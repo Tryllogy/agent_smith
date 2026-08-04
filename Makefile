@@ -4,15 +4,15 @@ CACHE_DIR      := cache
 .DEFAULT_GOAL := help
 
 .PHONY: help setup install dev sandbox sandbox-mbpp sandbox-swebench \
-        mbpp swebench test lint format check clean clean-docker clean-all
+        mbpp swebench lint format clean clean-docker clean-all
 
 help:
 	@echo "Agent Smith - cibles disponibles"
 	@echo ""
 	@echo "  Setup"
-	@echo "    setup              Installe Python $(PYTHON_VERSION) et l'epingle"
+	@echo "    setup              Installe Python $(PYTHON_VERSION)"
 	@echo "    install            Synchronise les dependances"
-	@echo "    dev                Dependances + outils de dev (pytest, ruff)"
+	@echo "    dev                Dependances + outils de dev (ruff)"
 	@echo ""
 	@echo "  Sandbox            (option : CONFIG=sandbox_template.json)"
 	@echo "    sandbox            REPL sandbox sans serveur MCP"
@@ -24,10 +24,8 @@ help:
 	@echo "    swebench           Lance l'agent SWE-bench"
 	@echo ""
 	@echo "  Qualite"
-	@echo "    test               Lance la suite de tests"
 	@echo "    lint               Analyse statique (ruff)"
 	@echo "    format             Formate le code (ruff)"
-	@echo "    check              lint + test"
 	@echo ""
 	@echo "  Nettoyage"
 	@echo "    clean              Caches Python et artefacts de build"
@@ -36,7 +34,6 @@ help:
 
 setup:
 	$(UV) python install $(PYTHON_VERSION)
-	$(UV) python pin $(PYTHON_VERSION)
 
 install:
 	$(UV) sync
@@ -69,9 +66,6 @@ swebench:
 		--model-name "$(MODEL)" \
 		--provider-url "$(URL)"
 
-test:
-	$(UV) run pytest -v
-
 lint:
 	$(UV) run ruff check .
 
@@ -79,12 +73,10 @@ format:
 	$(UV) run ruff format .
 	$(UV) run ruff check --fix .
 
-check: lint test
-
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -type d -name '*.egg-info' -prune -exec rm -rf {} +
-	rm -rf .pytest_cache .ruff_cache build dist
+	rm -rf .ruff_cache build dist
 
 clean-docker:
 	@docker ps -aq --filter "name=sweb" | xargs -r docker rm -f
