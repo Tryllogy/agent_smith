@@ -124,9 +124,9 @@
 ================================================================================
 Tant que ce n'est pas fige, chacun code contre du vide.
 
-  [ ] Setup uv + pyproject.toml + Python 3.10 + structure de dossiers
-  [ ] Makefile (install / run / test / lint / clean)
-  [ ] .gitignore (.env, __pycache__, cache/, evaluations/)
+  [X] Setup uv + pyproject.toml + Python 3.10 + structure de dossiers
+  [X] Makefile (install / run / test / lint / clean)
+  [X] .gitignore (.env, __pycache__, cache/, evaluations/)
   [ ] FIGER TOUS les models Pydantic dans src/validators.py :
         [ ] SandboxConfig          (fait)
         [ ] MBPPTaskInput          task_id, task_definition, function_definition,
