@@ -15,9 +15,98 @@ Particularité : **code-based tool calling**. Le LLM génère du Python appelant
 outils, au lieu de produire du JSON de tool call. Il gagne des variables persistantes entre
 étapes, des conditions et des boucles.
 
-Deux benchmarks à résoudre :
-- **MBPP** — petits problèmes Python algorithmiques ;
-- **SWE-bench (Verified)** — vrais bugs dans de vrais dépôts, dans des conteneurs Docker.
+Deux benchmarks à résoudre : **MBPP** et **SWE-bench Verified** (voir section suivante).
+
+### ⚠️ Ce que le projet n'est pas
+
+« Faire générer du code Python par une API LLM pour répondre aux benchmarks » décrit le **résultat
+visible**, pas le travail. Ce qui est construit et noté, c'est le **runtime autour de cet appel**.
+
+Les critères de validation listent **quatre** conditions obligatoires, dont une seule concerne le
+score aux benchmarks : réussir MBPP et SWE-bench ; respecter les limites ; **les outils
+obligatoires passent leurs tests indépendants** (sans la boucle agent) ; **le sandbox passe les
+tests d'isolation et de sécurité**. Un système qui fait 5/5 en MBPP mais dont le sandbox laisse
+importer `os` échoue.
+
+Trois points que cette réduction laisse de côté :
+
+- **Le sandbox est un sujet en soi.** Confiner du code arbitraire généré par un LLM — imports,
+  filesystem, réseau, timeout, mémoire, builtins — avec la stdlib seule, sans `RestrictedPython`,
+  relève de la conception de frontière de sécurité. Il a sa propre CLI et son propre script d'examen.
+- **Ce n'est pas une génération, c'est une boucle.** Sur SWE-bench, aucun modèle ne produit le bon
+  patch d'un seul coup : il faut chercher, lire, éditer, lancer les tests, lire l'échec, recommencer.
+  Cette machinerie — extraction, exécution, renvoi de l'observation, gestion des formats et des
+  erreurs — doit être notre code : les frameworks qui la fournissent sont **explicitement interdits**.
+- **Le LLM est un composant interchangeable.** Aucun modèle n'est entraîné ni même imposé — le sujet
+  précise que *le choix du provider n'est pas noté*, seule l'abstraction l'est. D'où le serveur MCP
+  testé avec un serveur inconnu, la rotation multi-clés, le manuel généré dynamiquement et le
+  `BENCHMARK_REPORT.md` avec son étude d'ablation.
+
+> **Reformulation juste** : on construit un **environnement d'exécution sécurisé et instrumenté
+> pour un agent de code**. MBPP et SWE-bench sont le banc d'essai qui prouve qu'il fonctionne —
+> la mesure, pas l'objet.
+
+## Les deux benchmarks
+
+> Contexte sur les datasets — le sujet les nomme sans les détailler.
+
+### MBPP — *Mostly Basic Python Problems*
+
+Benchmark de génération de code publié par Google Research (2021, *Program Synthesis with Large
+Language Models*). ~974 problèmes Python courts de niveau débutant : listes, chaînes, maths
+simples, algorithmique de base. Chaque tâche tient en une fonction.
+
+```python
+# task_definition : "Write a function to find the shared elements from the given two lists."
+# function_definition : def similar_elements(test_tup1, test_tup2):
+# test_list :
+assert similar_elements((3,4,5,6), (5,7,4,10)) == (4, 5)
+assert similar_elements((1,2,3,4), (5,4,3,7)) == (3, 4)
+```
+
+L'évaluation est binaire : les 3 assertions passent ou non.
+
+**Rôle dans le projet** : c'est le benchmark facile, à attaquer en premier. Une tâche se résout
+souvent en 1 ou 2 itérations — d'où les limites serrées (10 itérations, 6k tokens, 120 s). Il
+valide la boucle agent, l'extraction de code, le sandbox et `final_answer` sans la complexité
+Docker. C'est aussi lui qui sert aux **modifications à chaud** en soutenance, parce qu'un cycle
+complet y est rapide.
+
+### SWE-bench — *Software Engineering Benchmark*
+
+Publié par Princeton (Jimenez, Yang et al., ICLR 2024 — *Can Language Models Resolve Real-World
+GitHub Issues?*). Changement d'échelle complet : il faut **corriger un vrai bug dans un vrai
+dépôt**.
+
+Les tâches sont fabriquées à partir de PR réelles déjà mergées, qui ferment une issue GitHub sur
+de gros projets Python (django, sympy, scikit-learn, matplotlib, astropy, xarray, sphinx,
+pytest…). L'agent reçoit le dépôt au commit *juste avant* le correctif, et le texte de l'issue —
+rien d'autre. À lui de localiser le fichier fautif dans des centaines de milliers de lignes, de
+comprendre le problème et de produire le patch.
+
+L'évaluation repose sur les tests du dépôt :
+
+| Catégorie | Attendu |
+|---|---|
+| `FAIL_TO_PASS` | échouent avant le patch, doivent passer après — c'est la correction |
+| `PASS_TO_PASS` | passaient déjà, doivent continuer de passer — pas de régression |
+
+Le second critère est ce qui rend le benchmark dur : une correction qui casse autre chose est un
+échec.
+
+**Variante utilisée ici — SWE-bench Verified** : 500 instances, sous-ensemble validé manuellement
+(OpenAI avec les auteurs originaux, 2024), débarrassé des issues sous-spécifiées et des tests
+cassés ou trop stricts. C'est la version sur laquelle les leaderboards publics sont comparables,
+d'où l'intérêt d'y consulter les traces par tâche.
+
+**Conséquences concrètes** : chaque tâche arrive avec son **image Docker** contenant le dépôt à la
+bonne version (monté sur `/testbed`) et un `eval_script` ; la sortie n'est pas du code mais un
+**patch git** ; les outils obligatoires (`read_file`, `search_code`, `find_references`,
+`run_tests`…) existent précisément pour ce travail d'**exploration** de codebase.
+
+L'écart avec MBPP se lit dans les limites — 30 itérations, 300k tokens, 900 s contre 10 / 6k /
+120 s — et dans le seuil de réussite, 2/3 contre 4/5, parce que même les meilleurs systèmes
+publics ne résolvent pas tout.
 
 ## Architecture
 
