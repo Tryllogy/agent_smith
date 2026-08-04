@@ -24,3 +24,23 @@ class SandboxConfig(BaseModel):
     ])
     max_execution_time_seconds: int = 30
     max_memory_mb: int = 512
+
+
+class MBPPTaskInput(BaseModel):
+    """Input for MBPP task validation."""
+    pass
+
+
+class SWEBenchTaskInput(BaseException):
+    """Input for SWEBench task validation."""
+    pass
+
+
+class StepMetrics(BaseModel):
+    """Input for StepMetrics task validation."""
+    pass
+
+
+class SolutionOutput(BaseModel):
+    """Output for solution validation."""
+    pass
