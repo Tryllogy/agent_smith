@@ -1,54 +1,33 @@
 ================================================================================
- AGENT SMITH - TODO & DECOUPAGE DU TRAVAIL
+ AGENT SMITH - TODO & REPARTITION DU TRAVAIL
 ================================================================================
-Projet : Framework agentique (Code Agent) resolvant des taches de code de
-         facon autonome via une boucle Thought -> Code -> Observation.
-Benchmarks : MBPP (simple, a faire en premier) + SWE-bench (Docker, plus dur).
+ Personne 1 = tchemin     -> Execution & Outils   (sandbox, MCP, tools, Docker)
+ Personne 2 = ndi-tull    -> Agent & Intelligence (boucle, LLM, prompts, bench)
+
+ Le projet n'est PAS "faire generer du code par un LLM". C'est construire un
+ RUNTIME securise et instrumente pour un agent de code. MBPP / SWE-bench sont
+ le banc d'essai, pas l'objet. Voir RESUME.md.
 ================================================================================
 
 
 --------------------------------------------------------------------------------
- RESUME DU PROJET
+ ETAT ACTUEL
 --------------------------------------------------------------------------------
-Boucle centrale :
-    THOUGHT (le LLM raisonne)
-      -> CODE (il ecrit du Python executable)
-        -> OBSERVATION (execution dans le sandbox)
-          -> repeter jusqu'a final_answer()
+  [x] en.subject.pdf + RESUME.md
+  [~] src/validators.py       -> SandboxConfig OK, les autres models sont vides
+  [ ] pyproject.toml          -> VIDE, a remplir (voir DEPENDANCES)
+  [ ] Makefile                -> VIDE
+  [ ] README.md               -> VIDE
 
-Approche "code-based tool calling" : le LLM genere du code Python qui appelle
-directement les outils (variables persistantes, boucles, logique conditionnelle).
-
-Composants majeurs :
-  1. Orchestrateur / boucle agentique      (100% maison - PAS de langgraph,
-                                             smolagents, crewai, autogen...)
-  2. Extraction de code                     (Python + XML/JSON/ReAct -> Python)
-  3. Sandbox securise                       (stdlib only, PAS de RestrictedPython)
-  4. Serveur(s) MCP                         (stdio ET HTTP, outils dynamiques)
-  5. Multi-provider LLM                     (free tier, multi-tokens + rotation)
-  6. Rapport de benchmark                   (>=5 modeles x >=3 taches SWE-bench)
+  /!\ 2 points a corriger tout de suite :
+      1. src/validators.py:32 -> class SWEBenchTaskInput(BaseException)
+         doit heriter de BaseModel, pas BaseException.
+      2. Python 3.13.1 est installe, le sujet impose Python 3.10.
+         -> "uv python install 3.10" + requires-python = "==3.10.*"
 
 
 --------------------------------------------------------------------------------
- CONTRAINTES TECHNIQUES
---------------------------------------------------------------------------------
-  [ ] Python 3.10
-  [ ] uv comme package manager
-  [ ] Architecture clean, code lisible/structure/documente
-  [ ] Toutes les erreurs gerees gracieusement (un crash = echec)
-  [ ] Cles API via .env / env vars (JAMAIS en dur -> flag securite = 0)
-  [ ] Boucle agentique = implementation maison obligatoire
-  [ ] Sandbox : stdlib Python uniquement (pas de lib externe de securite)
-  [ ] Pydantic models imposes :
-        - SandboxConfig
-        - MBPPTaskInput
-        - SWEBenchTaskInput
-        - StepMetrics
-        - SolutionOutput
-
-
---------------------------------------------------------------------------------
- LIMITES D'EVALUATION (a respecter STRICTEMENT)
+ RAPPEL DES LIMITES (strictes, depassement = tache echouee)
 --------------------------------------------------------------------------------
   Metrique          | MBPP    | SWE-bench
   ------------------|---------|-----------
@@ -58,174 +37,309 @@ Composants majeurs :
   Timeout           | 120 s   | 900 s
   Seuil reussite    | 4 / 5   | 2 / 3
 
-  - Tokens cumulatifs sur toutes les iterations d'une tache.
-  - Tokens de reasoning comptent aussi -> preferer modele non-reasoning si serre.
+  - Tokens CUMULATIFS sur toute la tache, reasoning tokens inclus.
   - Aucun retry autorise pendant l'examen.
+  - Cles API en dur dans le code = flag securite.
+  - Solutions recuperees depuis PR / issues / sources externes = note de 0.
 
 
---------------------------------------------------------------------------------
- AI SAFETY (violation = note de 0)
---------------------------------------------------------------------------------
-  L'agent doit resoudre par EXPLORATION LEGITIME. Interdit :
-  [ ] Recuperer des solutions depuis PRs / issues / sources externes
-  [ ] Utiliser des patches memorises sans exploration reelle
-  [ ] Contourner les contraintes du sandbox
-  [ ] Acceder a des ressources hors du contexte de la tache
-  Les champs system_prompt / llm_output / sandbox_input / sandbox_output sont
-  logges pour tracer le raisonnement.
+================================================================================
+ DEPENDANCES & IMPORTS
+================================================================================
+
+--- pyproject.toml (a ecrire) --------------------------------------------------
+
+  [project]
+  name = "agent-smith"
+  requires-python = "==3.10.*"
+  dependencies = [
+      "pydantic>=2.0",        # models imposes par le sujet
+      "mcp>=1.2",             # SDK officiel MCP (serveur + client)
+      "httpx>=0.27",          # appels HTTP vers les APIs LLM
+      "python-dotenv>=1.0",   # chargement du .env passe a l'eval
+      "docker>=7.0",          # containers SWE-bench (ou subprocess docker CLI)
+  ]
+
+  [project.optional-dependencies]
+  dev = ["pytest>=8.0", "ruff>=0.6"]
+
+  [project.scripts]
+  sandbox = "src.sandbox.cli:main"      # -> uv run sandbox
+
+  Optionnel selon les choix :
+    openai>=1.0     si on passe par le SDK OpenAI plutot que httpx brut
+                    (tous les providers vises sont OpenAI-compatible)
+    psutil          si on veut mesurer la RAM autrement que par resource
+    tiktoken        fallback de comptage de tokens (normalement inutile :
+                    l'API renvoie usage.prompt_tokens / completion_tokens)
+
+  INTERDIT (reimplementent l'orchestration d'agents) :
+    smolagents, langgraph, crewai, autogen, llama-index, langchain-agents
+
+--- imports stdlib pour le SANDBOX (securite = stdlib UNIQUEMENT) --------------
+
+  ast              parsing/validation du code avant exec, detection des imports
+  builtins         construction du dict de builtins restreints
+  importlib        hook d'import custom pour l'allowlist
+  sys              sys.modules, sys.path, redirection stdout/stderr
+  os, os.path      resolution des chemins (realpath) pour l'allowlist FS
+  pathlib          manipulation de chemins
+  resource         RLIMIT_AS (memoire), RLIMIT_CPU  -> limites dures
+  signal           SIGALRM / SIGKILL pour le timeout
+  multiprocessing  isolation dans un process separe (approche recommandee)
+  subprocess       lancement du serveur MCP stdio, commandes docker
+  socket           neutralisation du reseau (monkeypatch avant exec)
+  io               StringIO pour capturer la sortie
+  contextlib       redirect_stdout / redirect_stderr
+  traceback        formatage des erreurs renvoyees au LLM
+  types            construction de modules/namespaces
+  threading, queue communication et watchdog
+  tempfile         zone scratch
+  json             configs, serialisation
+  time, datetime   metriques et timestamps
+
+--- imports MCP (SDK officiel) -------------------------------------------------
+
+  Serveur :
+    from mcp.server.fastmcp import FastMCP
+
+  Client (les DEUX transports sont obligatoires) :
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    from mcp.client.streamable_http import streamablehttp_client
+
+  Session : list_tools() / call_tool() / list_resources() / list_prompts()
+  -> c'est list_tools() qui alimente la generation dynamique du manuel.
+  (verifier la signature exacte selon la version du SDK installee)
+
+--- dependances a installer DANS le container SWE-bench (optionnel) ------------
+
+  jedi     tres utile pour find_references / resolution de symboles
+  ruff     verification syntaxe/lint apres un edit_file
+  tree     exploration rapide de l'arborescence
 
 
---------------------------------------------------------------------------------
- OUTILS OBLIGATOIRES (exposes via MCP, testes independamment)
---------------------------------------------------------------------------------
+================================================================================
+ PHASE 0 - A FAIRE ENSEMBLE, EN PREMIER (BLOQUANT)
+================================================================================
+Tant que ce n'est pas fige, chacun code contre du vide.
+
+  [ ] Setup uv + pyproject.toml + Python 3.10 + structure de dossiers
+  [ ] Makefile (install / run / test / lint / clean)
+  [ ] .gitignore (.env, __pycache__, cache/, evaluations/)
+  [ ] FIGER TOUS les models Pydantic dans src/validators.py :
+        [ ] SandboxConfig          (fait)
+        [ ] MBPPTaskInput          task_id, task_definition, function_definition,
+                                   test_imports, test_list
+        [ ] SWEBenchTaskInput      instance_id, problem_statement, docker_image,
+                                   eval_script, hints_text, repo
+        [ ] StepMetrics            step, input_tokens, output_tokens,
+                                   request_time_ms, timestamp, api_url,
+                                   model_name, llm_output, sandbox_input,
+                                   sandbox_output, retries
+        [ ] SolutionOutput         task_id, benchmark, success, solution,
+                                   iterations, total_requests, total_input_tokens,
+                                   total_output_tokens, total_time_seconds,
+                                   steps, system_prompt, error, timestamp
+  [ ] FIGER l'interface Sandbox <-> Orchestrateur :
+        - signature de execute(code) -> (stdout, stderr, error, is_final, answer)
+        - qui remplit sandbox_input / sandbox_output
+        - comment final_answer() remonte la reponse a la boucle
+  [ ] Chargement config JSON + .env (OPENROUTER_API_KEY etc.)
+
+
+================================================================================
+ PERSONNE 1 - tchemin : EXECUTION & OUTILS
+================================================================================
+Domaine : tout ce qui execute du code et touche au systeme.
+Livrables : le sandbox, le serveur MCP, les 9 outils, l'integration Docker.
+
+--- P1.1 SANDBOX (coeur du projet, priorite absolue) ---------------------------
+  [ ] Choisir l'approche d'isolation (process separe recommande :
+      timeout et limites RAM applicables proprement)
+  [ ] Allowlist d'imports (authorized_imports, support des motifs "module.*")
+  [ ] Allowlist filesystem (allowed_directories, chemins resolus DANS le sandbox)
+  [ ] Blocage reseau total (entrant + sortant)
+  [ ] Timeout d'execution (uniquement le code sandboxe, PAS les actions MCP)
+  [ ] Limite RAM (max_memory_mb)
+  [ ] Builtins restreints (retirer/surcharger les dangereux)
+  [ ] Propagation de KeyboardInterrupt / SystemExit (jamais captures en silence)
+  [ ] Injection de final_answer() dans le namespace
+      -> primitive DU SANDBOX, pas un outil MCP, toujours presente
+  [ ] Namespace = wrappers MCP decouverts dynamiquement + final_answer, rien d'autre
+
+--- P1.2 FEEDBACK AU LLM (souvent oublie, mais explicitement exige) -------------
+  [ ] aucun bloc de code trouve
+  [ ] bloc malforme mais interprete quand meme -> expliquer comment
+  [ ] timeout atteint -> renvoyer la sortie partielle
+  [ ] sortie tronquee (limite de taille) -> le dire
+  [ ] edit ayant casse la syntaxe / le lint
+  -> Aucun echec silencieux : sinon le LLM hallucine ses observations.
+
+--- P1.3 CLI SANDBOX -----------------------------------------------------------
+  [ ] uv run sandbox                                  (REPL interactif)
+  [ ] uv run sandbox sandbox_template.json            (config custom)
+  [ ] uv run sandbox --mcp-stdio "python mcp_tools_mbpp.py" sandbox_template.json
+  [ ] uv run sandbox --mcp-server <URL>               (HTTP streamable)
+  [ ] REPL : memes restrictions, sortie propre sur "exit" et Ctrl+D (EOF)
+
+--- P1.4 MCP -------------------------------------------------------------------
+  [ ] Serveur MCP : transports stdio ET HTTP streamable
+  [ ] Client MCP integre dans le sandbox
+  [ ] Decouverte dynamique -> doit marcher avec un serveur MCP INCONNU
+  [ ] Exposition des tools + resources + prompts
+  [ ] Wrappers Python generes automatiquement depuis les schemas
+  [ ] Generation dynamique du "sandbox manual" (noms, descriptions, params)
+      -> change automatiquement si on branche un autre serveur MCP
+
+--- P1.5 LES 9 OUTILS OBLIGATOIRES (testes independamment de la boucle) ---------
   Filesystem :
-  [ ] read_file(filepath, start_line, end_line)   -> format type "cat -n"
-  [ ] edit_file(filepath, old_str, new_str)       -> remplacement exact
+  [ ] read_file(filepath, start_line, end_line)  -> format "cat -n" :
+                                                    "<line_number>: <content>"
+  [ ] edit_file(filepath, old_str, new_str)      -> remplacement exact
   [ ] list_files(directory, pattern)
-
-  Recherche :
-  [ ] search_code(pattern, file_pattern)          -> grep-like, format /path:ligne
+  Recherche (format commun : "/abs/path.py:<line> <content>") :
+  [ ] search_code(pattern, file_pattern)
   [ ] search_function_or_class_definition_in_code(name)
   [ ] find_references(name, filepath, line)
-
   Execution :
-  [ ] run_tests()                                 -> lance le script d'eval
-  [ ] get_patch()                                 -> git diff unifie
-  [ ] run_command(command, workdir)               -> stdout, stderr, exit code
+  [ ] run_tests()                                -> lance l'eval_script
+  [ ] get_patch()                                -> git diff unifie
+  [ ] run_command(command, workdir)              -> stdout, stderr, exit code
+
+  [ ] mcp_tools_mbpp.py      A LA RACINE du repo
+  [ ] mcp_tools_swebench.py  A LA RACINE du repo
+
+--- P1.6 DOCKER / SWE-bench ----------------------------------------------------
+  [ ] Choisir : sandbox DANS le container, ou sandbox sur l'hote + outils MCP
+      faisant le pont vers Docker (les 2 sont valides)
+  [ ] Pull / run de l'image (docker_image de la tache)
+  [ ] Montage de ${TESTBED_PATH} si necessaire
+  [ ] git -c core.fileMode=false diff pour get_patch()
+  [ ] CLEANUP DES CONTAINERS apres execution (a notre charge, exige)
+
+--- P1.7 TESTS DE SECURITE (exam_sandbox.sh : TOUT doit passer) ----------------
+  [ ] blocage d'import        [ ] blocage de builtin
+  [ ] blocage reseau          [ ] restriction de chemin
+  [ ] timeout                 [ ] limite memoire
+  [ ] protocole MCP
+  -> Ecrire nos propres tests pour chacun AVANT l'eval.
 
 
 ================================================================================
- TODO LISTE PAR BLOC
+ PERSONNE 2 - ndi-tull : AGENT & INTELLIGENCE
 ================================================================================
+Domaine : tout ce qui parle au LLM et pilote le raisonnement.
+Livrables : la boucle agent, la couche providers, les prompts, les 2 CLI,
+            le rapport de benchmark.
 
---- FONDATIONS (COMMUN, a faire en premier - BLOQUANT) -------------------------
-  [ ] Setup projet : Python 3.10, uv, structure de dossiers, architecture clean
-  [ ] Definir TOUS les Pydantic models (contrat partage)
-  [ ] Systeme de config JSON + chargement .env
-  [ ] Figer l'interface Sandbox <-> Orchestrateur (signatures + StepMetrics)
-
---- BLOC A : SANDBOX & SECURITE ------------------------------------------------
-  [ ] Sandbox d'execution :
-        [ ] imports allowlist
-        [ ] filesystem allowlist (allowed_directories)
-        [ ] no network (aucune connexion entrante/sortante)
-        [ ] execution timeout (code sandbox uniquement)
-        [ ] limite RAM (max_memory_mb)
-        [ ] builtins restreints
-  [ ] Choix approche isolation (sous-processus vs meme processus)
-  [ ] Propagation correcte de KeyboardInterrupt / SystemExit (non silencieux)
-  [ ] final_answer() injecte dans le namespace
-  [ ] CLI interactif REPL (uv run sandbox) - exit / EOF (Ctrl+D)
-  [ ] Feedback explicite au LLM dans tous les cas :
-        [ ] pas de code block trouve
-        [ ] code malforme mais interprete quand meme (expliquer comment)
-        [ ] timeout atteint, output partiel
-        [ ] output tronque (size limit)
-        [ ] edit introduisant erreur syntaxe / lint
-  [ ] Generation dynamique du "sandbox manual" depuis les schemas MCP
-  [ ] Passer les tests de securite (exam_sandbox.sh) :
-        import block / builtin block / network block / path restrict /
-        timeout / memory limit / MCP protocol
-
---- BLOC B : MCP & OUTILS ------------------------------------------------------
-  [ ] Serveur MCP (stdio ET HTTP streamable)
-  [ ] Client MCP dans le sandbox + decouverte dynamique des outils
-  [ ] Outils filesystem (read_file, edit_file, list_files)
-  [ ] Outils recherche (search_code, search_function..., find_references)
-  [ ] Outils execution (run_tests, get_patch, run_command)
-  [ ] mcp_tools_mbpp.py    (a la racine du repo)
-  [ ] mcp_tools_swebench.py (a la racine du repo)
-  [ ] Outils fonctionnant independamment de la boucle agentique
-  [ ] Support d'un serveur MCP INCONNU (outils exposes dynamiquement)
-
---- BLOC C : ORCHESTRATEUR & LLM -----------------------------------------------
-  [ ] Boucle agentique maison (Thought -> Code -> Observation)
+--- P2.1 BOUCLE AGENTIQUE (100% maison, frameworks interdits) ------------------
+  [ ] Boucle Thought -> Code -> Observation
   [ ] max_iterations parametrable
-  [ ] Couche d'extraction de code :
-        [ ] Python code blocks (```python ... ``` <end_code>)  (primaire)
-        [ ] XML tool calls (Anthropic-style <invoke>)
-        [ ] JSON/Hermes tool calls (<tool_call>)
-        [ ] ReAct (Action: / Action Input:)
-        [ ] conversion formats non-Python -> appels de fonction Python
-  [ ] Abstraction multi-provider LLM (switch sans gros refactor)
-  [ ] Multi-tokens par provider + rotation (rate limits / quotas)
-  [ ] Provider fallback
-  [ ] stop_sequences (eviter hallucination d'observations)
-  [ ] Tracking usage -> StepMetrics (tokens, retries, latence, requetes)
-  [ ] Design des system prompts :
-        [ ] doc des outils disponibles
-        [ ] exemples de slots structures (Thought / Code / Observation)
-        [ ] exemples de reasoning loops efficaces
+  [ ] Arret sur final_answer() / limite atteinte / erreur fatale
+  [ ] Construction de l'historique de conversation envoye au LLM
+  [ ] Gestion de la taille du contexte (budget tokens sur toute la tache)
+  [ ] Aucun crash possible : toutes les erreurs gerees
 
---- BLOC D : AGENTS & BENCHMARKS -----------------------------------------------
-  [ ] Agent MBPP + CLI (uv run python -m agent_mbpp ...)
-        --task-file / --output / --model-name / --provider-url
-  [ ] Agent SWE-bench + CLI (uv run python -m agent_swebench ...)
-  [ ] Integration Docker SWE-bench + cleanup des containers
-  [ ] Patches via 'git -c core.fileMode=false diff'
-  [ ] Respect strict des limites (iterations / tokens / timeout)
-  [ ] BENCHMARK_REPORT.md :
-        [ ] Setup (modeles/providers/taches + justification)
-        [ ] Results table (pass/fail, iterations, tokens in/out, wall-clock)
-        [ ] Provider reliability (temps moyen, retries, dispo)
-        [ ] >=2 metriques intermediaires
-        [ ] Ablation study (avant/apres un changement)
-        [ ] solution.json de backing presents dans le repo
-  [ ] README.md :
-        [ ] 1ere ligne italique : "This project has been created as part of
-            the 42 curriculum by <login1>[, <login2>...]"
-        [ ] Description
-        [ ] Instructions (install / execution)
-        [ ] Resources (references + usage de l'IA detaille)
+--- P2.2 EXTRACTION DE CODE ----------------------------------------------------
+  [ ] Blocs Python ```python ... ``` + <end_code>     (format primaire)
+  [ ] XML tool calls (style Anthropic <invoke>)
+  [ ] JSON / Hermes (<tool_call>{...}</tool_call>)
+  [ ] ReAct (Action: / Action Input:)
+  [ ] Conversion des formats non-Python -> appels de fonction Python
+      (le sandbox doit rester agnostique du format)
+
+--- P2.3 COUCHE LLM ------------------------------------------------------------
+  [ ] Abstraction provider (changer de provider sans refacto majeure)
+  [ ] Multi-tokens par provider + ROTATION (rate limits, quotas epuises)
+  [ ] Fallback entre providers
+  [ ] stop_sequences (<end_code>, </tool_call>...) -> ESSENTIEL, sinon le
+      modele invente les resultats d'execution
+  [ ] Retry avec backoff, comptabilise dans StepMetrics.retries
+  [ ] Cles API depuis env vars uniquement (OPENROUTER_API_KEY, ...)
+  [ ] Tracking : tokens in/out, request_time_ms, total_requests, latence
+
+--- P2.4 SYSTEM PROMPTS --------------------------------------------------------
+  [ ] Injection du sandbox manual (fourni par P1)
+  [ ] Slots structures Thought / Code / Observation avec exemples
+  [ ] Exemples de boucles de raisonnement efficaces
+  [ ] Prompt MBPP (court, contrainte 6k tokens d'entree au total)
+  [ ] Prompt SWE-bench (methodologie d'exploration : chercher, lire, editer,
+      tester, relire l'echec)
+  -> Methode : resoudre une tache A LA MAIN avec seulement les outils de
+     l'agent, et transcrire ce raisonnement dans le prompt.
+
+--- P2.5 LES DEUX AGENTS -------------------------------------------------------
+  [ ] agent_mbpp : uv run python -m agent_mbpp --task-file X --output Y
+                   --model-name "..." --provider-url "..."
+  [ ] agent_swebench : memes options
+  [ ] Ecriture du solution.json conforme (SolutionOutput complet)
+  [ ] final_answer(code) pour MBPP / final_answer(get_patch()) pour SWE-bench
+  [ ] Respect strict des limites (compteur + arret propre avant depassement)
+  [ ] Remplissage de TOUS les champs de StepMetrics (llm_output brut,
+      sandbox_input, sandbox_output, retries) -> tracabilite exigee
+
+--- P2.6 BENCHMARK_REPORT.md (racine du repo) ----------------------------------
+  >= 5 modeles x >= 3 taches SWE-bench communes
+  [ ] Setup : modeles/providers, taches choisies + justification
+  [ ] Tableau modele x tache : pass/fail, iterations, tokens in/out, temps mur
+  [ ] Fiabilite provider : temps de reponse moyen, retries, disponibilite
+  [ ] >= 2 metriques intermediaires parmi :
+        - etape du 1er acces au fichier du patch final (exploration)
+        - etape ou les echecs de tests commencent a baisser (progres partiel)
+        - iterations entre "tests au vert" et final_answer (discipline, 0 ideal)
+  [ ] Etude d'ablation : avant/apres un changement (prompt, outils, params)
+      sur les memes taches et le meme modele
+  [ ] Conclusions : modeles retenus / ecartes, justifies par les donnees
+  [ ] Les solution.json de backing presents dans le repo
+  -> Mesure manuelle acceptee, c'est l'analyse qui compte.
+
+
+================================================================================
+ A FAIRE ENSEMBLE (fin de projet)
+================================================================================
+  [ ] README.md EN ANGLAIS, a la racine :
+        [ ] 1ere ligne en italique : "This project has been created as part of
+            the 42 curriculum by tchemin, ndi-tull."
+        [ ] Description / Instructions / Resources (+ usage de l'IA detaille)
         [ ] System architecture
         [ ] Agent loop explanation
         [ ] Sandbox design
         [ ] Tool implementation details
         [ ] Benchmark results and analysis
-        [ ] En ANGLAIS
-
---- LIVRABLES / SUBMISSION -----------------------------------------------------
-  [ ] Repo Git avec : README.md, fichiers de config sandbox+modeles,
-      mcp_tools_mbpp.py + mcp_tools_swebench.py (racine), BENCHMARK_REPORT.md
+  [ ] Verifier le repo : configs sandbox + modeles, mcp_tools_*.py a la racine,
+      BENCHMARK_REPORT.md, solution.json
   [ ] NE PAS inclure : images Docker, poids de modeles, outputs generes
+  [ ] Relire le code de l'autre : en soutenance, on doit savoir modifier
+      l'agent en 2-5 min sur une tache MBPP. Prevoir 2 sessions de passation.
 
 
 ================================================================================
- DECOUPAGE POUR 2 PERSONNES
+ ORDRE DE TRAVAIL RECOMMANDE
 ================================================================================
-Axe : separer la couche EXECUTION/SECURITE de la couche INTELLIGENCE.
-Ce sont deux domaines de securite independants avec une interface claire.
+  1. Phase 0 ensemble (models + interface + setup)          <- bloquant
+  2. En parallele :
+       tchemin  -> sandbox minimal qui execute du code + final_answer
+       ndi-tull -> boucle agent minimale + 1 provider en dur
+  3. PREMIER JALON : MBPP end-to-end avec le modele le plus capable
+     disponible et SANS limites de tokens/iterations.
+     Si ca ne passe pas la, ajouter des contraintes n'aidera pas.
+  4. Brancher les vraies limites, mesurer, optimiser le prompt.
+  5. Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.
+  6. SWE-bench sur les 3 taches conseillees :
+       sympy__sympy-14711 / sympy__sympy-13480 / pydata__xarray-4629
+  7. BENCHMARK_REPORT.md une fois les 2 benchmarks fonctionnels.
+  8. README.md + relecture croisee.
 
---- PERSONNE 1 : "Execution & Outils" (Blocs A + B) ----------------------------
-  - Sandbox complet + securite + CLI REPL
-  - Serveur MCP (stdio + HTTP) + client MCP + decouverte dynamique
-  - Les 9 outils obligatoires (mcp_tools_mbpp.py, mcp_tools_swebench.py)
-  - Generation du sandbox manual
-  - Integration Docker SWE-bench (containers + cleanup)
-  - Responsable des tests exam_sandbox.sh
 
---- PERSONNE 2 : "Agent & Intelligence" (Blocs C + D) --------------------------
-  - Boucle agentique maison + extraction de code (tous formats)
-  - Abstraction multi-provider + rotation tokens + fallback + stop_sequences
-  - Tracking usage / StepMetrics / SolutionOutput
-  - System prompts (MBPP + SWE-bench)
-  - Les deux CLI d'agents (agent_mbpp, agent_swebench)
-  - BENCHMARK_REPORT.md + experimentations modeles
-
---- A FAIRE ENSEMBLE D'ABORD (jour 1-2, BLOQUANT) ------------------------------
-  1. Les Pydantic models (contrat partage) -> a figer en premier
-  2. L'interface Sandbox <-> Orchestrateur (signatures, format StepMetrics)
-  3. Setup projet (uv, structure, config JSON/.env)
-
---- POINTS DE SYNCHRO CLES -----------------------------------------------------
-  - MBPP end-to-end EN PREMIER (plus simple) : valider l'integration des deux
-    couches avant SWE-bench/Docker.
-  - Caler tot le format sandbox_input / sandbox_output (logging partage).
-  - Lancer le BENCHMARK_REPORT une fois MBPP + SWE-bench fonctionnels.
-
---- RAPPEL EVAL ----------------------------------------------------------------
-  Pendant l'eval : modifications live de l'agent en 2-5 min (test de
-  comprehension du code). Prevoir des sessions de partage croise pour que
-  chacun comprenne la couche de l'autre.
-
+================================================================================
+ POINTS DE SYNCHRO
+================================================================================
+  - Format sandbox_input / sandbox_output : a caler tot, c'est l'interface
+    entre les deux moities du projet.
+  - Le sandbox manual est produit par P1 et consomme par P2 : definir sa
+    forme des que la decouverte MCP marche.
+  - MBPP end-to-end AVANT de toucher a Docker.
+  - Ne pas optimiser (tokens, choix de modele) avant que l'approche soit
+    prouvee sur une tache.
 ================================================================================
