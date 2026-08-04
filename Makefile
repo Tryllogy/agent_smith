@@ -7,8 +7,32 @@ CACHE_DIR      := cache
         mbpp swebench test lint format check clean clean-docker clean-all
 
 help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@echo "Agent Smith - cibles disponibles"
+	@echo ""
+	@echo "  Setup"
+	@echo "    setup              Installe Python $(PYTHON_VERSION) et l'epingle"
+	@echo "    install            Synchronise les dependances"
+	@echo "    dev                Dependances + outils de dev (pytest, ruff)"
+	@echo ""
+	@echo "  Sandbox            (option : CONFIG=sandbox_template.json)"
+	@echo "    sandbox            REPL sandbox sans serveur MCP"
+	@echo "    sandbox-mbpp       REPL sandbox + MCP MBPP (stdio)"
+	@echo "    sandbox-swebench   REPL sandbox + MCP SWE-bench (stdio)"
+	@echo ""
+	@echo "  Agents             (requis : TASK=... MODEL=... URL=...)"
+	@echo "    mbpp               Lance l'agent MBPP"
+	@echo "    swebench           Lance l'agent SWE-bench"
+	@echo ""
+	@echo "  Qualite"
+	@echo "    test               Lance la suite de tests"
+	@echo "    lint               Analyse statique (ruff)"
+	@echo "    format             Formate le code (ruff)"
+	@echo "    check              lint + test"
+	@echo ""
+	@echo "  Nettoyage"
+	@echo "    clean              Caches Python et artefacts de build"
+	@echo "    clean-docker       Conteneurs SWE-bench restants"
+	@echo "    clean-all          clean + clean-docker + .venv + $(CACHE_DIR)"
 
 setup:
 	$(UV) python install $(PYTHON_VERSION)
