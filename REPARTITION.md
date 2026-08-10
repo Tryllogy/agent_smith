@@ -2,7 +2,7 @@
 
 > Document de discussion, pas de spec. Objectif : que chacun choisisse sa partie
 > en sachant a quoi ressemblent ses journees, pas juste en lisant une liste de
-> taches. Le decoupage de reference reste `TODO.txt`.
+> taches. Le decoupage de reference reste `TODO.md`.
 
 ---
 
@@ -125,4 +125,4 @@ trinque, alors qu'il pese lourd dans la note.
   fin de projet ne sont pas decoratifs : la soutenance demande de savoir modifier
   l'agent en 2-5 min sur une tache MBPP. Celui qui prend P2 devra vraiment
   comprendre le sandbox, et inversement. D'ou les 2 sessions de passation prevues
-  dans `TODO.txt`.
+  dans `TODO.md`.
