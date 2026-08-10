@@ -124,6 +124,59 @@ LLM API ⇄ Orchestrator → extraction de code → [ Sandbox : interpréteur Py
 | `final_answer()` | primitive **du sandbox**, pas un outil MCP ; termine la boucle |
 | Serveur MCP | processus séparé, fournit les outils (fichiers, recherche, exécution) |
 
+## MCP — de quoi on parle
+
+> Le sujet utilise MCP sans jamais le définir. Rappel, et surtout : dissiper une confusion.
+
+**Model Context Protocol** est un standard ouvert (Anthropic) qui normalise la connexion entre un
+agent et des capacités externes. Une prise unique, au lieu d'une intégration propriétaire par
+application. Deux rôles :
+
+- **Client** — vit dans notre sandbox, parle le protocole, route les appels.
+- **Serveur** — processus séparé qu'on écrit, qui déclare ce qu'il sait faire et l'exécute.
+
+Trois primitives exposables : **tools** (actions appelables), **resources** (données lisibles par
+URI), **prompts** (modèles réutilisables). Deux transports : **stdio** (processus local lancé par
+le client) et **HTTP streamable** (serveur joignable par URL). Les deux sont exigés.
+
+### ⚠️ Les outils MCP sont les *mains* de l'agent, pas ses réponses
+
+Formulation fausse à éviter : « le code produit est une correction de bug **ou** une fonction
+choisie parmi les fonctions du serveur MCP ». Les deux types de tâches viennent des **benchmarks**,
+jamais du MCP.
+
+| Benchmark | Tâche | Livrable |
+|---|---|---|
+| MBPP | écrire une fonction Python depuis un énoncé | le code de la fonction |
+| SWE-bench | corriger un vrai bug dans un vrai dépôt | un patch `git diff` |
+
+Le serveur MCP fournit les moyens d'y arriver — lire, chercher, éditer, tester. Le code généré par
+le LLM **appelle** ces outils :
+
+```python
+result = search_code("is_valid_email")
+print(result)
+content = read_file("/testbed/src/mail.py", 65, 70)
+print(content)
+```
+
+Corollaire : le code exécuté dans le sandbox, c'est surtout **les actions de l'agent**, pas la
+solution qu'on teste. La solution se valide via `run_tests()`, puis se rend via `final_answer()` —
+qui est une primitive du sandbox, **pas** un outil MCP.
+
+### Qui écrit quoi
+
+| Couche | Origine |
+|---|---|
+| Protocole MCP (transport, handshake, sérialisation, déclaration des tools) | **SDK MCP** officiel (`mcp`) — lib de protocole, pas d'orchestration : autorisée |
+| Logique des 9 outils obligatoires | **nous** |
+| Boucle agent, orchestrator, extraction, sandbox | **nous** (frameworks d'orchestration interdits) |
+
+Rien n'oblige à réimplémenter grep ou un parseur Python à la main : `ripgrep` ou `re` pour
+`search_code`, le module `ast` de la stdlib (ou `jedi`) pour les définitions et les références,
+`subprocess` sur `git diff` pour `get_patch`. Le sujet autorise d'ailleurs `ruff`, `jedi`, `tree`
+dans le conteneur.
+
 ## Contraintes générales
 
 - Python **3.10**, gestionnaire **uv**.
@@ -280,6 +333,14 @@ exploration et raisonnement légitimes.
 - `get_patch()` — `git diff` unifié des modifications
 - `run_command(command, workdir)` — stdout, stderr, code de sortie
 
+Les formats de sortie sont normés parce que ces outils sont testés **hors de la boucle agent** :
+un `read_file` au bon contenu mais sans numéros de ligne échoue.
+
+> **À trancher avant de les écrire** : sur SWE-bench, le dépôt est dans un conteneur Docker. Selon
+> qu'on choisisse l'approche (a) — sandbox et serveur MCP **dans** le conteneur — ou (b) — sandbox
+> sur l'hôte, outils faisant le pont via `docker exec` —, l'implémentation de **tous** les outils
+> filesystem change. Décision d'architecture, pas détail d'implémentation.
+
 ## Providers LLM
 
 Exemples cités (liste non contractuelle) : OpenRouter, Together AI, Groq (compatibles OpenAI) ;
@@ -319,6 +380,12 @@ Les `solution.json` correspondants doivent être présents dans le dépôt.
 ```
 
 La CLI charge les clés depuis l'environnement (ex. `OPENROUTER_API_KEY`).
+
+**On ne choisit pas les tâches** : la moulinette les tire au sort dans le benchmark
+(`dump` → `run` → `validate`). Notre agent reçoit un `task.json` et produit un `solution.json` —
+c'est tout le contrat. `validate` contrôle deux choses : la **correction** (assertions MBPP passées,
+patch résolvant l'issue SWE-bench) **et** les **métriques dans les limites**, lues dans notre
+`solution.json`. Fabriquer un `task.json` à la main reste utile pour déboguer en local.
 
 | `exam_mbpp.sh` | `exam_swebench.sh` | `exam_sandbox.sh` |
 |---|---|---|
