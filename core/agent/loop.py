@@ -29,8 +29,9 @@ class Loop:
 
     def thought(self):
         try:
-            message: list = self.messages + [{"role": "user", "content": "Please provide your next "
-                                    "thought or code snippet."}]
+            message: list = self.messages + [{"role": "user", "content":
+                                              "Please provide your "
+                                              "next thought."}]
             self.llm_response: httpx.Response = httpx.post(
                 url=self.provider_url + self.endpoint,
                 headers={"Authorization":

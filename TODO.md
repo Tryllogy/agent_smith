@@ -345,6 +345,54 @@ le rapport de benchmark.
 - [ ] Cles API depuis env vars uniquement (`OPENROUTER_API_KEY`, ...)
 - [ ] Tracking : tokens in/out, `request_time_ms`, `total_requests`, latence
 
+#### Modeles gratuits OpenRouter (releve du 2026-08-10)
+
+Le sujet impose les **offres gratuites exclusivement** : aucun plan payant,
+credit achete ou compte facture. Verifier `usage.cost == 0` sur une requete
+de controle avant de lancer une campagne de benchmark.
+
+Comment relister : `GET https://openrouter.ai/api/v1/models` (public, sans
+auth), garder les entrees ou `pricing.prompt` **et** `pricing.completion`
+valent `"0"`. Filtrer sur le prix, pas sur le suffixe `:free` : certaines
+entrees gratuites ne le portent pas.
+
+17 gratuits sur 399 au releve. Utilisables pour du code :
+
+| Identifiant | Contexte |
+|---|---|
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | 1 000 000 |
+| `poolside/laguna-s-2.1:free` | 262 144 |
+| `poolside/laguna-xs-2.1:free` | 262 144 |
+| `google/gemma-4-31b-it:free` | 262 144 |
+| `google/gemma-4-26b-a4b-it:free` | 262 144 |
+| `nvidia/nemotron-3-super-120b-a12b:free` | 262 144 |
+| `inclusionai/ling-3.0-tiny:free` | 262 144 |
+| `cohere/north-mini-code:free` | 256 000 |
+| `nvidia/nemotron-3-nano-30b-a3b:free` | 256 000 |
+| `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` | 256 000 |
+| `openai/gpt-oss-20b:free` | 131 072 |
+| `nvidia/nemotron-nano-9b-v2:free` | 128 000 |
+
+A ecarter (gratuits mais hors sujet) : `google/lyria-3-pro-preview` et
+`google/lyria-3-clip-preview` (audio), `nvidia/nemotron-3.5-content-safety`
+(classifieur de moderation). `openrouter/free` est un routeur automatique,
+pas un modele identifiable — inutilisable pour un benchmark reproductible.
+
+Criteres de choix :
+
+- **Commencer par le plus capable** (`nemotron-3-ultra-550b`), sans limites.
+  Le sujet : si ca ne passe pas sans contraintes, les contraintes n'aideront pas.
+- **Eviter le modele `reasoning`** : ses tokens de raisonnement comptent dans
+  la limite de sortie, or MBPP n'en autorise que 1 500 au total.
+- **Ignorer la taille de contexte** comme critere : la vraie contrainte est
+  6 000 tokens d'entree cumules (MBPP), tres en dessous de tous ces modeles.
+- **Quotas journaliers** sur le tier gratuit → c'est la raison d'etre du
+  multi-cles + rotation ci-dessus. 5 modeles x 3 taches SWE-bench pour le
+  rapport, plus les iterations de dev, les atteindront.
+- **Liste volatile** : les modeles gratuits apparaissent et disparaissent chez
+  OpenRouter. Ne jamais figer un identifiant dans le code — `--model-name` est
+  deja un parametre impose par le sujet. Relister avant chaque campagne.
+
 ### P2.4 — System prompts
 
 - [ ] Injection du sandbox manual (fourni par P1)
@@ -372,6 +420,7 @@ l'agent, et transcrire ce raisonnement dans le prompt.
 
 *Racine du repo — fichier cree, vide.*
 **≥ 5 modeles × ≥ 3 taches SWE-bench communes.**
+Candidats : voir la table des modeles gratuits en P2.3 (12 utilisables).
 
 - [ ] Setup : modeles/providers, taches choisies + justification
 - [ ] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
