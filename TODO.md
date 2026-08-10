@@ -2,8 +2,8 @@
 
 | | Qui | Domaine |
 |---|---|---|
-| **Personne 1** | tchemin | Execution & Outils (sandbox, MCP, tools, Docker) |
-| **Personne 2** | ndi-tull | Agent & Intelligence (boucle, LLM, prompts, bench) |
+| **Personne 1** | ndi-tull | Execution & Outils (sandbox, MCP, tools, Docker) |
+| **Personne 2** | tchemin | Agent & Intelligence (boucle, LLM, prompts, bench) |
 
 > Le projet n'est **pas** "faire generer du code par un LLM". C'est construire un
 > **runtime securise et instrumente** pour un agent de code. MBPP / SWE-bench sont
@@ -55,20 +55,6 @@ tests/           test_sandbox_security.py  test_extraction.py  test_mcp_tools.py
 **Reste a verifier :** `uv run sandbox` ne marchera qu'une fois
 `sandbox/cli.py:main()` ecrit (le fichier est encore vide).
 
-### PYTEST — a trancher
-
-Le sujet n'exige **ni** `tests/` **ni** pytest.
-
-`pyproject` declare pytest + `testpaths=["tests"]`, le `Makefile` n'a **pas** de
-cible test, et pytest n'est pas installe (`uv sync` lance sans `--extra dev`).
-
-- Soit on garde → cible `test` au Makefile + `make dev`.
-- Soit on abandonne → retirer pytest du `pyproject` + supprimer `tests/`.
-
-*Argument pour garder :* rejouer `exam_sandbox.sh` en local, et relancer une suite
-en 1 commande pendant les modifs a chaud de la soutenance.
-
----
 
 ## Rappel des limites
 
@@ -217,7 +203,7 @@ Tant que ce n'est pas fige, chacun code contre du vide.
 
 ---
 
-## Personne 1 — tchemin : Execution & Outils
+## Personne 1 — ndi-tull : Execution & Outils
 
 Domaine : tout ce qui execute du code et touche au systeme.
 Livrables : le sandbox, le serveur MCP, les 9 outils, l'integration Docker.
@@ -322,7 +308,7 @@ points d'entree fins, l'emplacement racine etant impose par le sujet.
 
 ---
 
-## Personne 2 — ndi-tull : Agent & Intelligence
+## Personne 2 — tchemin : Agent & Intelligence
 
 Domaine : tout ce qui parle au LLM et pilote le raisonnement.
 Livrables : la boucle agent, la couche providers, les prompts, les 2 CLI,
@@ -428,8 +414,8 @@ l'agent, et transcrire ce raisonnement dans le prompt.
    → setup, structure, flat layout et models **faits**. Reste : l'interface
    Sandbox ↔ Orchestrateur, et le chargement config JSON / `.env`.
 2. **En parallele :**
-   - `tchemin` → sandbox minimal qui execute du code + `final_answer`
-   - `ndi-tull` → boucle agent minimale + 1 provider en dur
+   - `ndi-tull` → sandbox minimal qui execute du code + `final_answer`
+   - `tchemin` → boucle agent minimale + 1 provider en dur
 3. **Premier jalon :** MBPP end-to-end avec le modele le plus capable disponible
    et **sans** limites de tokens/iterations. Si ca ne passe pas la, ajouter des
    contraintes n'aidera pas.
