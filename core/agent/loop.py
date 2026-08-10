@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 from .. import constants
 
+
 if not load_dotenv():
     raise FileNotFoundError("The .env file was not found."
                             "Please ensure it exists in the project root.")
@@ -12,7 +13,8 @@ class Loop:
     def __init__(
         self,
         model_name: str,
-        provider_url: str
+        provider_url: str,
+        prompt: str = None
     ) -> None:
         self.thoughts: list = []
         self.codes: list = []
@@ -25,6 +27,7 @@ class Loop:
         self.messages: list = [
             {"role": "system", "content": "You are a helpful assistant that "
              "must generate or debug code."},
+            {"role": "user", "content": prompt}
         ]
 
     def thought(self):
@@ -32,6 +35,7 @@ class Loop:
             message: list = self.messages + [{"role": "user", "content":
                                               "Please provide your "
                                               "next thought."}]
+            print("TEST")
             self.llm_response: httpx.Response = httpx.post(
                 url=self.provider_url + self.endpoint,
                 headers={"Authorization":
@@ -43,6 +47,7 @@ class Loop:
                 },
                 timeout=constants.LLM_TIMEOUT_SECONDS
             )
+            print("TEST2")
             self.llm_response.raise_for_status()
         except httpx.TimeoutException:
             raise TimeoutError("The request to the LLM provider timed out. "
@@ -64,6 +69,7 @@ class Loop:
         self.usage_input += usage.get("prompt_tokens", 0)
         self.usage_output += usage.get("completion_tokens", 0)
         self.thoughts.append(text)
+        print(self.thoughts[-1])
 
     def code(self):
         return
