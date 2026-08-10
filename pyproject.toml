@@ -21,14 +21,14 @@ dev = [
 ]
 
 [project.scripts]
-sandbox = "src.sandbox.cli:main"
+sandbox = "sandbox.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["core", "sandbox", "agent_mbpp", "agent_swebench", "mcp_tools"]
 
 [tool.ruff]
 line-length = 79

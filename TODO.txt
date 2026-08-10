@@ -11,19 +11,52 @@
 
 
 --------------------------------------------------------------------------------
- ETAT ACTUEL
+ ETAT ACTUEL                                 (maj : arborescence flat creee)
 --------------------------------------------------------------------------------
-  [x] en.subject.pdf + RESUME.md
-  [~] src/validators.py       -> SandboxConfig OK, les autres models sont vides
-  [ ] pyproject.toml          -> VIDE, a remplir (voir DEPENDANCES)
-  [ ] Makefile                -> VIDE
-  [ ] README.md               -> VIDE
+  [x] en.subject.pdf + RESUME.md   -> RESUME complete (section MCP ajoutee :
+                                      definition, "les outils MCP sont les
+                                      mains de l'agent", qui ecrit quoi)
+  [x] core/models.py               -> les 5 models Pydantic sont ecrits
+                                      (ex-src/validators.py, deplace en flat)
+  [x] pyproject.toml               -> rempli (2 cles a corriger, voir plus bas)
+  [x] Makefile                     -> rempli (pas de cible test, cf. PYTEST)
+  [x] Python 3.10                  -> .venv en 3.10.20, requires-python OK
+  [x] Arborescence flat layout     -> creee, tous les .py sont VIDES
+  [ ] README.md                    -> toujours VIDE
+  [~] .gitignore                   -> .env et __pycache__ OK,
+                                      il manque cache/ et evaluations/
 
-  /!\ 2 points a corriger tout de suite :
-      1. src/validators.py:32 -> class SWEBenchTaskInput(BaseException)
-         doit heriter de BaseModel, pas BaseException.
-      2. Python 3.13.1 est installe, le sujet impose Python 3.10.
-         -> "uv python install 3.10" + requires-python = "==3.10.*"
+  Arborescence en place (fichiers vides, a remplir) :
+    racine    mcp_tools_mbpp.py   mcp_tools_swebench.py
+              sandbox_template.json   BENCHMARK_REPORT.md
+    core/     models.py  errors.py
+              agent/  loop.py  extraction.py  prompt.py
+              llm/    client.py  keyring.py  usage.py
+    sandbox/  cli.py  executor.py  manual.py
+              security/    imports.py filesystem.py builtins.py limits.py
+              mcp_client/  client.py  transports.py
+    mcp_tools/       tools_fs.py  tools_search.py  tools_exec.py
+    agent_mbpp/      __main__.py  cli.py
+    agent_swebench/  __main__.py  cli.py  docker.py
+    configs/  models.json
+    tests/    test_sandbox_security.py  test_extraction.py  test_mcp_tools.py
+
+  [x] Flat layout coherent (3 corrections faites) :
+      1. [project.scripts] = "sandbox.cli:main"   (plus de prefixe src)
+      2. [tool.hatch...] packages = core, sandbox, agent_mbpp,
+                                     agent_swebench, mcp_tools
+      3. src/ supprime : validators.py -> core/models.py (git mv),
+         __main__.py vide supprime.
+      -> RESTE a verifier : "uv run sandbox" ne marchera qu'une fois
+         sandbox/cli.py:main() ecrit (le fichier est encore vide).
+
+  PYTEST - a trancher (le sujet n'exige NI tests/ NI pytest) :
+      pyproject declare pytest + testpaths=["tests"], le Makefile n'a PAS de
+      cible test, et pytest n'est pas installe (uv sync lance sans --extra dev).
+      Soit on garde -> cible "test" au Makefile + make dev.
+      Soit on abandonne -> retirer pytest du pyproject + supprimer tests/.
+      Argument pour garder : rejouer exam_sandbox.sh en local, et relancer
+      une suite en 1 commande pendant les modifs a chaud de la soutenance.
 
 
 --------------------------------------------------------------------------------
@@ -47,7 +80,7 @@
  DEPENDANCES & IMPORTS
 ================================================================================
 
---- pyproject.toml (a ecrire) --------------------------------------------------
+--- pyproject.toml (ECRIT - relire les 2 cles signalees en ETAT ACTUEL) --------
 
   [project]
   name = "agent-smith"
@@ -64,7 +97,11 @@
   dev = ["pytest>=8.0", "ruff>=0.6"]
 
   [project.scripts]
-  sandbox = "src.sandbox.cli:main"      # -> uv run sandbox
+  sandbox = "sandbox.cli:main"          # -> uv run sandbox  (flat layout :
+                                        #    PAS "src.sandbox.cli:main")
+
+  [tool.hatch.build.targets.wheel]
+  packages = ["core", "sandbox", "agent_mbpp", "agent_swebench", "mcp_tools"]
 
   Optionnel selon les choix :
     openai>=1.0     si on passe par le SDK OpenAI plutot que httpx brut
@@ -125,22 +162,27 @@
 Tant que ce n'est pas fige, chacun code contre du vide.
 
   [X] Setup uv + pyproject.toml + Python 3.10 + structure de dossiers
-  [X] Makefile (install / run / test / lint / clean)
-  [X] .gitignore (.env, __pycache__, cache/, evaluations/)
-  [ ] FIGER TOUS les models Pydantic dans src/validators.py :
-        [ ] SandboxConfig          (fait)
-        [ ] MBPPTaskInput          task_id, task_definition, function_definition,
+  [X] Makefile (install / run / lint / clean)      -> pas de cible test
+  [~] .gitignore (.env, __pycache__ OK)            -> ajouter cache/ + evaluations/
+  [X] FIGER TOUS les models Pydantic (core/models.py) :
+        [X] SandboxConfig          authorized_imports, allowed_directories,
+                                   max_execution_time_seconds, max_memory_mb
+        [X] MBPPTaskInput          task_id, task_definition, function_definition,
                                    test_imports, test_list
-        [ ] SWEBenchTaskInput      instance_id, problem_statement, docker_image,
+        [X] SWEBenchTaskInput      instance_id, problem_statement, docker_image,
                                    eval_script, hints_text, repo
-        [ ] StepMetrics            step, input_tokens, output_tokens,
+                                   (l'heritage BaseException est corrige)
+        [X] StepMetrics            step, input_tokens, output_tokens,
                                    request_time_ms, timestamp, api_url,
                                    model_name, llm_output, sandbox_input,
                                    sandbox_output, retries
-        [ ] SolutionOutput         task_id, benchmark, success, solution,
+        [X] SolutionOutput         task_id, benchmark, success, solution,
                                    iterations, total_requests, total_input_tokens,
                                    total_output_tokens, total_time_seconds,
                                    steps, system_prompt, error, timestamp
+      -> RESTE : relire champ par champ contre le sujet (V.3 / V.4) avant de
+         coder dessus. Une signature fausse ici casse les deux moities du
+         projet et n'est detectee qu'a la validation moulinette.
   [ ] FIGER l'interface Sandbox <-> Orchestrateur :
         - signature de execute(code) -> (stdout, stderr, error, is_final, answer)
         - qui remplit sandbox_input / sandbox_output
@@ -207,8 +249,11 @@ Livrables : le sandbox, le serveur MCP, les 9 outils, l'integration Docker.
   [ ] get_patch()                                -> git diff unifie
   [ ] run_command(command, workdir)              -> stdout, stderr, exit code
 
-  [ ] mcp_tools_mbpp.py      A LA RACINE du repo
-  [ ] mcp_tools_swebench.py  A LA RACINE du repo
+  [~] mcp_tools_mbpp.py      A LA RACINE du repo   (fichier cree, vide)
+  [~] mcp_tools_swebench.py  A LA RACINE du repo   (fichier cree, vide)
+  -> la logique des 9 outils va dans le package mcp_tools/ (tools_fs.py,
+     tools_search.py, tools_exec.py) ; les 2 fichiers racine ne sont que des
+     points d'entree fins, l'emplacement racine etant impose par le sujet.
 
 --- P1.6 DOCKER / SWE-bench ----------------------------------------------------
   [ ] Choisir : sandbox DANS le container, ou sandbox sur l'hote + outils MCP
@@ -279,7 +324,7 @@ Livrables : la boucle agent, la couche providers, les prompts, les 2 CLI,
   [ ] Remplissage de TOUS les champs de StepMetrics (llm_output brut,
       sandbox_input, sandbox_output, retries) -> tracabilite exigee
 
---- P2.6 BENCHMARK_REPORT.md (racine du repo) ----------------------------------
+--- P2.6 BENCHMARK_REPORT.md (racine du repo - fichier cree, vide) -------------
   >= 5 modeles x >= 3 taches SWE-bench communes
   [ ] Setup : modeles/providers, taches choisies + justification
   [ ] Tableau modele x tache : pass/fail, iterations, tokens in/out, temps mur
@@ -318,6 +363,8 @@ Livrables : la boucle agent, la couche providers, les prompts, les 2 CLI,
  ORDRE DE TRAVAIL RECOMMANDE
 ================================================================================
   1. Phase 0 ensemble (models + interface + setup)          <- bloquant
+     -> setup, structure, flat layout et models FAITS. Reste : l'interface
+        Sandbox <-> Orchestrateur, et le chargement config JSON / .env.
   2. En parallele :
        tchemin  -> sandbox minimal qui execute du code + final_answer
        ndi-tull -> boucle agent minimale + 1 provider en dur
