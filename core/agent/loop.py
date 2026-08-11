@@ -1,7 +1,9 @@
 import httpx
 from dotenv import load_dotenv
 import os
-from .. import constants
+from core.agent.prompt import Prompt
+from core import constants
+from core.models import SolutionOutput
 
 
 if not load_dotenv():
@@ -14,7 +16,7 @@ class Loop:
         self,
         model_name: str,
         provider_url: str,
-        prompt: str = None
+        prompt: Prompt = None
     ) -> None:
         self.thoughts: list = []
         self.codes: list = []
@@ -24,30 +26,22 @@ class Loop:
         self.endpoint: str = constants.LLM_ENDPOINT
         self.provider_url: str = provider_url
         self.model_name: str = model_name
-        self.messages: list = [
-            {"role": "system", "content": "You are a helpful assistant that "
-             "must generate or debug code."},
-            {"role": "user", "content": prompt}
-        ]
+        self.prompt: Prompt = prompt if prompt is not None else Prompt("")
 
     def thought(self):
         try:
-            message: list = self.messages + [{"role": "user", "content":
-                                              "Please provide your "
-                                              "next thought."}]
-            print("TEST")
+
             self.llm_response: httpx.Response = httpx.post(
                 url=self.provider_url + self.endpoint,
                 headers={"Authorization":
                          f"Bearer {os.getenv('OPENROUTER_API_KEY')}"},
                 json={
                     "model": self.model_name,
-                    "messages": message,
-                    "stop": ["<end_code>"]
+                    "messages": self.prompt.prompt,
+                    "stop": constants.LLM_STOP_SEQUENCE
                 },
                 timeout=constants.LLM_TIMEOUT_SECONDS
             )
-            print("TEST2")
             self.llm_response.raise_for_status()
         except httpx.TimeoutException:
             raise TimeoutError("The request to the LLM provider timed out. "
@@ -69,16 +63,24 @@ class Loop:
         self.usage_input += usage.get("prompt_tokens", 0)
         self.usage_output += usage.get("completion_tokens", 0)
         self.thoughts.append(text)
-        print(self.thoughts[-1])
+        message = {"role": "assistant", "content": text}
+        self.prompt.add_message(message)
 
-    def code(self):
+    def extract(self):
         return
 
     def observation(self):
         return
 
-    def run(self):
-        while True:
-            self.thought()
-            self.code()
-            self.observation()
+    def run(
+        self,
+        limit_iter: int,
+        max_tokens: int,
+    ):
+        # while True:
+        #     self.thought()
+        #     self.extract()
+        #     self.observation()
+        pass
+        solution: dict = {}
+        SolutionOutput()

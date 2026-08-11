@@ -1,7 +1,9 @@
 from core.agent.loop import Loop
 from core.models import MBPPTaskInput
 from pydantic import ValidationError
+from core.agent.prompt import Prompt
 import json
+from core.models import SandboxConfig
 
 
 class AgentMBPP:
@@ -14,7 +16,9 @@ class AgentMBPP:
     ) -> None:
         self.task: dict = self.get_task_from_file(task_file)
         self.output_file: str = output_file
-        prompt: str = json.dumps(self.task)
+        prompt: Prompt = Prompt(task=self.task,
+                                tools=None,
+                                allowed_imports=SandboxConfig.allowed_imports)
 
         self.loop = Loop(
             model_name=model_name,

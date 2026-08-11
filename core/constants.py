@@ -1,5 +1,6 @@
 LLM_TIMEOUT_SECONDS = 120
 LLM_ENDPOINT = "/chat/completions"
+LLM_STOP_SEQUENCE = ["<end_code>", "</tool_calls>"]
 
 
 MBPP_INPUT_MAX_TOKEN = 6000
