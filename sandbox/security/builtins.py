@@ -1,0 +1,44 @@
+import builtins
+
+SAFE = [
+    # Types & conversions
+    "bool", "int", "float", "complex",
+    "str", "bytes", "bytearray",
+    "list", "tuple", "dict", "set", "frozenset",
+
+    # Iteration & sequences
+    "len", "range", "enumerate", "zip", "map", "filter",
+    "sorted", "reversed", "iter", "next", "slice",
+    "all", "any", "sum", "min", "max",
+
+    # Numeriques & formatage
+    "abs", "round", "pow", "divmod",
+    "bin", "oct", "hex", "chr", "ord", "ascii",
+    "format", "repr", "hash",
+
+    # Introspection douce (test de type uniquement, pas de manipulation)
+    "isinstance", "issubclass", "type", "callable",
+
+    # Sortie
+    "print",
+
+    # Exceptions (le code legitime en leve et en attrape)
+    "BaseException", "Exception",
+    "ArithmeticError", "ZeroDivisionError", "OverflowError",
+    "ValueError", "TypeError", "KeyError", "IndexError",
+    "AttributeError", "NameError", "RuntimeError",
+    "StopIteration", "StopAsyncIteration",
+    "AssertionError", "NotImplementedError",
+    "LookupError", "FloatingPointError",
+
+    # Constantes
+    "True", "False", "None", "NotImplemented", "Ellipsis",
+]
+
+
+def safe_builtins() -> dict:
+    d = {}
+    for name in SAFE:
+        if hasattr(builtins, name):
+            d[name] = getattr(builtins, name)
+    return d

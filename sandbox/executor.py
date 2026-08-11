@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import io
 from contextlib import redirect_stdout, redirect_stderr
+from sandbox.security.builtins import safe_builtins
 
 
 class FinalAnswer(Exception):
@@ -13,7 +14,7 @@ def final_answer(value):
 
 
 def run_in_child(code, out_queue):
-    ns = {"__builtins__": __builtins__, "final_answer": final_answer}
+    ns = {"__builtins__": safe_builtins(), "final_answer": final_answer}
     error, is_final, answer = None, False, None
 
     out = io.StringIO()
