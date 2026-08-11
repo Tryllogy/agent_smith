@@ -60,8 +60,13 @@ class Loop:
         text: str = data.get("choices", [{}])[0].get(
             "message", {}).get("content", "")
         usage = data.get("usage", 0)
-        self.usage_input += usage.get("prompt_tokens", 0)
-        self.usage_output += usage.get("completion_tokens", 0)
+        try:
+            self.usage_input += usage.get("prompt_tokens", 0)
+            self.usage_output += usage.get("completion_tokens", 0)
+        except AttributeError:
+            raise ValueError(
+                "Unexpected response format from the LLM provider."
+                " 'usage' field is missing or not a dictionary.")
         self.thoughts.append(text)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)

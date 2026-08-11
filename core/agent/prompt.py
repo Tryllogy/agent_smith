@@ -32,6 +32,7 @@ class Prompt:
              " and the tools that you want to use."
              " Then in the 'code:', you should write the"
              " code in simple Python."
+             " No docstrings or comments are needed."
              " If nothing is printed, nothing will appear"
              " in the 'observation:'."
              " In the end you have to return a final answer using the"

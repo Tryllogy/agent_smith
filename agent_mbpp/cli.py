@@ -16,9 +16,11 @@ class AgentMBPP:
     ) -> None:
         self.task: dict = self.get_task_from_file(task_file)
         self.output_file: str = output_file
-        prompt: Prompt = Prompt(task=self.task,
-                                tools=None,
-                                allowed_imports=SandboxConfig.allowed_imports)
+        prompt: Prompt = Prompt(
+            task=self.task,
+            tools=None,
+            allowed_imports=SandboxConfig().authorized_imports
+        )
 
         self.loop = Loop(
             model_name=model_name,
