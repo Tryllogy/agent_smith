@@ -2,6 +2,7 @@ import multiprocessing as mp
 import io
 from contextlib import redirect_stdout, redirect_stderr
 from sandbox.security.builtins import safe_builtins
+from sandbox.security.ast_guard import check_code
 
 
 class FinalAnswer(Exception):
@@ -21,6 +22,7 @@ def run_in_child(code, out_queue):
     err = io.StringIO()
     with redirect_stdout(out), redirect_stderr(err):
         try:
+            check_code(code)
             exec(code, ns)
         except FinalAnswer as fa:
             is_final, answer = True, fa.value
