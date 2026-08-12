@@ -8,7 +8,7 @@ if __name__ == "__main__":
     parser.add_argument("--task-file",
                         default="task.json",
                         help="Path to the task file.")
-    parser.add_argument("--output-file",
+    parser.add_argument("--output",
                         default="output.json",
                         help="Path to the output file.")
     parser.add_argument("--model-name",
@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     agent_mbpp = AgentMBPP(
         task_file=args.task_file,
-        output_file=args.output_file,
+        output_file=args.output,
         model_name=args.model_name,
         provider_url=args.provider_url
     )

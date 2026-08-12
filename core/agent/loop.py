@@ -27,7 +27,6 @@ class Loop:
         bench: constants.Bench
     ) -> None:
         self.thoughts: list = []
-        self.codes: list = []
         self.observations: list = []
         self.usage_input: int = 0
         self.usage_output: int = 0
@@ -40,8 +39,14 @@ class Loop:
         self.max_tokens_output: int = bench.output_max_token
         self.timeout_limit: int = bench.timeout
         self.iteration_limit: int = bench.iterations
+        self.step_metrics: list = []
+        self.solution: str = ""
+        self.success: bool = False
 
-    def thought(self):
+    def thought(
+        self,
+        timeout_max: float
+    ):
         try:
             self.llm_response: httpx.Response = httpx.post(
                 url=self.provider_url + self.endpoint,
@@ -52,7 +57,7 @@ class Loop:
                     "messages": self.prompt.prompt,
                     "stop": constants.LLM_STOP_SEQUENCE
                 },
-                timeout=constants.LLM_TIMEOUT_SECONDS
+                timeout=timeout_max
             )
             self.llm_response.raise_for_status()
             data: dict = self.llm_response.json()
@@ -91,33 +96,92 @@ class Loop:
         self.thoughts.append(text)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
-        print(text)
 
-    def is_extracted(self, text: str):
-        code: dict = extract_code_from_text(text)
-        print("EXTRACTED CODE:", code)
-        return True
+    def extract(self, text: str):
+        self.code: dict = extract_code_from_text(text)
+        return self.code["found"] and self.code["error"] == "None"
 
     def observation(self):
-        return
+        if not self.code["found"]:
+            self.prompt.add_message({"role": "user",
+                                     "content": self.code["error"]})
+            return False
+        # UTILISER LA SANDBOX DE L'AUTRE RANDOM DE PLOMB MAIS JE L'AI PAS
+        # POUR LE MOMENT DONC JE PEUX PAS BOSSER
+        # If sandbox == bien executed:
+        #   If assert == True:
+        #       self.solution = self.code["code"]
+        #       self.success = True
+        #       return True
+        #   else:
+        #       self.prompt.add_message({"role": "user",
+        #                              "content": "Assertion failed"})
+        #       return False
+        # else:
+        #   self.prompt.add_message({"role": "user",
+        #                          "content": self.code["error"]})
+        # return False
 
     def run(
         self,
-    ):
-        start_time: float = time.time()
-        solution: dict = {}
-        iteration: int = 0
-        while iteration < self.iteration_limit:
-            if start_time + self.timeout_limit < time.time():
-                return SolutionOutput().model_validate({})
+        task_id: str,
+    ) -> SolutionOutput:
+        self.start_time: float = time.time()
+        self.iteration: int = 0
+        self.task_id: str = task_id
+        while self.iteration < self.iteration_limit:
+            try:
+                self.thought(min(constants.LLM_TIMEOUT_SECONDS,
+                                 (time.time() - self.start_time)))
+            except RuntimeError:
+                return self.make_solution_output(
+                    error="Error from LLM provider"
+                )
+            except Exception:
+                continue
+            if time.time() - self.start_time > self.timeout_limit:
+                return self.make_solution_output(
+                    error="Timeout limit exceeded"
+                )
             if self.usage_input > self.max_tokens_input:
-                return SolutionOutput().model_validate({})
+                return self.make_solution_output(
+                    error="Input token limit exceeded"
+                )
             if self.usage_output > self.max_tokens_output:
-                return SolutionOutput().model_validate({})
-            self.thought()
-            if self.is_extracted(self.thoughts[-1]):
-                iteration += 1
+                return self.make_solution_output(
+                    error="Output token limit exceeded"
+                )
+            self.extract(self.thoughts[-1])
+            if self.observation():
+                self.iteration += 1
                 break
-            self.observation()
-            iteration += 1
-        SolutionOutput().model_validate(solution)
+            self.iteration += 1
+        return self.make_solution_output(
+        )
+
+    def make_solution_output(
+        self,
+        error: str | None = None
+    ) -> SolutionOutput:
+        if self.name_bench == "mbpp":
+            self.task_id = str(self.task_id)
+
+        n_retries: int = 0
+        solution: dict = {
+            "task_id": self.task_id,
+            "benchmark": self.name_bench,
+            "success": self.success,
+            "solution": self.solution,
+            "iterations": self.iteration,
+            "total_requests": self.iteration + n_retries,
+            "total_input_tokens": self.usage_input,
+            "total_output_tokens": self.usage_output,
+            "total_time_seconds": round(time.time() - self.start_time, 2),
+            "steps": self.step_metrics,
+            "system_prompt": "\n".join([msg["content"]
+                                        for msg in self.prompt.prompt
+                                        if msg["role"] == "system"]),
+            "error": error,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+        }
+        return SolutionOutput.model_validate(solution)

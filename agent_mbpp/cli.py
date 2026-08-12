@@ -31,7 +31,7 @@ class AgentMBPP:
         )
 
     def run(self):
-        self.loop.run()
+        self.loop.run(self.task["task_id"])
 
     def get_task_from_file(
         self,

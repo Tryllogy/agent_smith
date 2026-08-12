@@ -27,7 +27,7 @@ class Bench:
 
 
 SWE = Bench(
-    name="SWE",
+    name="swebench",
     input_max_token=300000,
     output_max_token=10000,
     iterations=30,
@@ -35,7 +35,7 @@ SWE = Bench(
 )
 
 MBPP = Bench(
-    name="MBPP",
+    name="mbpp",
     input_max_token=6000,
     output_max_token=1500,
     iterations=10,

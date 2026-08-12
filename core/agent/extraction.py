@@ -19,19 +19,21 @@ def extract_code_from_text(text: str) -> dict:
         return {
             "code": extracted_code.strip(),
             "found": False,
-            "format": None
+            "error": "No code block found"
         }
-    extracted_code, format_str = decode_python(code_blocks[0])
+    extracted_code, error_str = decode_python(code_blocks[0])
     return {
         "code": extracted_code.strip(),
         "found": True,
-        "format": format_str
+        "error": error_str
     }
 
 
 def decode_python(text: str) -> tuple[str, str]:
     try:
         ast.parse(text)
-        return text, "python"
-    except SyntaxError:
-        return text, ""
+        return text, "None"
+    except IndentationError as e:
+        return text, f"IndentationError: {e}"
+    except SyntaxError as e:
+        return text, f"SyntaxError: {e}"
