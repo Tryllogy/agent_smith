@@ -3,7 +3,18 @@ from dataclasses import dataclass
 
 LLM_TIMEOUT_SECONDS = 30
 LLM_ENDPOINT = "/chat/completions"
-LLM_STOP_SEQUENCE = ["<end_code>", "</tool_calls>"]
+LLM_STOP_SEQUENCE = [
+    "<end_code>",
+    "</tool_call>",
+    "<invoke>",
+    "Action Input:"
+]
+LLM_START_SEQUENCE = [
+    "```python",
+    "<tool_call>",
+    "<invoke>",
+    "Action:"
+]
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,7 @@
 from core import constants
 from core.models import SolutionOutput
 from core.agent.prompt import Prompt
+from core.agent.extraction import extract_code_from_text
 from dotenv import load_dotenv
 import time
 import os
@@ -92,8 +93,10 @@ class Loop:
         self.prompt.add_message(message)
         print(text)
 
-    def extract(self):
-        return False
+    def is_extracted(self, text: str):
+        code: dict = extract_code_from_text(text)
+        print("EXTRACTED CODE:", code)
+        return True
 
     def observation(self):
         return
@@ -112,7 +115,7 @@ class Loop:
             if self.usage_output > self.max_tokens_output:
                 return SolutionOutput().model_validate({})
             self.thought()
-            if self.extract():
+            if self.is_extracted(self.thoughts[-1]):
                 iteration += 1
                 break
             self.observation()
