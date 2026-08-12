@@ -1,5 +1,5 @@
 from core import constants
-from core.models import SolutionOutput
+from core.models import SolutionOutput, StepMetrics
 from core.agent.prompt import Prompt
 from core.agent.extraction import extract_code_from_text
 from dotenv import load_dotenv
@@ -42,12 +42,14 @@ class Loop:
         self.step_metrics: list = []
         self.solution: str = ""
         self.success: bool = False
+        self.request_time_ms: float = 0.0
 
     def thought(
         self,
         timeout_max: float
     ):
         try:
+            start_time = time.time()
             self.llm_response: httpx.Response = httpx.post(
                 url=self.provider_url + self.endpoint,
                 headers={"Authorization":
@@ -59,6 +61,8 @@ class Loop:
                 },
                 timeout=timeout_max
             )
+            self.request_time_ms: float = round(
+                (time.time() - start_time) * 1000, 2)
             self.llm_response.raise_for_status()
             data: dict = self.llm_response.json()
             if data.get("error"):
@@ -93,6 +97,8 @@ class Loop:
                              "'usage' field.")
         self.usage_input += usage.get("prompt_tokens", 0)
         self.usage_output += usage.get("completion_tokens", 0)
+        self.last_usage_input: int = usage.get("prompt_tokens", 0)
+        self.last_usage_output: int = usage.get("completion_tokens", 0)
         self.thoughts.append(text)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
@@ -153,8 +159,10 @@ class Loop:
                 )
             self.extract(self.thoughts[-1])
             if self.observation():
+                self.step_metrics.append(self.make_step_metrics())
                 self.iteration += 1
                 break
+            self.step_metrics.append(self.make_step_metrics())
             self.iteration += 1
         return self.make_solution_output(
         )
@@ -185,3 +193,21 @@ class Loop:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
         }
         return SolutionOutput.model_validate(solution)
+
+    def make_step_metrics(
+        self,
+    ) -> dict:
+        step_metric: dict = {
+            "step": self.iteration,
+            "input_tokens": self.last_usage_input,
+            "output_tokens": self.last_usage_output,
+            "request_time_ms": self.request_time_ms,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
+            "api_url": self.provider_url + self.endpoint,
+            "model_name": self.model_name,
+            "llm_output": self.thoughts[-1] if self.thoughts else "",
+            "sandbox_input": None,
+            "sandbox_output": None,
+            "retries": 0,
+        }
+        return StepMetrics.model_validate(step_metric)
