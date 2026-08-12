@@ -1,9 +1,10 @@
-from core.agent.loop import Loop
-from core.models import MBPPTaskInput
-from pydantic import ValidationError
-from core.agent.prompt import Prompt
-import json
+from core import constants
 from core.models import SandboxConfig
+from core.models import MBPPTaskInput
+from core.agent.loop import Loop
+from core.agent.prompt import Prompt
+from pydantic import ValidationError
+import json
 
 
 class AgentMBPP:
@@ -26,10 +27,11 @@ class AgentMBPP:
             model_name=model_name,
             provider_url=provider_url,
             prompt=prompt,
+            bench=constants.MBPP
         )
 
     def run(self):
-        self.loop.thought()
+        self.loop.run()
 
     def get_task_from_file(
         self,

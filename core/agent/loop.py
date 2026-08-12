@@ -1,10 +1,11 @@
-import httpx
-import os
-import json
-from dotenv import load_dotenv
-from core.agent.prompt import Prompt
 from core import constants
 from core.models import SolutionOutput
+from core.agent.prompt import Prompt
+from dotenv import load_dotenv
+import time
+import os
+import json
+import httpx
 
 
 if not load_dotenv():
@@ -21,7 +22,8 @@ class Loop:
         self,
         model_name: str,
         provider_url: str,
-        prompt: Prompt
+        prompt: Prompt,
+        bench: constants.Bench
     ) -> None:
         self.thoughts: list = []
         self.codes: list = []
@@ -32,6 +34,11 @@ class Loop:
         self.provider_url: str = provider_url
         self.model_name: str = model_name
         self.prompt: Prompt = prompt
+        self.name_bench: str = bench.name
+        self.max_tokens_input: int = bench.input_max_token
+        self.max_tokens_output: int = bench.output_max_token
+        self.timeout_limit: int = bench.timeout
+        self.iteration_limit: int = bench.iterations
 
     def thought(self):
         try:
@@ -86,20 +93,28 @@ class Loop:
         print(text)
 
     def extract(self):
-        return
+        return False
 
     def observation(self):
         return
 
     def run(
         self,
-        limit_iter: int,
-        max_tokens: int,
     ):
-        # while True:
-        #     self.thought()
-        #     self.extract()
-        #     self.observation()
-        pass
+        start_time: float = time.time()
         solution: dict = {}
-        SolutionOutput()
+        iteration: int = 0
+        while iteration < self.iteration_limit:
+            if start_time + self.timeout_limit < time.time():
+                return SolutionOutput().model_validate({})
+            if self.usage_input > self.max_tokens_input:
+                return SolutionOutput().model_validate({})
+            if self.usage_output > self.max_tokens_output:
+                return SolutionOutput().model_validate({})
+            self.thought()
+            if self.extract():
+                iteration += 1
+                break
+            self.observation()
+            iteration += 1
+        SolutionOutput().model_validate(solution)
