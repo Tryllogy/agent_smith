@@ -42,6 +42,7 @@ class Prompt:
              " You have been given access to a list of tools:"
              " these tools are basically Python functions which you"
              " can call with code."
+             " final_answer MUST be autosufficent"
              " \nHere are the tools you have access to: \n"
              f" {tools_str}"
              "\nHere are the allowed imports you can use: \n"

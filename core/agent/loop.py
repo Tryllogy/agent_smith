@@ -1,6 +1,7 @@
 import httpx
-from dotenv import load_dotenv
 import os
+import json
+from dotenv import load_dotenv
 from core.agent.prompt import Prompt
 from core import constants
 from core.models import SolutionOutput
@@ -8,7 +9,11 @@ from core.models import SolutionOutput
 
 if not load_dotenv():
     raise FileNotFoundError("The .env file was not found."
-                            "Please ensure it exists in the project root.")
+                            " Please ensure it exists in the project root.")
+if not os.getenv("OPENROUTER_API_KEY"):
+    raise EnvironmentError("The OPENROUTER_API_KEY environment variable"
+                           " is not set."
+                           " Please ensure it is defined in the .env file.")
 
 
 class Loop:
@@ -16,7 +21,7 @@ class Loop:
         self,
         model_name: str,
         provider_url: str,
-        prompt: Prompt = None
+        prompt: Prompt
     ) -> None:
         self.thoughts: list = []
         self.codes: list = []
@@ -26,11 +31,10 @@ class Loop:
         self.endpoint: str = constants.LLM_ENDPOINT
         self.provider_url: str = provider_url
         self.model_name: str = model_name
-        self.prompt: Prompt = prompt if prompt is not None else Prompt("")
+        self.prompt: Prompt = prompt
 
     def thought(self):
         try:
-
             self.llm_response: httpx.Response = httpx.post(
                 url=self.provider_url + self.endpoint,
                 headers={"Authorization":
@@ -43,6 +47,15 @@ class Loop:
                 timeout=constants.LLM_TIMEOUT_SECONDS
             )
             self.llm_response.raise_for_status()
+            data: dict = self.llm_response.json()
+            if data.get("error"):
+                raise RuntimeError(f"Error from LLM provider: {data['error']}")
+            if not data.get("choices"):
+                raise ValueError("The LLM response does not contain"
+                                 " the expected 'choices' field")
+        except json.JSONDecodeError:
+            raise ValueError("Failed to decode JSON response from the LLM "
+                             "provider. Please check the provider's response.")
         except httpx.TimeoutException:
             raise TimeoutError("The request to the LLM provider timed out. "
                                "Please try again later.")
@@ -56,20 +69,21 @@ class Loop:
         except KeyboardInterrupt:
             raise KeyboardInterrupt("The operation was interrupted by "
                                     "the user.")
-        data: dict = self.llm_response.json()
-        text: str = data.get("choices", [{}])[0].get(
+        text: str = data.get("choices")[0].get(
             "message", {}).get("content", "")
-        usage = data.get("usage", 0)
-        try:
-            self.usage_input += usage.get("prompt_tokens", 0)
-            self.usage_output += usage.get("completion_tokens", 0)
-        except AttributeError:
-            raise ValueError(
-                "Unexpected response format from the LLM provider."
-                " 'usage' field is missing or not a dictionary.")
+        if text is None or text.strip() == "":
+            raise ValueError("The LLM response does not contain the expected "
+                             "'content' field.")
+        usage = data.get("usage", {})
+        if not usage:
+            raise ValueError("The LLM response does not contain the expected "
+                             "'usage' field.")
+        self.usage_input += usage.get("prompt_tokens", 0)
+        self.usage_output += usage.get("completion_tokens", 0)
         self.thoughts.append(text)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
+        print(text)
 
     def extract(self):
         return
