@@ -35,18 +35,3 @@ def decode_python(text: str) -> tuple[str, str]:
         return text, "python"
     except SyntaxError:
         return text, ""
-
-
-def generate(name: str, args: list) -> str:
-    # """
-    # Generates a code snippet based on the given name and arguments.
-
-    # Args:
-    #     name (str): The name of the function or tool.
-    #     args (list): The list of arguments for the function or tool.
-    # Returns:
-    #     str: The generated code snippet.
-    # """
-    # args_str = ", ".join(map(str, args))
-    # return f"{name}({args_str})"
-    pass

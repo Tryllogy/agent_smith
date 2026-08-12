@@ -13,18 +13,32 @@
 
 ## Etat actuel
 
-*(maj : arborescence flat creee)*
+*(maj : 2026-08-12 — premier squelette d'agent MBPP qui tourne)*
 
 - [x] `en.subject.pdf` + `RESUME.md` → RESUME complete (section MCP ajoutee :
       definition, "les outils MCP sont les mains de l'agent", qui ecrit quoi)
 - [x] `core/models.py` → les 5 models Pydantic sont ecrits
       (ex-`src/validators.py`, deplace en flat)
 - [x] `pyproject.toml` → rempli (2 cles a corriger, voir plus bas)
-- [x] `Makefile` → rempli (pas de cible test, cf. PYTEST)
+- [x] `Makefile` → rempli
 - [x] Python 3.10 → `.venv` en 3.10.20, `requires-python` OK
-- [x] Arborescence flat layout → creee, tous les `.py` sont VIDES
+- [x] Arborescence flat layout → creee
 - [ ] `README.md` → toujours VIDE
-- [~] `.gitignore` → `.env` et `__pycache__` OK, il manque `cache/` et `evaluations/`
+- [~] `.gitignore` → `.env`, `__pycache__`, `cache`, `moulinette`, `tests` OK ;
+      il manque `evaluations/`
+
+### Qui a du code, au 2026-08-12
+
+| Ecrit | Encore vide |
+|---|---|
+| `core/models.py`, `core/constants.py` | `core/errors.py`, tout `core/llm/` |
+| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `sandbox/` |
+| `agent_mbpp/` : `cli.py`, `__main__.py` | tout `mcp_tools/`, les 2 `mcp_tools_*.py` racine |
+| | tout `agent_swebench/` |
+| | `configs/models.json`, `sandbox_template.json` |
+
+**Cote P1 (ndi-tull) : rien n'est commence.** C'est le chemin critique — sans
+sandbox, la boucle de P2 ne peut pas produire d'observation, donc pas boucler.
 
 ### Arborescence en place (fichiers vides, a remplir)
 
@@ -41,7 +55,7 @@ mcp_tools/       tools_fs.py  tools_search.py  tools_exec.py
 agent_mbpp/      __main__.py  cli.py
 agent_swebench/  __main__.py  cli.py  docker.py
 configs/         models.json
-tests/           test_sandbox_security.py  test_extraction.py  test_mcp_tools.py
+tests/           banc d'essai local, gitignore, hors rendu
 ```
 
 ### Flat layout coherent (3 corrections faites)
@@ -176,8 +190,9 @@ Session : `list_tools()` / `call_tool()` / `list_resources()` / `list_prompts()`
 Tant que ce n'est pas fige, chacun code contre du vide.
 
 - [x] Setup uv + `pyproject.toml` + Python 3.10 + structure de dossiers
-- [x] Makefile (install / run / lint / clean) → pas de cible test
-- [~] `.gitignore` (`.env`, `__pycache__` OK) → ajouter `cache/` + `evaluations/`
+- [x] Makefile (install / run / lint / clean)
+- [~] `.gitignore` (`.env`, `__pycache__`, `cache`, `tests` OK) → ajouter
+      `evaluations/`
 - [x] **FIGER TOUS les models Pydantic** (`core/models.py`) :
   - [x] `SandboxConfig` — `authorized_imports`, `allowed_directories`,
         `max_execution_time_seconds`, `max_memory_mb`
@@ -318,32 +333,79 @@ le rapport de benchmark.
 
 *100% maison, frameworks interdits.*
 
-- [ ] Boucle Thought → Code → Observation
-- [ ] `max_iterations` parametrable
-- [ ] Arret sur `final_answer()` / limite atteinte / erreur fatale
-- [ ] Construction de l'historique de conversation envoye au LLM
-- [ ] Gestion de la taille du contexte (budget tokens sur toute la tache)
+- [~] Boucle Thought → Code → Observation → `thought()` fait, `observation()`
+      est un stub vide, donc la boucle ne boucle pas encore
+- [x] `max_iterations` parametrable → via `constants.Bench.iterations`,
+      injecte dans `Loop` (MBPP 10 / SWE 30)
+- [~] Arret sur `final_answer()` / limite atteinte / erreur fatale
+  - [x] limites tokens + timeout testees en tete de `run()`
+  - [ ] `final_answer()` non detecte : `run()` fait `break` des la 1ere
+        iteration, quoi qu'ait repondu le modele
+  - [ ] erreur fatale : aucune n'est rattrapee, elles remontent brutes
+- [~] Construction de l'historique → `Prompt.add_message` + message assistant
+      ajoute apres chaque `thought()` ; il manque les observations
+- [~] Gestion de la taille du contexte → `usage_input` / `usage_output`
+      cumules et compares aux maxima. **Le controle est fait AVANT l'appel**,
+      donc la derniere requete peut faire depasser la limite : c'est un
+      garde-fou, pas encore un arret propre
 - [ ] Aucun crash possible : toutes les erreurs gerees
+
+**Verrou principal :** `Loop.is_extracted` (`loop.py:96-99`) affiche le
+resultat et renvoie `True` sans le lire. Les etats produits par l'extraction
+(`found` / `format`) n'ont donc aucun effet sur la boucle.
 
 ### P2.2 — Extraction de code
 
-- [ ] Blocs Python ` ```python ... ``` ` + `<end_code>` (format primaire)
-- [ ] XML tool calls (style Anthropic `<invoke>`)
-- [ ] JSON / Hermes (`<tool_call>{...}</tool_call>`)
-- [ ] ReAct (`Action:` / `Action Input:`)
-- [ ] Conversion des formats non-Python → appels de fonction Python
-      (le sandbox doit rester agnostique du format)
+- [x] Blocs Python ` ```python ... ``` ` + `<end_code>` (format primaire)
+- [x] Retour a 3 cles : `code`, `found` (un bloc repere ?), `format`
+      (`"python"` si le bloc parse, `""` sinon, `None` si aucun bloc)
+- [x] Validation par `ast.parse` sans exception : une sortie tronquee ressort
+      en `found=True` / `format=""`, le code invalide est conserve pour etre
+      renvoye au modele en observation
+
+**Decision du 2026-08-12 : un seul format supporte.** Les trois autres sont
+abandonnes, pas reportes.
+
+- [-] ~~XML tool calls (style Anthropic `<invoke>`)~~
+- [-] ~~JSON / Hermes (`<tool_call>{...}</tool_call>`)~~
+- [-] ~~ReAct (`Action:` / `Action Input:`)~~
+- [-] ~~Conversion des formats non-Python → appels de fonction Python~~
+      (plus d'objet : sans format structure en entree, il n'y a rien a
+      convertir — la fonction `generate()` est devenue morte)
+
+Raisons, a savoir redire en soutenance :
+
+1. Le prompt systeme impose un format unique (bloc + `<end_code>` +
+   `final_answer`). Parser quatre formats quand on n'en demande qu'un est une
+   robustesse decorative.
+2. Deux des trois etaient **inatteignables par construction** :
+   `</tool_call>` et `<invoke>` sont dans `LLM_STOP_SEQUENCE`, donc la
+   generation s'arrete avant que la balise soit emise.
+3. Le troisieme etait **nuisible** : le motif `Action:` matchait n'importe ou
+   dans la prose et faisait tomber une reponse par ailleurs valide.
+4. La robustesse au format passe desormais par la boucle : format non
+   reconnu → observation renvoyee au modele → nouvelle iteration.
+
+→ Consequence a traiter : `LLM_START_SEQUENCE` et `LLM_STOP_SEQUENCE`
+(`core/constants.py`) listent encore ces trois formats. Trois sequences
+d'arret sont consommees pour rien.
 
 ### P2.3 — Couche LLM
 
 - [ ] Abstraction provider (changer de provider sans refacto majeure)
+      → `httpx.post` est en dur dans `Loop.thought`, tout `core/llm/` est vide
 - [ ] Multi-tokens par provider + **rotation** (rate limits, quotas epuises)
 - [ ] Fallback entre providers
-- [ ] `stop_sequences` (`<end_code>`, `</tool_call>`...) → **essentiel**, sinon le
-      modele invente les resultats d'execution
+- [x] `stop_sequences` → `constants.LLM_STOP_SEQUENCE` envoye dans le payload
+      (3 des 4 entrees sont devenues inutiles, cf. P2.2)
 - [ ] Retry avec backoff, comptabilise dans `StepMetrics.retries`
-- [ ] Cles API depuis env vars uniquement (`OPENROUTER_API_KEY`, ...)
-- [ ] Tracking : tokens in/out, `request_time_ms`, `total_requests`, latence
+- [x] Cles API depuis env vars uniquement → `load_dotenv` + `os.getenv`, et
+      le module refuse de se charger si `OPENROUTER_API_KEY` est absente
+- [~] Tracking : `usage_input` / `usage_output` cumules depuis `usage` de la
+      reponse. Manquent `request_time_ms`, `total_requests`, la latence
+- [x] Erreurs API traduites en exceptions Python typees (champ `error` en
+      HTTP 200, `choices` vide, `content` null des modeles de raisonnement,
+      `usage` absent, corps non-JSON, timeout, erreur de transport)
 
 #### Modeles gratuits OpenRouter (releve du 2026-08-10)
 
@@ -395,26 +457,39 @@ Criteres de choix :
 
 ### P2.4 — System prompts
 
-- [ ] Injection du sandbox manual (fourni par P1)
-- [ ] Slots structures Thought / Code / Observation avec exemples
-- [ ] Exemples de boucles de raisonnement efficaces
-- [ ] Prompt MBPP (court, contrainte 6k tokens d'entree au total)
+- [~] Injection du sandbox manual (fourni par P1) → le slot existe dans
+      `Prompt` (`tools` + `allowed_imports`), mais `agent_mbpp/cli.py:22`
+      passe `tools=None` : le prompt affiche litteralement "None" au modele
+- [x] Slots structures Thought / Code / Observation avec exemples
+- [x] Exemples de boucles de raisonnement efficaces → l'exemple `smallest_abs`
+      montre un premier essai **faux**, l'observation, puis la correction
+- [x] Prompt MBPP (court, contrainte 6k tokens d'entree au total)
 - [ ] Prompt SWE-bench (methodologie d'exploration : chercher, lire, editer,
       tester, relire l'echec)
+- [x] `allowed_imports` alimente depuis `SandboxConfig().authorized_imports`
 
 → **Methode :** resoudre une tache a la main avec seulement les outils de
 l'agent, et transcrire ce raisonnement dans le prompt.
 
 ### P2.5 — Les deux agents
 
-- [ ] `agent_mbpp` : `uv run python -m agent_mbpp --task-file X --output Y
-      --model-name "..." --provider-url "..."`
-- [ ] `agent_swebench` : memes options
+- [~] `agent_mbpp` : les 4 options existent et la tache est chargee + validee
+      contre `MBPPTaskInput`. **Mais l'option est declaree `--output-file`
+      alors que le sujet impose `--output`** ; ca ne marche aujourd'hui que
+      par l'abreviation automatique d'argparse, et le `Makefile` en profite.
+      A renommer avant l'eval : un `--output-dir` ajoute plus tard rendrait
+      `--output` ambigu et casserait tout.
+- [ ] `agent_swebench` : memes options → les 4 fichiers sont vides
 - [ ] Ecriture du `solution.json` conforme (`SolutionOutput` complet)
+      → `output_file` est stocke mais jamais utilise ; `run()` ne renvoie
+      qu'un `SolutionOutput` valide contre un dict vide, ce qui ne peut pas
+      passer (13 champs obligatoires)
 - [ ] `final_answer(code)` pour MBPP / `final_answer(get_patch())` pour SWE-bench
-- [ ] Respect strict des limites (compteur + arret propre avant depassement)
+- [~] Respect strict des limites → compteurs en place, arret pas encore propre
+      (cf. P2.1)
 - [ ] Remplissage de **tous** les champs de `StepMetrics` (`llm_output` brut,
-      `sandbox_input`, `sandbox_output`, `retries`) → tracabilite exigee
+      `sandbox_input`, `sandbox_output`, `retries`) → aucun `StepMetrics`
+      n'est instancie a ce jour
 
 ### P2.6 — `BENCHMARK_REPORT.md`
 
@@ -460,11 +535,14 @@ Candidats : voir la table des modeles gratuits en P2.3 (12 utilisables).
 ## Ordre de travail recommande
 
 1. **Phase 0 ensemble** (models + interface + setup) — *bloquant*
-   → setup, structure, flat layout et models **faits**. Reste : l'interface
-   Sandbox ↔ Orchestrateur, et le chargement config JSON / `.env`.
+   → setup, structure, flat layout et models **faits**. `.env` charge dans
+   `core/agent/loop.py`. Reste : l'interface Sandbox ↔ Orchestrateur (toujours
+   pas figee, c'est le point bloquant), et le chargement config JSON.
 2. **En parallele :**
    - `ndi-tull` → sandbox minimal qui execute du code + `final_answer`
-   - `tchemin` → boucle agent minimale + 1 provider en dur
+     **(pas commence)**
+   - `tchemin` → boucle agent minimale + 1 provider en dur **(en cours :
+     appel API, prompt et extraction faits ; boucle et sortie a finir)**
 3. **Premier jalon :** MBPP end-to-end avec le modele le plus capable disponible
    et **sans** limites de tokens/iterations. Si ca ne passe pas la, ajouter des
    contraintes n'aidera pas.
