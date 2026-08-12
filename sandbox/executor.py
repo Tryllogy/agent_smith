@@ -3,6 +3,8 @@ import io
 from contextlib import redirect_stdout, redirect_stderr
 from sandbox.security.builtins import safe_builtins
 from sandbox.security.ast_guard import check_code
+from core.models import SandboxConfig
+from sandbox.security.imports import make_guarded_import
 
 
 class FinalAnswer(Exception):
@@ -15,7 +17,11 @@ def final_answer(value):
 
 
 def run_in_child(code, out_queue):
-    ns = {"__builtins__": safe_builtins(), "final_answer": final_answer}
+    config = SandboxConfig()
+    builtins_dict = safe_builtins()
+    builtins_dict["__import__"] = make_guarded_import(
+        config.authorized_imports)
+    ns = {"__builtins__": builtins_dict, "final_answer": final_answer}
     error, is_final, answer = None, False, None
 
     out = io.StringIO()
