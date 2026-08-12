@@ -5,6 +5,8 @@ from sandbox.security.builtins import safe_builtins
 from sandbox.security.ast_guard import check_code
 from core.models import SandboxConfig
 from sandbox.security.imports import make_guarded_import
+from sandbox.security.filesystem import make_guarded_directory
+import resource
 
 
 class FinalAnswer(Exception):
@@ -16,11 +18,14 @@ def final_answer(value):
     raise FinalAnswer(value)
 
 
-def run_in_child(code, out_queue):
+def run_in_child(code, out_queue, max_memory_mb):
+    octets = max_memory_mb * 1024 * 1024
+    resource.setrlimit(resource.RLIMIT_AS, (octets, octets))
     config = SandboxConfig()
     builtins_dict = safe_builtins()
     builtins_dict["__import__"] = make_guarded_import(
         config.authorized_imports)
+    builtins_dict["open"] = make_guarded_directory(config.allowed_directories)
     ns = {"__builtins__": builtins_dict, "final_answer": final_answer}
     error, is_final, answer = None, False, None
 
@@ -43,8 +48,10 @@ def run_in_child(code, out_queue):
 
 
 def execute(code, timeout=2):
+    config = SandboxConfig()
     q = mp.Queue()
-    p = mp.Process(target=run_in_child, args=(code, q))
+    p = mp.Process(target=run_in_child, args=(
+        code, q, config.max_memory_mb))
     p.start()
     p.join(timeout)
     if p.is_alive():
