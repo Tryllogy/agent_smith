@@ -19,10 +19,9 @@ def final_answer(value):
     raise FinalAnswer(value)
 
 
-def run_in_child(code, out_queue, max_memory_mb):
-    octets = max_memory_mb * 1024 * 1024
+def run_in_child(code, out_queue, config: SandboxConfig):
+    octets = config.max_memory_mb * 1024 * 1024
     resource.setrlimit(resource.RLIMIT_AS, (octets, octets))
-    config = SandboxConfig()
     block_network()
     builtins_dict = safe_builtins()
     builtins_dict["__import__"] = make_guarded_import(
@@ -49,11 +48,13 @@ def run_in_child(code, out_queue, max_memory_mb):
     out_queue.put((stdout, stderr, error, is_final, answer))
 
 
-def execute(code, timeout=2):
-    config = SandboxConfig()
+def execute(code, config=None):
+    if config is None:
+        config = SandboxConfig()
+    timeout = config.max_execution_time_seconds
     q = mp.Queue()
     p = mp.Process(target=run_in_child, args=(
-        code, q, config.max_memory_mb))
+        code, q, config))
     p.start()
     p.join(timeout)
     if p.is_alive():
