@@ -1,3 +1,4 @@
+from core import errors
 from core.llm.response import LLMResponse
 import httpx
 import json
@@ -41,32 +42,90 @@ class LLMClient:
             request.raise_for_status()
             data: dict = request.json()
             if data.get("error"):
-                raise RuntimeError(f"Error from LLM provider: {data['error']}")
+                self.check_status_error(
+                    status_code=data.get("error").get("code", "Unknown error")
+                )
             if not data.get("choices"):
-                raise ValueError("The LLM response does not contain"
-                                 " the expected 'choices' field")
+                raise errors.PermanentLLMResponseError(
+                    "The LLM response does not contain the expected" +
+                    " 'choices' field.",
+                    status_code=request.status_code
+                )
         except json.JSONDecodeError:
-            raise ValueError("Failed to decode JSON response from the LLM "
-                             "provider. Please check the provider's response.")
+            raise errors.TransientLLMResponseError(
+                "The LLM response is not a valid JSON.",
+                status_code=request.status_code
+            )
         except httpx.TimeoutException:
-            raise TimeoutError("The request to the LLM provider timed out. "
-                               "Please try again later.")
+            raise errors.TransientLLMResponseError(
+                "The request to the LLM provider timed out.",
+            )
         except httpx.RequestError as e:
-            raise ConnectionError(f"An error occurred while requesting the LLM"
-                                  f" provider: {e}")
+            raise errors.TransientLLMResponseError(
+                "An error occurred while making the request to"
+                f" the LLM provider: {e}",
+                status_code=None
+            )
         except httpx.HTTPStatusError as e:
-            raise RuntimeError(f"Received an error response from the LLM "
-                               f"provider: {e.response.status_code} - "
-                               f"{e.response.text}")
+            self.check_status_error(
+                status_code=e.response.status_code,
+                retry_after=e.response.headers.get("Retry-After"),
+                error=e,
+            )
         except KeyboardInterrupt:
             raise KeyboardInterrupt("The operation was interrupted by "
                                     "the user.")
+        message: dict = data.get("choices")[0].get("message")
+        if message is None:
+            raise errors.PermanentLLMResponseError(
+                "The LLM response does not contain the expected" +
+                " 'message' field.",
+                status_code=request.status_code
+            )
+        if message.get("content") is None or message.get("content").strip() == "":
+            raise errors.TransientLLMResponseError(
+                "The LLM response does not contain the expected" +
+                " 'content' field.",
+                status_code=request.status_code
+            )
+        if not data.get("usage"):
+            raise errors.PermanentLLMResponseError(
+                "The LLM response does not contain the expected" +
+                " 'usage' field.",
+                status_code=request.status_code
+            )
         return LLMResponse(
-            content=data.get("choices")[0].get(
-                "message", {}).get("content", ""),
+            content=message.get("content", ""),
             input_tokens=data.get("usage", {}).get("prompt_tokens", 0),
             output_tokens=data.get("usage", {}).get("completion_tokens", 0),
             model_name=data.get("model", self.model_name),
             finish_reason=data.get("choices")[0].get("finish_reason", ""),
             request_time_ms=request_time_ms
         )
+
+    @staticmethod
+    def check_status_error(
+        status_code: int,
+        retry_after: float | None = None,
+        error: Exception | None = None
+    ) -> None:
+        if status_code in errors.ERRORS_TRANSIENT:
+            if isinstance(retry_after, str) and retry_after.isdigit():
+                retry_after = float(retry_after)
+            else:
+                retry_after = None
+            raise errors.TransientLLMResponseError(
+                f"Transient error from LLM provider: {error}",
+                status_code=status_code,
+                retry_after=retry_after
+            )
+        elif status_code in errors.ERRORS_PERMANENT:
+            raise errors.PermanentLLMResponseError(
+                f"Permanent error from LLM provider: {error}",
+                status_code=status_code
+            )
+        else:
+            raise errors.PermanentLLMResponseError(
+                f"Unexpected error from LLM provider: {error}",
+                status_code=status_code
+            )
