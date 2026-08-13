@@ -1,10 +1,22 @@
+from core import errors
 from core import constants
 from core.models import SandboxConfig
 from core.models import MBPPTaskInput
 from core.agent.loop import Loop
 from core.agent.prompt import Prompt
+from core.llm.client import LLMClient
 from pydantic import ValidationError
+from dotenv import load_dotenv
+import os
 import json
+
+if not load_dotenv():
+    raise FileNotFoundError("The .env file was not found."
+                            " Please ensure it exists in the project root.")
+if not os.getenv("OPENROUTER_API_KEY"):
+    raise EnvironmentError("The OPENROUTER_API_KEY environment variable"
+                           " is not set."
+                           " Please ensure it is defined in the .env file.")
 
 
 class AgentMBPP:
@@ -23,15 +35,22 @@ class AgentMBPP:
             allowed_imports=SandboxConfig().authorized_imports
         )
 
-        self.loop = Loop(
+        self.llm_client: LLMClient = LLMClient(
+            url=provider_url,
+            endpoint=constants.LLM_ENDPOINT,
             model_name=model_name,
-            provider_url=provider_url,
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            stop_sequence=constants.LLM_STOP_SEQUENCE
+        )
+
+        self.loop = Loop(
+            client=self.llm_client,
             prompt=prompt,
             bench=constants.MBPP
         )
 
     def run(self):
-        self.loop.run(self.task["task_id"])
+        solution = self.loop.run(self.task["task_id"])
 
     def get_task_from_file(
         self,

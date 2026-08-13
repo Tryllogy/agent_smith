@@ -1,132 +1,89 @@
+from core import errors
 from core import constants
 from core.models import SolutionOutput, StepMetrics
 from core.agent.prompt import Prompt
 from core.agent.extraction import extract_code_from_text
-from dotenv import load_dotenv
+from sandbox.executor import execute
+from core.llm.client import LLMClient
+from core.llm.response import LLMResponse
 import time
-import os
-import json
-import httpx
-
-
-if not load_dotenv():
-    raise FileNotFoundError("The .env file was not found."
-                            " Please ensure it exists in the project root.")
-if not os.getenv("OPENROUTER_API_KEY"):
-    raise EnvironmentError("The OPENROUTER_API_KEY environment variable"
-                           " is not set."
-                           " Please ensure it is defined in the .env file.")
 
 
 class Loop:
     def __init__(
         self,
-        model_name: str,
-        provider_url: str,
+        client: LLMClient,
         prompt: Prompt,
         bench: constants.Bench
     ) -> None:
+        self.client: LLMClient = client
         self.thoughts: list = []
         self.observations: list = []
         self.usage_input: int = 0
         self.usage_output: int = 0
-        self.endpoint: str = constants.LLM_ENDPOINT
-        self.provider_url: str = provider_url
-        self.model_name: str = model_name
         self.prompt: Prompt = prompt
         self.name_bench: str = bench.name
         self.max_tokens_input: int = bench.input_max_token
         self.max_tokens_output: int = bench.output_max_token
         self.timeout_limit: int = bench.timeout
         self.iteration_limit: int = bench.iterations
-        self.step_metrics: list = []
+        self.step_metrics: list[StepMetrics] = []
         self.solution: str = ""
         self.success: bool = False
+        self.sandbox_input: str = ""
+        self.sandbox_output: str = ""
         self.request_time_ms: float = 0.0
+        self.last_usage_input: int = 0
+        self.last_usage_output: int = 0
 
     def thought(
         self,
-        timeout_max: float
+        timeout_max: float,
     ):
-        try:
-            start_time = time.time()
-            self.llm_response: httpx.Response = httpx.post(
-                url=self.provider_url + self.endpoint,
-                headers={"Authorization":
-                         f"Bearer {os.getenv('OPENROUTER_API_KEY')}"},
-                json={
-                    "model": self.model_name,
-                    "messages": self.prompt.prompt,
-                    "stop": constants.LLM_STOP_SEQUENCE
-                },
-                timeout=timeout_max
-            )
-            self.request_time_ms: float = round(
-                (time.time() - start_time) * 1000, 2)
-            self.llm_response.raise_for_status()
-            data: dict = self.llm_response.json()
-            if data.get("error"):
-                raise RuntimeError(f"Error from LLM provider: {data['error']}")
-            if not data.get("choices"):
-                raise ValueError("The LLM response does not contain"
-                                 " the expected 'choices' field")
-        except json.JSONDecodeError:
-            raise ValueError("Failed to decode JSON response from the LLM "
-                             "provider. Please check the provider's response.")
-        except httpx.TimeoutException:
-            raise TimeoutError("The request to the LLM provider timed out. "
-                               "Please try again later.")
-        except httpx.RequestError as e:
-            raise ConnectionError(f"An error occurred while requesting the LLM"
-                                  f" provider: {e}")
-        except httpx.HTTPStatusError as e:
-            raise RuntimeError(f"Received an error response from the LLM "
-                               f"provider: {e.response.status_code} - "
-                               f"{e.response.text}")
-        except KeyboardInterrupt:
-            raise KeyboardInterrupt("The operation was interrupted by "
-                                    "the user.")
-        text: str = data.get("choices")[0].get(
-            "message", {}).get("content", "")
-        if text is None or text.strip() == "":
-            raise ValueError("The LLM response does not contain the expected "
-                             "'content' field.")
-        usage = data.get("usage", {})
-        if not usage:
-            raise ValueError("The LLM response does not contain the expected "
-                             "'usage' field.")
-        self.usage_input += usage.get("prompt_tokens", 0)
-        self.usage_output += usage.get("completion_tokens", 0)
-        self.last_usage_input: int = usage.get("prompt_tokens", 0)
-        self.last_usage_output: int = usage.get("completion_tokens", 0)
+        llm_response: LLMResponse = self.client.make_request(
+            timeout_max=timeout_max,
+            messages=self.prompt.prompt
+        )
+        text: str = llm_response.content
+        self.request_time_ms = llm_response.request_time_ms
+        self.usage_input += llm_response.input_tokens
+        self.usage_output += llm_response.output_tokens
+        self.last_usage_input = llm_response.input_tokens
+        self.last_usage_output = llm_response.output_tokens
         self.thoughts.append(text)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
 
-    def extract(self, text: str):
+    def extract(
+        self,
+        text: str
+    ) -> bool:
         self.code: dict = extract_code_from_text(text)
         return self.code["found"] and self.code["error"] == "None"
 
-    def observation(self):
+    def observation(
+        self
+    ) -> bool:
         if not self.code["found"]:
             self.prompt.add_message({"role": "user",
                                      "content": self.code["error"]})
             return False
-        # UTILISER LA SANDBOX DE L'AUTRE RANDOM DE PLOMB MAIS JE L'AI PAS
-        # POUR LE MOMENT DONC JE PEUX PAS BOSSER
-        # If sandbox == bien executed:
-        #   If assert == True:
-        #       self.solution = self.code["code"]
-        #       self.success = True
-        #       return True
-        #   else:
-        #       self.prompt.add_message({"role": "user",
-        #                              "content": "Assertion failed"})
-        #       return False
-        # else:
-        #   self.prompt.add_message({"role": "user",
-        #                          "content": self.code["error"]})
-        # return False
+        stdout, stderr, error, is_final, answer = execute(self.code["code"])
+        self.sandbox_input: str = self.code["code"]
+        self.sandbox_output: str = stdout + \
+            stderr + error if error else stdout + stderr
+        if error is None:
+            if is_final:
+                self.solution = answer
+                self.success = True
+                return True
+            else:
+                self.prompt.add_message({"role": "user",
+                                        "content": stdout + stderr})
+                return False
+        self.prompt.add_message({"role": "user",
+                                "content": self.code["error"]})
+        return False
 
     def run(
         self,
@@ -135,16 +92,25 @@ class Loop:
         self.start_time: float = time.time()
         self.iteration: int = 0
         self.task_id: str = task_id
+        self.retries: int = 0
         while self.iteration < self.iteration_limit:
             try:
-                self.thought(min(constants.LLM_TIMEOUT_SECONDS,
-                                 (time.time() - self.start_time)))
-            except RuntimeError:
-                return self.make_solution_output(
-                    error="Error from LLM provider"
-                )
-            except Exception:
+                if time.time() - self.start_time > self.timeout_limit:
+                    return self.make_solution_output(
+                        error="Timeout limit exceeded"
+                    )
+                self.thought(
+                    min(constants.LLM_TIMEOUT_SECONDS,
+                        self.timeout_limit - (time.time() - self.start_time)))
+            except errors.TransientLLMResponseError as e:
+                self.retries += 1
+                self.retry_after = e.retry_after if e.retry_after else 0.0
+                time.sleep(self.retry_after)
                 continue
+            except errors.PermanentLLMResponseError as e:
+                return self.make_solution_output(
+                    error=f"Permanent LLM error: {str(e)}"
+                )
             if time.time() - self.start_time > self.timeout_limit:
                 return self.make_solution_output(
                     error="Timeout limit exceeded"
@@ -159,13 +125,13 @@ class Loop:
                 )
             self.extract(self.thoughts[-1])
             if self.observation():
-                self.step_metrics.append(self.make_step_metrics())
                 self.iteration += 1
-                break
-            self.step_metrics.append(self.make_step_metrics())
+                self.step_metrics.append(self.make_step_metrics())
+                return self.make_solution_output()
             self.iteration += 1
-        return self.make_solution_output(
-        )
+            self.step_metrics.append(self.make_step_metrics())
+            self.retries = 0
+        return self.make_solution_output()
 
     def make_solution_output(
         self,
@@ -175,6 +141,8 @@ class Loop:
             self.task_id = str(self.task_id)
 
         n_retries: int = 0
+        for step in self.step_metrics:
+            n_retries += step.retries
         solution: dict = {
             "task_id": self.task_id,
             "benchmark": self.name_bench,
@@ -196,18 +164,18 @@ class Loop:
 
     def make_step_metrics(
         self,
-    ) -> dict:
+    ) -> StepMetrics:
         step_metric: dict = {
             "step": self.iteration,
             "input_tokens": self.last_usage_input,
             "output_tokens": self.last_usage_output,
             "request_time_ms": self.request_time_ms,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
-            "api_url": self.provider_url + self.endpoint,
-            "model_name": self.model_name,
+            "api_url": self.client.url,
+            "model_name": self.client.model_name,
             "llm_output": self.thoughts[-1] if self.thoughts else "",
-            "sandbox_input": None,
-            "sandbox_output": None,
-            "retries": 0,
+            "sandbox_input": self.sandbox_input,
+            "sandbox_output": self.sandbox_output,
+            "retries": self.retries,
         }
         return StepMetrics.model_validate(step_metric)

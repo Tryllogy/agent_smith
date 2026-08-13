@@ -1,6 +1,8 @@
 PYTHON_VERSION := 3.10
 UV             := uv
 CACHE_DIR      := cache
+URL := https://openrouter.ai/api/v1
+MODEL := nvidia/nemotron-3-ultra-550b-a55b:free
 .DEFAULT_GOAL := help
 
 .PHONY: help setup install dev sandbox sandbox-mbpp sandbox-swebench \
