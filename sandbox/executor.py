@@ -6,6 +6,7 @@ from sandbox.security.ast_guard import check_code
 from core.models import SandboxConfig
 from sandbox.security.imports import make_guarded_import
 from sandbox.security.filesystem import make_guarded_directory
+from sandbox.security.network import block_network
 import resource
 
 
@@ -22,6 +23,7 @@ def run_in_child(code, out_queue, max_memory_mb):
     octets = max_memory_mb * 1024 * 1024
     resource.setrlimit(resource.RLIMIT_AS, (octets, octets))
     config = SandboxConfig()
+    block_network()
     builtins_dict = safe_builtins()
     builtins_dict["__import__"] = make_guarded_import(
         config.authorized_imports)
