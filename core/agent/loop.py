@@ -1,12 +1,12 @@
-from core import errors
-from core import constants
-from core.models import SolutionOutput, StepMetrics
-from core.agent.prompt import Prompt
+import time
+
+from core import constants, errors
 from core.agent.extraction import extract_code_from_text
-from sandbox.executor import execute
+from core.agent.prompt import Prompt
 from core.llm.client import LLMClient
 from core.llm.response import LLMResponse
-import time
+from core.models import SandboxConfig, SolutionOutput, StepMetrics
+from sandbox.executor import execute
 
 
 class Loop:
@@ -14,7 +14,8 @@ class Loop:
         self,
         client: LLMClient,
         prompt: Prompt,
-        bench: constants.Bench
+        bench: constants.Bench,
+        config_sandbox: SandboxConfig | None = None,
     ) -> None:
         self.client: LLMClient = client
         self.thoughts: list = []
@@ -35,14 +36,17 @@ class Loop:
         self.request_time_ms: float = 0.0
         self.last_usage_input: int = 0
         self.last_usage_output: int = 0
+        if config_sandbox is None:
+            self.config_sandbox: SandboxConfig = SandboxConfig()
+        else:
+            self.config_sandbox: SandboxConfig = config_sandbox
 
     def thought(
         self,
         timeout_max: float,
     ):
         llm_response: LLMResponse = self.client.make_request(
-            timeout_max=timeout_max,
-            messages=self.prompt.prompt
+            timeout_max=timeout_max, messages=self.prompt.prompt
         )
         text: str = llm_response.content
         self.request_time_ms = llm_response.request_time_ms
@@ -54,35 +58,46 @@ class Loop:
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
 
-    def extract(
-        self,
-        text: str
-    ) -> bool:
+    def extract(self, text: str) -> bool:
         self.code: dict = extract_code_from_text(text)
         return self.code["found"] and self.code["error"] == "None"
 
-    def observation(
-        self
-    ) -> bool:
+    def observation(self, max_execution_time: int) -> bool:
         if not self.code["found"]:
-            self.prompt.add_message({"role": "user",
-                                     "content": self.code["error"]})
+            self.prompt.add_message(
+                {
+                    "role": "user",
+                    "content": f"Observation: {self.code['error']}",
+                }
+            )
             return False
-        stdout, stderr, error, is_final, answer = execute(self.code["code"])
         self.sandbox_input: str = self.code["code"]
-        self.sandbox_output: str = stdout + \
-            stderr + error if error else stdout + stderr
-        if error is None:
-            if is_final:
-                self.solution = answer
-                self.success = True
-                return True
-            else:
-                self.prompt.add_message({"role": "user",
-                                        "content": stdout + stderr})
-                return False
-        self.prompt.add_message({"role": "user",
-                                "content": self.code["error"]})
+        config_copy: SandboxConfig = self.config_sandbox.model_copy()
+        config_copy.max_execution_time_seconds = max_execution_time
+        stdout, stderr, error, is_final, answer = execute(
+            self.sandbox_input, config_copy
+        )
+        self.sandbox_output: str = (
+            stdout + stderr + error if error else stdout + stderr
+        )
+        if error is None and is_final:
+            self.solution = answer
+            self.success = True
+            return True
+        if self.sandbox_output.strip() == "":
+            self.prompt.add_message(
+                {
+                    "role": "user",
+                    "content": "Observation: The code has been"
+                    " executed without"
+                    " any error or exception and did not produce any output."
+                    " No final_answer() captured.",
+                }
+            )
+            return False
+        self.prompt.add_message(
+            {"role": "user", "content": f"Observation: {self.sandbox_output}"}
+        )
         return False
 
     def run(
@@ -95,13 +110,22 @@ class Loop:
         self.retries: int = 0
         while self.iteration < self.iteration_limit:
             try:
-                if time.time() - self.start_time > self.timeout_limit:
+                if (
+                    time.time()
+                    - self.start_time
+                    + constants.MARGIN_EXECUTION_TIME
+                ) > self.timeout_limit:
                     return self.make_solution_output(
                         error="Timeout limit exceeded"
                     )
                 self.thought(
-                    min(constants.LLM_TIMEOUT_SECONDS,
-                        self.timeout_limit - (time.time() - self.start_time)))
+                    min(
+                        constants.LLM_TIMEOUT_SECONDS,
+                        self.timeout_limit
+                        - (time.time() - self.start_time)
+                        - constants.MARGIN_EXECUTION_TIME,
+                    )
+                )
             except errors.TransientLLMResponseError as e:
                 self.retries += 1
                 self.retry_after = e.retry_after if e.retry_after else 0.0
@@ -124,7 +148,16 @@ class Loop:
                     error="Output token limit exceeded"
                 )
             self.extract(self.thoughts[-1])
-            if self.observation():
+            max_execution_time: int = int(
+                self.timeout_limit
+                - (time.time() - self.start_time)
+                - constants.MARGIN_EXECUTION_TIME
+            )
+            if max_execution_time <= 0:
+                return self.make_solution_output(
+                    error="Timeout limit exceeded"
+                )
+            if self.observation(max_execution_time=max_execution_time):
                 self.iteration += 1
                 self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output()
@@ -133,10 +166,7 @@ class Loop:
             self.retries = 0
         return self.make_solution_output()
 
-    def make_solution_output(
-        self,
-        error: str | None = None
-    ) -> SolutionOutput:
+    def make_solution_output(self, error: str | None = None) -> SolutionOutput:
         if self.name_bench == "mbpp":
             self.task_id = str(self.task_id)
 
@@ -154,11 +184,15 @@ class Loop:
             "total_output_tokens": self.usage_output,
             "total_time_seconds": round(time.time() - self.start_time, 2),
             "steps": self.step_metrics,
-            "system_prompt": "\n".join([msg["content"]
-                                        for msg in self.prompt.prompt
-                                        if msg["role"] == "system"]),
+            "system_prompt": "\n".join(
+                [
+                    msg["content"]
+                    for msg in self.prompt.prompt
+                    if msg["role"] == "system"
+                ]
+            ),
             "error": error,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
         }
         return SolutionOutput.model_validate(solution)
 

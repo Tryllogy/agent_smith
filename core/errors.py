@@ -1,8 +1,6 @@
-ERRORS_TRANSIENT = {
-    408,
-    409,
-    429
-} | {status_code for status_code in range(500, 600)}
+ERRORS_TRANSIENT = {408, 409, 429} | {
+    status_code for status_code in range(500, 600)
+}
 
 ERRORS_PERMANENT = {
     400,
@@ -19,11 +17,8 @@ class LLMResponseError(Exception):
     due to various reasons, such as invalid input, server issues, or
     other unexpected conditions.
     """
-    def __init__(
-        self,
-        message: str,
-        status_code: int | None = None
-    ) -> None:
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
 
@@ -34,11 +29,12 @@ class TransientLLMResponseError(LLMResponseError):
     This error indicates that the request may succeed if retried after
     a certain period.
     """
+
     def __init__(
         self,
         message: str,
         status_code: int | None = None,
-        retry_after: float | None = None
+        retry_after: float | None = None,
     ) -> None:
         super().__init__(message, status_code)
         self.retry_after: float | None = retry_after
@@ -50,4 +46,5 @@ class PermanentLLMResponseError(LLMResponseError):
     This error indicates that the request is invalid or cannot be processed,
     and retrying will not resolve the issue.
     """
+
     pass

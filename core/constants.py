@@ -1,19 +1,13 @@
 from dataclasses import dataclass
 
-
+MARGIN_EXECUTION_TIME = 5
 LLM_TIMEOUT_SECONDS = 30
 LLM_ENDPOINT = "/chat/completions"
 LLM_STOP_SEQUENCE = [
     "<end_code>",
-    "</tool_call>",
-    "<invoke>",
-    "Action Input:"
 ]
 LLM_START_SEQUENCE = [
     "```python",
-    "<tool_call>",
-    "<invoke>",
-    "Action:"
 ]
 
 
@@ -31,7 +25,7 @@ SWE = Bench(
     input_max_token=300000,
     output_max_token=10000,
     iterations=30,
-    timeout=900
+    timeout=900,
 )
 
 MBPP = Bench(
@@ -39,5 +33,5 @@ MBPP = Bench(
     input_max_token=6000,
     output_max_token=1500,
     iterations=10,
-    timeout=120
+    timeout=120,
 )

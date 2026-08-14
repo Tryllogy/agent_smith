@@ -1,5 +1,5 @@
-import re
 import ast
+import re
 
 
 def extract_code_from_text(text: str) -> dict:
@@ -19,14 +19,10 @@ def extract_code_from_text(text: str) -> dict:
         return {
             "code": extracted_code.strip(),
             "found": False,
-            "error": "No code block found"
+            "error": "No code block found",
         }
     extracted_code, error_str = decode_python(code_blocks[0])
-    return {
-        "code": extracted_code.strip(),
-        "found": True,
-        "error": error_str
-    }
+    return {"code": extracted_code.strip(), "found": True, "error": error_str}
 
 
 def decode_python(text: str) -> tuple[str, str]:
