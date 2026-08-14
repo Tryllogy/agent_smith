@@ -1,4 +1,5 @@
 import time
+import re
 
 from core import constants, errors
 from core.agent.extraction import extract_code_from_text
@@ -40,13 +41,14 @@ class Loop:
             self.config_sandbox: SandboxConfig = SandboxConfig()
         else:
             self.config_sandbox: SandboxConfig = config_sandbox
+        self.requests: int = 0
 
-    def thought(
-        self,
-        timeout_max: float,
-    ):
+    def thought(self, timeout_max: float, max_tokens: int):
+        self.requests += 1
         llm_response: LLMResponse = self.client.make_request(
-            timeout_max=timeout_max, messages=self.prompt.prompt
+            timeout_max=timeout_max,
+            messages=self.prompt.prompt,
+            max_tokens=max_tokens,
         )
         text: str = llm_response.content
         self.request_time_ms = llm_response.request_time_ms
@@ -54,6 +56,7 @@ class Loop:
         self.usage_output += llm_response.output_tokens
         self.last_usage_input = llm_response.input_tokens
         self.last_usage_output = llm_response.output_tokens
+        self.finish_reason: str = llm_response.finish_reason
         self.thoughts.append(text)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
@@ -64,10 +67,14 @@ class Loop:
 
     def observation(self, max_execution_time: int) -> bool:
         if not self.code["found"]:
+            self.sandbox_input = ""
+            self.sandbox_output = ""
             self.prompt.add_message(
                 {
                     "role": "user",
-                    "content": f"Observation: {self.code['error']}",
+                    "content": f"Observation: {self.code['error']}."
+                    " Must contain a ```python <your code here>``` "
+                    " block.",
                 }
             )
             return False
@@ -81,6 +88,15 @@ class Loop:
             stdout + stderr + error if error else stdout + stderr
         )
         if error is None and is_final:
+            if not isinstance(answer, str):
+                self.prompt.add_message(
+                    {
+                        "role": "user",
+                        "content": "Observation: The final answer"
+                        " returned by the code is not a string.",
+                    }
+                )
+                return False
             self.solution = answer
             self.success = True
             return True
@@ -118,13 +134,19 @@ class Loop:
                     return self.make_solution_output(
                         error="Timeout limit exceeded"
                     )
+                max_tokens: int = self.max_tokens_output - self.usage_output
+                if max_tokens <= 0:
+                    return self.make_solution_output(
+                        error="Output token limit exceeded"
+                    )
                 self.thought(
                     min(
                         constants.LLM_TIMEOUT_SECONDS,
                         self.timeout_limit
                         - (time.time() - self.start_time)
                         - constants.MARGIN_EXECUTION_TIME,
-                    )
+                    ),
+                    max_tokens=max_tokens,
                 )
             except errors.TransientLLMResponseError as e:
                 self.retries += 1
@@ -135,6 +157,13 @@ class Loop:
                 return self.make_solution_output(
                     error=f"Permanent LLM error: {str(e)}"
                 )
+            if (
+                self.finish_reason == "length"
+                or self.usage_output > self.max_tokens_output
+            ):
+                return self.make_solution_output(
+                    error="LLM response exceeded the maximum token limit"
+                )
             if time.time() - self.start_time > self.timeout_limit:
                 return self.make_solution_output(
                     error="Timeout limit exceeded"
@@ -142,10 +171,6 @@ class Loop:
             if self.usage_input > self.max_tokens_input:
                 return self.make_solution_output(
                     error="Input token limit exceeded"
-                )
-            if self.usage_output > self.max_tokens_output:
-                return self.make_solution_output(
-                    error="Output token limit exceeded"
                 )
             self.extract(self.thoughts[-1])
             max_execution_time: int = int(
@@ -164,22 +189,22 @@ class Loop:
             self.iteration += 1
             self.step_metrics.append(self.make_step_metrics())
             self.retries = 0
-        return self.make_solution_output()
+        return self.make_solution_output(error="Iteration limit exceeded")
 
-    def make_solution_output(self, error: str | None = None) -> SolutionOutput:
+    def make_solution_output(
+        self,
+        error: str | None = None
+    ) -> SolutionOutput:
         if self.name_bench == "mbpp":
             self.task_id = str(self.task_id)
 
-        n_retries: int = 0
-        for step in self.step_metrics:
-            n_retries += step.retries
         solution: dict = {
             "task_id": self.task_id,
             "benchmark": self.name_bench,
             "success": self.success,
             "solution": self.solution,
             "iterations": self.iteration,
-            "total_requests": self.iteration + n_retries,
+            "total_requests": self.requests,
             "total_input_tokens": self.usage_input,
             "total_output_tokens": self.usage_output,
             "total_time_seconds": round(time.time() - self.start_time, 2),

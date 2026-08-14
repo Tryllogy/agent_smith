@@ -58,11 +58,7 @@ class AgentMBPP:
         solution: SolutionOutput = self.loop.run(self.task["task_id"])
         with open(self.output_file, "w") as f:
             f.write(solution.model_dump_json(indent=4))
-        if solution.success and solution.error is None:
-            return solution
-        raise RuntimeError(
-            f"Agent failed to solve the task. Error: {solution.error}"
-        )
+        return solution
 
     def get_task_from_file(self, file_path: str) -> dict:
         try:

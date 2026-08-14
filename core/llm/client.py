@@ -2,6 +2,7 @@ import json
 import time
 
 import httpx
+from pydantic import ValidationError
 
 from core import errors
 from core.llm.response import LLMResponse
@@ -21,7 +22,9 @@ class LLMClient:
         self.api_key = api_key
         self.stop_sequence = stop_sequence
 
-    def make_request(self, timeout_max: float, messages: list) -> LLMResponse:
+    def make_request(
+        self, timeout_max: float, messages: list, max_tokens: int
+    ) -> LLMResponse:
         start_time = time.time()
         try:
             request: httpx.Response = httpx.post(
@@ -31,6 +34,7 @@ class LLMClient:
                     "model": self.model_name,
                     "messages": messages,
                     "stop": self.stop_sequence,
+                    "max_tokens": max_tokens,
                 },
                 timeout=timeout_max,
             )
@@ -96,14 +100,23 @@ class LLMClient:
                 + " 'usage' field.",
                 status_code=request.status_code,
             )
-        return LLMResponse(
-            content=message.get("content", ""),
-            input_tokens=data.get("usage", {}).get("prompt_tokens", 0),
-            output_tokens=data.get("usage", {}).get("completion_tokens", 0),
-            model_name=data.get("model", self.model_name),
-            finish_reason=data.get("choices")[0].get("finish_reason", ""),
-            request_time_ms=request_time_ms,
-        )
+        try:
+            return LLMResponse(
+                content=message.get("content", ""),
+                input_tokens=data.get("usage", {}).get("prompt_tokens", 0),
+                output_tokens=data.get("usage", {}).get(
+                    "completion_tokens", 0
+                ),
+                model_name=data.get("model", self.model_name),
+                finish_reason=data.get("choices")[0].get("finish_reason", ""),
+                request_time_ms=request_time_ms,
+            )
+        except ValidationError as e:
+            raise errors.PermanentLLMResponseError(
+                "The LLM response does not match the expected"
+                + f" schema: {e}",
+                status_code=request.status_code,
+            )
 
     @staticmethod
     def check_status_error(
