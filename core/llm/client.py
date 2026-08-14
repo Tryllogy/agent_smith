@@ -14,22 +14,34 @@ class LLMClient:
         url: str,
         endpoint: str,
         model_name: str,
-        api_key: str,
+        api_key: list,
         stop_sequence: list[str] | None = None,
     ) -> None:
         self.url = url + endpoint
         self.model_name = model_name
-        self.api_key = api_key
+        self.api_key: list = api_key
         self.stop_sequence = stop_sequence
+        self.index_api_key: int = 0
 
     def make_request(
-        self, timeout_max: float, messages: list, max_tokens: int
+        self,
+        timeout_max: float,
+        messages: list,
+        max_tokens: int,
     ) -> LLMResponse:
         start_time = time.time()
+        if not self.api_key:
+            raise errors.PermanentLLMResponseError(
+                "No API key provided for LLM client.",
+                status_code=None,
+            )
         try:
             request: httpx.Response = httpx.post(
                 url=self.url,
-                headers={"Authorization": f"Bearer {self.api_key}"},
+                headers={
+                    "Authorization":
+                    f"Bearer {self.api_key[self.index_api_key]}"
+                },
                 json={
                     "model": self.model_name,
                     "messages": messages,
@@ -118,13 +130,18 @@ class LLMClient:
                 status_code=request.status_code,
             )
 
-    @staticmethod
     def check_status_error(
+        self,
         status_code: int,
         retry_after: float | None = None,
         error: Exception | None = None,
     ) -> None:
         if status_code in errors.ERRORS_TRANSIENT:
+            if status_code == 429:
+                last_api_key = self.api_key[self.index_api_key]
+                self.get_next_api_key(status_code=status_code)
+                if last_api_key != self.api_key[self.index_api_key]:
+                    retry_after = 0
             if isinstance(retry_after, str) and retry_after.isdigit():
                 retry_after = float(retry_after)
             else:
@@ -139,8 +156,36 @@ class LLMClient:
                 f"Permanent error from LLM provider: {error}",
                 status_code=status_code,
             )
+        elif status_code == 402:
+            if self.get_next_api_key(status_code=status_code) is None:
+                raise errors.PermanentLLMResponseError(
+                    "Payment required error from LLM provider. "
+                    "No more API keys available.",
+                    status_code=status_code,
+                )
+            raise errors.TransientLLMResponseError(
+                "Payment required error from LLM provider. "
+                "Please check your API key and account status.",
+                status_code=status_code,
+            )
         else:
             raise errors.PermanentLLMResponseError(
                 f"Unexpected error from LLM provider: {error}",
                 status_code=status_code,
             )
+
+    def get_next_api_key(
+        self,
+        status_code: int | None = None,
+    ) -> str | None:
+        if not self.api_key:
+            return None
+        if status_code == 402:
+            self.api_key.pop(
+                self.api_key.index(self.api_key[self.index_api_key]))
+            self.index_api_key = (
+                self.index_api_key % len(self.api_key) if self.api_key else 0
+            )
+            return self.api_key[self.index_api_key] if self.api_key else None
+        self.index_api_key = (self.index_api_key + 1) % len(self.api_key)
+        return self.api_key[self.index_api_key]

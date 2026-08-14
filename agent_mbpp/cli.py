@@ -1,7 +1,6 @@
 import json
 import os
 
-from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from core import constants
@@ -10,11 +9,6 @@ from core.agent.prompt import Prompt
 from core.llm.client import LLMClient
 from core.models import MBPPTaskInput, SandboxConfig, SolutionOutput
 
-if not load_dotenv():
-    raise FileNotFoundError(
-        "The .env file was not found."
-        " Please ensure it exists in the project root."
-    )
 if not os.getenv("OPENROUTER_API_KEY"):
     raise OSError(
         "The OPENROUTER_API_KEY environment variable"
@@ -43,7 +37,7 @@ class AgentMBPP:
             url=provider_url,
             endpoint=constants.LLM_ENDPOINT,
             model_name=model_name,
-            api_key=os.getenv("OPENROUTER_API_KEY"),
+            api_key=[os.getenv("OPENROUTER_API_KEY")],
             stop_sequence=constants.LLM_STOP_SEQUENCE,
         )
 

@@ -1,5 +1,4 @@
 import time
-import re
 
 from core import constants, errors
 from core.agent.extraction import extract_code_from_text
@@ -191,10 +190,7 @@ class Loop:
             self.retries = 0
         return self.make_solution_output(error="Iteration limit exceeded")
 
-    def make_solution_output(
-        self,
-        error: str | None = None
-    ) -> SolutionOutput:
+    def make_solution_output(self, error: str | None = None) -> SolutionOutput:
         if self.name_bench == "mbpp":
             self.task_id = str(self.task_id)
 
