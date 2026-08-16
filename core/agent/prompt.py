@@ -44,6 +44,7 @@ class Prompt:
                 " NO DOCSTRINGS or COMMENTS."
                 " In the end you have to return a final answer using the"
                 " `final_answer()` if the task is finished."
+                " final_answer() MUST be inside a code block ```python code```"
                 " \nYou will be generating code and must"
                 " finish with <end_code> to indicate the end of your code."
                 " You have been given access to a list of tools:"

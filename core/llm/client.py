@@ -14,12 +14,19 @@ class LLMClient:
         url: str,
         endpoint: str,
         model_name: str,
-        api_key: list,
+        api_keys: list,
         stop_sequence: list[str] | None = None,
     ) -> None:
+        if not isinstance(api_keys, list) and not all(
+            isinstance(key, str) for key in api_keys
+        ):
+            raise ValueError(
+                "api_keys must be a list of strings."
+                "Please provide a list of API keys."
+            )
         self.url = url + endpoint
         self.model_name = model_name
-        self.api_key: list = api_key
+        self.api_keys: list = api_keys
         self.stop_sequence = stop_sequence
         self.index_api_key: int = 0
 
@@ -30,7 +37,7 @@ class LLMClient:
         max_tokens: int,
     ) -> LLMResponse:
         start_time = time.time()
-        if not self.api_key:
+        if not self.api_keys:
             raise errors.PermanentLLMResponseError(
                 "No API key provided for LLM client.",
                 status_code=None,
@@ -40,7 +47,7 @@ class LLMClient:
                 url=self.url,
                 headers={
                     "Authorization":
-                    f"Bearer {self.api_key[self.index_api_key]}"
+                    f"Bearer {self.api_keys[self.index_api_key]}"
                 },
                 json={
                     "model": self.model_name,
@@ -115,6 +122,7 @@ class LLMClient:
         try:
             return LLMResponse(
                 content=message.get("content", ""),
+                reasoning=message.get("reasoning"),
                 input_tokens=data.get("usage", {}).get("prompt_tokens", 0),
                 output_tokens=data.get("usage", {}).get(
                     "completion_tokens", 0
@@ -138,9 +146,9 @@ class LLMClient:
     ) -> None:
         if status_code in errors.ERRORS_TRANSIENT:
             if status_code == 429:
-                last_api_key = self.api_key[self.index_api_key]
+                last_api_key = self.api_keys[self.index_api_key]
                 self.get_next_api_key(status_code=status_code)
-                if last_api_key != self.api_key[self.index_api_key]:
+                if last_api_key != self.api_keys[self.index_api_key]:
                     retry_after = 0
             if isinstance(retry_after, str) and retry_after.isdigit():
                 retry_after = float(retry_after)
@@ -178,14 +186,15 @@ class LLMClient:
         self,
         status_code: int | None = None,
     ) -> str | None:
-        if not self.api_key:
+        if not self.api_keys:
             return None
         if status_code == 402:
-            self.api_key.pop(
-                self.api_key.index(self.api_key[self.index_api_key]))
-            self.index_api_key = (
-                self.index_api_key % len(self.api_key) if self.api_key else 0
+            self.api_keys.pop(
+                self.api_keys.index(self.api_keys[self.index_api_key])
             )
-            return self.api_key[self.index_api_key] if self.api_key else None
-        self.index_api_key = (self.index_api_key + 1) % len(self.api_key)
-        return self.api_key[self.index_api_key]
+            self.index_api_key = (
+                self.index_api_key % len(self.api_keys) if self.api_keys else 0
+            )
+            return self.api_keys[self.index_api_key] if self.api_keys else None
+        self.index_api_key = (self.index_api_key + 1) % len(self.api_keys)
+        return self.api_keys[self.index_api_key]

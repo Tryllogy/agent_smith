@@ -5,6 +5,7 @@ class LLMResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     content: str
+    reasoning: str | None = None
     input_tokens: int
     output_tokens: int
     model_name: str
