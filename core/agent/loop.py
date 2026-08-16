@@ -102,15 +102,22 @@ class Loop:
             self.solution = answer
             self.success = True
             return True
-        if self.sandbox_output.strip() == "":
+        elif error is None and not is_final:
+            content: str = (
+                "The code has been"
+                " executed without any error or exception but did not"
+                " produce a final answer. No final_answer() captured."
+                " Provide a final_answer() in the next response.")
+            output: str = ""
+            if self.sandbox_output.strip() != "":
+                output = (
+                    f"Observation: Output: {self.sandbox_output}. " + content
+                )
             self.prompt.add_message(
                 {
                     "role": "user",
-                    "content": "Observation: The code has been"
-                    " executed without"
-                    " any error or exception and did not produce any output."
-                    " No final_answer() captured. Provide a final_answer()"
-                    " in the next response.",
+                    "content":
+                    f"{output}" if output else f"Observation: {content}",
                 }
             )
             return False

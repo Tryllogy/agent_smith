@@ -1,17 +1,11 @@
 class APIKey:
-    def __init__(
-        self,
-        key: str
-    ) -> None:
+    def __init__(self, key: str) -> None:
         self.set_key(key)
 
     def get_key(self) -> str:
         return self.__key
 
-    def set_key(
-        self,
-        new_key: str
-    ) -> None:
+    def set_key(self, new_key: str) -> None:
         if not isinstance(new_key, str):
             raise ValueError("API key must be a string.")
         if not new_key.strip():
@@ -19,10 +13,7 @@ class APIKey:
         self.__key = new_key
         self.__usable = True
 
-    def set_usable(
-        self,
-        usable: bool
-    ) -> None:
+    def set_usable(self, usable: bool) -> None:
         if not isinstance(usable, bool):
             raise ValueError("Usable flag must be a boolean.")
         self.__usable = usable
