@@ -39,7 +39,8 @@ def search_code(pattern: str, file_pattern: str) -> str:
     return "\n".join(result)
 
 
-def search_function_or_class_definition_in_code(name: str, file_pattern: str) -> str:
+def search_function_or_class_definition_in_code(
+        name: str, file_pattern: str) -> str:
     """Find where a function or class is defined.
 
     Recursively searches files matching `file_pattern` for the definition of
@@ -69,7 +70,8 @@ def search_function_or_class_definition_in_code(name: str, file_pattern: str) ->
         for number, content in enumerate(lines, start=1):
             stripped = content.lstrip()
             if stripped.startswith(prefixes):
-                after = stripped[4:] if stripped.startswith("def ") else stripped[6:]
+                after = stripped[4:] if stripped.startswith(
+                    "def ") else stripped[6:]
                 rest = after[len(name):]
                 if rest[:1] in ("(", ":", " "):
                     absolute = path.resolve()
