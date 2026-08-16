@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from core import constants
+from core.api_key import APIKey
 from core.agent.loop import Loop
 from core.agent.prompt import Prompt
 from core.llm.client import LLMClient
@@ -76,7 +77,7 @@ class AgentMBPP:
             )
 
 
-def get_api_keys() -> list[str]:
+def get_api_keys() -> list[APIKey]:
     api_keys_env = os.getenv("OPENROUTER_API_KEY")
     if not api_keys_env:
         raise ValueError(
@@ -84,7 +85,7 @@ def get_api_keys() -> list[str]:
             " Please ensure it is defined in the .env file."
         )
     keys: list = [
-        key.strip() for key in api_keys_env.split(",") if key.strip()
+        APIKey(key.strip()) for key in api_keys_env.split(",") if key.strip()
     ]
     if not keys:
         raise ValueError(

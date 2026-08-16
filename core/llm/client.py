@@ -5,6 +5,7 @@ import httpx
 from pydantic import ValidationError
 
 from core import errors
+from core.api_key import APIKey
 from core.llm.response import LLMResponse
 
 
@@ -14,19 +15,19 @@ class LLMClient:
         url: str,
         endpoint: str,
         model_name: str,
-        api_keys: list,
+        api_keys: list[APIKey],
         stop_sequence: list[str] | None = None,
     ) -> None:
-        if not isinstance(api_keys, list) and not all(
-            isinstance(key, str) for key in api_keys
+        if not isinstance(api_keys, list) or not all(
+            isinstance(key, APIKey) for key in api_keys
         ):
             raise ValueError(
-                "api_keys must be a list of strings."
+                "api_keys must be a list of APIKey."
                 "Please provide a list of API keys."
             )
         self.url = url + endpoint
         self.model_name = model_name
-        self.api_keys: list = api_keys
+        self.api_keys: list[APIKey] = api_keys
         self.stop_sequence = stop_sequence
         self.index_api_key: int = 0
 
@@ -47,7 +48,7 @@ class LLMClient:
                 url=self.url,
                 headers={
                     "Authorization":
-                    f"Bearer {self.api_keys[self.index_api_key]}"
+                    f"Bearer {self.api_keys[self.index_api_key].get_key()}"
                 },
                 json={
                     "model": self.model_name,
@@ -188,13 +189,14 @@ class LLMClient:
     ) -> str | None:
         if not self.api_keys:
             return None
+        if all(not key.get_usable() for key in self.api_keys):
+            return None
         if status_code == 402:
-            self.api_keys.pop(
-                self.api_keys.index(self.api_keys[self.index_api_key])
-            )
-            self.index_api_key = (
-                self.index_api_key % len(self.api_keys) if self.api_keys else 0
-            )
-            return self.api_keys[self.index_api_key] if self.api_keys else None
+            self.api_keys[self.index_api_key].set_usable(False)
         self.index_api_key = (self.index_api_key + 1) % len(self.api_keys)
+        while not self.api_keys[self.index_api_key].get_usable():
+            self.index_api_key = (self.index_api_key + 1) % len(self.api_keys)
+            if self.index_api_key == 0:
+                if all(not key.get_usable() for key in self.api_keys):
+                    return None
         return self.api_keys[self.index_api_key]
