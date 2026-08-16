@@ -19,6 +19,7 @@ class Loop:
     ) -> None:
         self.client: LLMClient = client
         self.thoughts: list = []
+        self.reasoning: list = []
         self.observations: list = []
         self.usage_input: int = 0
         self.usage_output: int = 0
@@ -57,6 +58,8 @@ class Loop:
         self.last_usage_output = llm_response.output_tokens
         self.finish_reason: str = llm_response.finish_reason
         self.thoughts.append(text)
+        reason: str = llm_response.reasoning if llm_response.reasoning else ""
+        self.reasoning.append(reason)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
 
@@ -106,7 +109,8 @@ class Loop:
                     "content": "Observation: The code has been"
                     " executed without"
                     " any error or exception and did not produce any output."
-                    " No final_answer() captured.",
+                    " No final_answer() captured. Provide a final_answer()"
+                    " in the next response.",
                 }
             )
             return False
@@ -124,6 +128,10 @@ class Loop:
         self.task_id: str = task_id
         self.retries: int = 0
         while self.iteration < self.iteration_limit:
+            self.sandbox_input = ""
+            self.sandbox_output = ""
+            self.last_usage_input = 0
+            self.last_usage_output = 0
             try:
                 if (
                     time.time()
@@ -160,14 +168,20 @@ class Loop:
                 self.finish_reason == "length"
                 or self.usage_output > self.max_tokens_output
             ):
+                self.iteration += 1
+                self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
                     error="LLM response exceeded the maximum token limit"
                 )
             if time.time() - self.start_time > self.timeout_limit:
+                self.iteration += 1
+                self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
                     error="Timeout limit exceeded"
                 )
             if self.usage_input > self.max_tokens_input:
+                self.iteration += 1
+                self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
                     error="Input token limit exceeded"
                 )
@@ -178,6 +192,8 @@ class Loop:
                 - constants.MARGIN_EXECUTION_TIME
             )
             if max_execution_time <= 0:
+                self.iteration += 1
+                self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
                     error="Timeout limit exceeded"
                 )
@@ -220,6 +236,9 @@ class Loop:
     def make_step_metrics(
         self,
     ) -> StepMetrics:
+        llm_output: str = self.reasoning[-1] if self.reasoning else ""
+        llm_output += " " + self.thoughts[-1] if self.thoughts else ""
+
         step_metric: dict = {
             "step": self.iteration,
             "input_tokens": self.last_usage_input,
@@ -228,7 +247,7 @@ class Loop:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
             "api_url": self.client.url,
             "model_name": self.client.model_name,
-            "llm_output": self.thoughts[-1] if self.thoughts else "",
+            "llm_output": llm_output,
             "sandbox_input": self.sandbox_input,
             "sandbox_output": self.sandbox_output,
             "retries": self.retries,

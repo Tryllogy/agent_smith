@@ -1,6 +1,7 @@
 import json
 import os
 
+from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from core import constants
@@ -9,12 +10,7 @@ from core.agent.prompt import Prompt
 from core.llm.client import LLMClient
 from core.models import MBPPTaskInput, SandboxConfig, SolutionOutput
 
-if not os.getenv("OPENROUTER_API_KEY"):
-    raise OSError(
-        "The OPENROUTER_API_KEY environment variable"
-        " is not set."
-        " Please ensure it is defined in the .env file."
-    )
+load_dotenv()
 
 
 class AgentMBPP:
@@ -27,6 +23,7 @@ class AgentMBPP:
     ) -> None:
         self.task: dict = self.get_task_from_file(task_file)
         self.output_file: str = output_file
+
         prompt: Prompt = Prompt(
             task=self.task,
             tools=None,
@@ -37,7 +34,7 @@ class AgentMBPP:
             url=provider_url,
             endpoint=constants.LLM_ENDPOINT,
             model_name=model_name,
-            api_key=[os.getenv("OPENROUTER_API_KEY")],
+            api_keys=get_api_keys(),
             stop_sequence=constants.LLM_STOP_SEQUENCE,
         )
 
@@ -77,3 +74,21 @@ class AgentMBPP:
             raise RuntimeError(
                 f"An error occurred while reading the task file: {e}"
             )
+
+
+def get_api_keys() -> list[str]:
+    api_keys_env = os.getenv("OPENROUTER_API_KEY")
+    if not api_keys_env:
+        raise ValueError(
+            "The OPENROUTER_API_KEY environment variable is not set."
+            " Please ensure it is defined in the .env file."
+        )
+    keys: list = [
+        key.strip() for key in api_keys_env.split(",") if key.strip()
+    ]
+    if not keys:
+        raise ValueError(
+            "The OPENROUTER_API_KEY environment variable is empty."
+            " Please provide at least one valid API key."
+        )
+    return keys
