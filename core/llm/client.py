@@ -1,5 +1,6 @@
 import json
 import time
+import threading
 
 import httpx
 from pydantic import ValidationError
@@ -31,6 +32,34 @@ class LLMClient:
         self.stop_sequence = stop_sequence
         self.index_api_key: int = 0
 
+    def get_reponses(
+        self,
+        thread_result: dict,
+        timeout_max: float,
+        messages: list,
+        max_tokens: int,
+    ) -> None:
+        try:
+            request: httpx.Response = httpx.post(
+                url=self.url,
+                headers={
+                    "Authorization":
+                    f"Bearer {self.api_keys[self.index_api_key].get_key()}"
+                },
+                json={
+                    "model": self.model_name,
+                    "messages": messages,
+                    "stop": self.stop_sequence,
+                    "max_tokens": max_tokens,
+                },
+                timeout=timeout_max,
+            )
+            request.raise_for_status()
+        except Exception as e:
+            thread_result["error"] = e
+            return
+        thread_result["request"] = request
+
     def make_request(
         self,
         timeout_max: float,
@@ -44,23 +73,27 @@ class LLMClient:
                 status_code=None,
             )
         try:
-            request: httpx.Response = httpx.post(
-                url=self.url,
-                headers={
-                    "Authorization": f"Bearer {self.api_keys[self.index_api_key].get_key()}"
-                },
-                json={
-                    "model": self.model_name,
-                    "messages": messages,
-                    "stop": self.stop_sequence,
-                    "max_tokens": max_tokens,
-                },
-                timeout=timeout_max,
+            thread_result: dict = {
+                "error": None,
+                "request": None,
+            }
+            thread = threading.Thread(
+                target=self.get_reponses,
+                args=(thread_result, timeout_max, messages, max_tokens),
+                daemon=True,
             )
+            thread.start()
+            thread.join(timeout=timeout_max)
+            if thread_result.get("error"):
+                raise thread_result.get("error")
+            if thread_result.get("request") is None:
+                raise errors.TransientLLMResponseError(
+                    "The request to the LLM provider timed out.",
+                )
             request_time_ms: float = round(
                 (time.time() - start_time) * 1000, 2
             )
-            request.raise_for_status()
+            request = thread_result.get("request")
             data: dict = request.json()
             if data.get("error"):
                 self.check_status_error(

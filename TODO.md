@@ -13,7 +13,7 @@
 
 ## Etat actuel
 
-*(maj : 2026-08-12 — premier squelette d'agent MBPP qui tourne)*
+*(maj : 2026-08-16 — MBPP end-to-end, 9/10 mesure sur taches reelles)*
 
 - [x] `en.subject.pdf` + `RESUME.md` → RESUME complete (section MCP ajoutee :
       definition, "les outils MCP sont les mains de l'agent", qui ecrit quoi)
@@ -25,37 +25,45 @@
 - [x] Arborescence flat layout → creee
 - [ ] `README.md` → toujours VIDE
 - [~] `.gitignore` → `.env`, `__pycache__`, `cache`, `moulinette`, `tests` OK ;
-      il manque `evaluations/`
+      il manque toujours `evaluations/`
 
-### Qui a du code, au 2026-08-12
+### Qui a du code, au 2026-08-16
 
 | Ecrit | Encore vide |
 |---|---|
-| `core/models.py`, `core/constants.py` | `core/errors.py`, tout `core/llm/` |
-| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `sandbox/` |
-| `agent_mbpp/` : `cli.py`, `__main__.py` | tout `mcp_tools/`, les 2 `mcp_tools_*.py` racine |
-| | tout `agent_swebench/` |
-| | `configs/models.json`, `sandbox_template.json` |
+| `core/models.py`, `core/constants.py`, `core/errors.py` | `core/llm/keyring.py` |
+| `core/api_key.py` (nouveau) | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
+| `core/llm/client.py`, `core/llm/response.py` | tout `sandbox/mcp_client/` |
+| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `mcp_tools/`, les 2 `mcp_tools_*.py` racine |
+| `agent_mbpp/` : `cli.py`, `__main__.py` | tout `agent_swebench/` (4 fichiers) |
+| `sandbox/executor.py` | `configs/models.json`, `sandbox_template.json` |
+| `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | `BENCHMARK_REPORT.md`, `README.md` |
 
-**Cote P1 (ndi-tull) : rien n'est commence.** C'est le chemin critique — sans
-sandbox, la boucle de P2 ne peut pas produire d'observation, donc pas boucler.
+**Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
+existent ; le sandbox execute du code et remonte `final_answer`, ce qui a
+debloque la boucle de P2. Restent le CLI/REPL, le manual, et tout MCP.
 
-### Arborescence en place (fichiers vides, a remplir)
+**`core/llm/usage.py` supprime** (decision du 2026-08-14) : le suivi d'usage
+vit dans `Loop` (`usage_input` / `usage_output` / `requests`), un module
+separe aurait duplique l'etat sans proprietaire clair.
+
+### Arborescence (`+` ecrit, `.` encore vide)
 
 ```
-racine           mcp_tools_mbpp.py   mcp_tools_swebench.py
-                 sandbox_template.json   BENCHMARK_REPORT.md
-core/            models.py  errors.py
-  agent/         loop.py  extraction.py  prompt.py
-  llm/           client.py  keyring.py  usage.py
-sandbox/         cli.py  executor.py  manual.py
-  security/      imports.py  filesystem.py  builtins.py  limits.py
-  mcp_client/    client.py  transports.py
-mcp_tools/       tools_fs.py  tools_search.py  tools_exec.py
-agent_mbpp/      __main__.py  cli.py
-agent_swebench/  __main__.py  cli.py  docker.py
-configs/         models.json
-tests/           banc d'essai local, gitignore, hors rendu
+racine         . mcp_tools_mbpp.py  . mcp_tools_swebench.py
+               . sandbox_template.json  . BENCHMARK_REPORT.md  . README.md
+core/          + models.py  + errors.py  + constants.py  + api_key.py
+  agent/       + loop.py  + extraction.py  + prompt.py
+  llm/         + client.py  + response.py  . keyring.py   (usage.py supprime)
+sandbox/       . cli.py  + executor.py  . manual.py
+  security/    + imports.py  + filesystem.py  + builtins.py  + network.py
+               + ast_guard.py  . limits.py
+  mcp_client/  . client.py  . transports.py
+mcp_tools/     . tools_fs.py  . tools_search.py  . tools_exec.py
+agent_mbpp/    + __main__.py  + cli.py
+agent_swebench/. __main__.py  . cli.py  . docker.py
+configs/       . models.json
+tests/         + banc d'essai local, gitignore, hors rendu (158 tests)
 ```
 
 ### Flat layout coherent (3 corrections faites)
@@ -210,11 +218,17 @@ Tant que ce n'est pas fige, chacun code contre du vide.
   **Reste :** relire champ par champ contre le sujet (V.3 / V.4) avant de coder
   dessus. Une signature fausse ici casse les deux moities du projet et n'est
   detectee qu'a la validation moulinette.
-- [ ] **FIGER l'interface Sandbox ↔ Orchestrateur :**
-  - signature de `execute(code)` → `(stdout, stderr, error, is_final, answer)`
-  - qui remplit `sandbox_input` / `sandbox_output`
-  - comment `final_answer()` remonte la reponse a la boucle
-- [ ] Chargement config JSON + `.env` (`OPENROUTER_API_KEY`, etc.)
+- [x] **Interface Sandbox ↔ Orchestrateur figee et en service :**
+  - `execute(code, config)` → `(stdout, stderr, error, is_final, answer)`
+  - `sandbox_input` = le bloc extrait, `sandbox_output` = `stdout + stderr`
+    (+ `error` s'il y en a un), remis a zero en tete de chaque tour
+  - `final_answer()` remonte par `is_final` / `answer` — un **fait
+    d'execution**, jamais une relecture du source. La boucle exige en plus que
+    `answer` soit une `str`
+  - la config part en `model_copy()` : le budget du tour n'ecrase pas le
+    reglage injecte
+- [x] Chargement `.env` (`OPENROUTER_API_KEY`, liste separee par virgules)
+- [ ] Chargement de la config JSON des modeles (cf. P2.5 bis)
 
 ---
 
@@ -333,26 +347,41 @@ le rapport de benchmark.
 
 *100% maison, frameworks interdits.*
 
-- [~] Boucle Thought → Code → Observation → `thought()` fait, `observation()`
-      est un stub vide, donc la boucle ne boucle pas encore
+- [x] Boucle Thought → Code → Observation → complete et verifiee sur taches
+      reelles (15 taches MBPP, 2 modeles)
 - [x] `max_iterations` parametrable → via `constants.Bench.iterations`,
       injecte dans `Loop` (MBPP 10 / SWE 30)
-- [~] Arret sur `final_answer()` / limite atteinte / erreur fatale
+- [x] Arret sur `final_answer()` / limite atteinte / erreur fatale
   - [x] limites tokens + timeout testees en tete de `run()`
-  - [ ] `final_answer()` non detecte : `run()` fait `break` des la 1ere
-        iteration, quoi qu'ait repondu le modele
-  - [ ] erreur fatale : aucune n'est rattrapee, elles remontent brutes
-- [~] Construction de l'historique → `Prompt.add_message` + message assistant
-      ajoute apres chaque `thought()` ; il manque les observations
-- [~] Gestion de la taille du contexte → `usage_input` / `usage_output`
-      cumules et compares aux maxima. **Le controle est fait AVANT l'appel**,
-      donc la derniere requete peut faire depasser la limite : c'est un
-      garde-fou, pas encore un arret propre
-- [ ] Aucun crash possible : toutes les erreurs gerees
+  - [x] `final_answer()` detecte via `is_final` / `answer` rendus par
+        `execute()` — un fait d'execution, pas une relecture du source
+  - [x] la reponse finale doit etre une `str`, sinon observation au modele
+  - [x] erreur fatale : `Transient` → retry, `Permanent` → abandon propre.
+        Rien ne sort des deux familles (16 cas parametres en test)
+- [x] Construction de l'historique → assistant apres chaque `thought()`,
+      observation apres chaque execution
+- [x] Gestion de la taille du contexte → `max_tokens` de chaque requete
+      derive du budget restant, arret propre a l'epuisement
+- [x] Aucun crash possible : 158 tests, dont 16 sur l'etancheite de la
+      hierarchie d'exceptions
 
-**Verrou principal :** `Loop.is_extracted` (`loop.py:96-99`) affiche le
-resultat et renvoie `True` sans le lire. Les etats produits par l'extraction
-(`found` / `format`) n'ont donc aucun effet sur la boucle.
+**Corrige le 2026-08-16 — message d'observation.** Le rappel "aucun
+`final_answer` capture" n'existait que dans la branche "sortie vide" : un code
+qui affichait quelque chose recevait sa propre sortie sans un mot sur
+`final_answer`, et le modele concluait qu'il avait fini. Constate sur la tache
+MBPP 453 (3 tours perdus a renvoyer le meme bloc). Les deux faits — la sortie
+du programme et le rappel — se composent maintenant dans un seul message.
+
+**Corrige le 2026-08-16 — comptabilite des etapes.** Une sortie par garde
+posterieure a une requete aboutie n'enregistrait pas son `StepMetrics` : les
+totaux ne valaient plus la somme des `steps`. Invariants tenus desormais sur
+les quatre familles de sortie : une etape par iteration, numerotation depuis 1
+sans trou ni doublon, totaux egaux a la somme des etapes, et **aucune** etape
+pour une sortie anterieure a la premiere requete.
+
+→ **Reste :** les `retries` d'un tour qui sort par une garde ne sont comptes
+nulle part (un rendu peut afficher `total_requests: 9` avec `steps: []`, sans
+dire ce qui a echoue).
 
 ### P2.2 — Extraction de code
 
@@ -386,28 +415,98 @@ Raisons, a savoir redire en soutenance :
 4. La robustesse au format passe desormais par la boucle : format non
    reconnu → observation renvoyee au modele → nouvelle iteration.
 
-→ Consequence a traiter : `LLM_START_SEQUENCE` et `LLM_STOP_SEQUENCE`
-(`core/constants.py`) listent encore ces trois formats. Trois sequences
-d'arret sont consommees pour rien.
+→ [x] Consequence traitee : `LLM_START_SEQUENCE` et `LLM_STOP_SEQUENCE`
+(`core/constants.py`) ne contiennent plus que ` ```python ` et `<end_code>`.
 
 ### P2.3 — Couche LLM
 
-- [ ] Abstraction provider (changer de provider sans refacto majeure)
-      → `httpx.post` est en dur dans `Loop.thought`, tout `core/llm/` est vide
-- [ ] Multi-tokens par provider + **rotation** (rate limits, quotas epuises)
-- [ ] Fallback entre providers
+- [x] Abstraction provider → `LLMClient` (`core/llm/client.py`) est le **seul**
+      module qui importe `httpx`. Injecte dans `Loop`, donc testable sans
+      reseau ni `monkeypatch` de `httpx`
+- [x] Multi-tokens par provider + **rotation** → 429 fait tourner sans
+      condamner, 402 marque la cle epuisee et saute les mortes, vivier vide
+      remonte en `Permanent`. Verifie sur 5 situations limites
+- [ ] Fallback entre providers (un seul provider en service)
 - [x] `stop_sequences` → `constants.LLM_STOP_SEQUENCE` envoye dans le payload
-      (3 des 4 entrees sont devenues inutiles, cf. P2.2)
-- [ ] Retry avec backoff, comptabilise dans `StepMetrics.retries`
-- [x] Cles API depuis env vars uniquement → `load_dotenv` + `os.getenv`, et
-      le module refuse de se charger si `OPENROUTER_API_KEY` est absente
-- [~] Tracking : `usage_input` / `usage_output` cumules depuis `usage` de la
-      reponse. Manquent `request_time_ms`, `total_requests`, la latence
+- [~] Retry comptabilise dans `StepMetrics.retries` ; le **backoff** se limite
+      a `sleep(retry_after)` quand l'en-tete est present, sinon 0
+- [x] Cles API depuis env vars uniquement → `load_dotenv()` sans test de
+      retour (le fichier est un confort local, pas une obligation), la seule
+      question posee est `os.getenv`. L'import ne leve plus jamais
+- [x] Liste de cles : `OPENROUTER_API_KEY=cle1,cle2,...`, entrees vides
+      filtrees, convention declaree dans `.env.example`
+- [x] Tracking complet : `usage_input` / `usage_output`, `request_time_ms`,
+      `total_requests`, `retries` par etape
 - [x] Erreurs API traduites en exceptions Python typees (champ `error` en
       HTTP 200, `choices` vide, `content` null des modeles de raisonnement,
       `usage` absent, corps non-JSON, timeout, erreur de transport)
+- [x] `reasoning` capture depuis `message.reasoning` et joint a `llm_output`
 
-#### Modeles gratuits OpenRouter (releve du 2026-08-10)
+**`core/api_key.py` (2026-08-16).** Une cle est un objet `APIKey` avec son
+drapeau `usable`, pas une chaine. Trois raisons : une `str` passee au lieu
+d'une liste etait indexee **caractere par caractere** (chaque requete partait
+avec `Bearer c`, et le serveur repondait 401 — diagnostic impossible) ;
+marquer une cle epuisee plutot que la supprimer garde la taille du vivier
+stable, donc la rotation n'a plus de rattrapage d'indice ; et `__repr__` ne
+divulgue rien. Le constructeur de `LLMClient` refuse tout ce qui n'est pas une
+`list[APIKey]`.
+
+**Echeance reelle sur les appels (2026-08-16).** Le `timeout` de `httpx` est
+**par phase d'E/S, pas une duree totale** : mesure, un serveur qui envoie un
+octet par seconde traverse un `timeout=2` pendant 6 secondes. En conditions
+reelles, un appel a dure 98 s sous un plafond de 30 s, et une tache MBPP a
+fini a 135,8 s — au-dela de la limite de 120 s, donc `Metrics valid: NO`.
+
+L'appel bloquant part maintenant dans un `threading.Thread(daemon=True)` et
+`join(timeout=...)` fait office d'echeance. On n'interrompt pas le thread —
+c'est impossible en Python — on l'**abandonne** ; le drapeau `daemon` est ce
+qui empeche l'interpreteur de l'attendre a la sortie (mesure : 8,65 s contre
+3,47 s sans). L'exception du thread est stockee puis **relevee dans le meme
+`try`**, sinon les gestionnaires `httpx.*` ne voient plus rien passer.
+Le `timeout=` de `httpx` est conserve **en plus** : il coupe les serveurs
+muets, l'echeance borne les serveurs lents.
+
+#### Modeles gratuits OpenRouter (releve du 2026-08-16)
+
+**19 gratuits sur 413** (contre 17 sur 399 le 2026-08-10). Apparus depuis :
+`nvidia/nemotron-3.5-lightning:free`, `dots-studio/dots-3-note-preview:free`,
+`liquid/lfm-2.5-2.6b:free`, `nvidia/nemotron-nano-12b-v2-vl:free`.
+La note "liste volatile" se verifie en six jours.
+
+**Les 19 annoncent tous `reasoning` dans `supported_parameters`.** Ce champ
+dit "sait raisonner", pas "raisonne par defaut" : le catalogue ne permet donc
+**aucun** tri. Le seul critere fiable est la mesure de
+`usage.completion_tokens_details.reasoning_tokens` sur une requete de
+controle. Sonde du 2026-08-16, meme requete pour tous (bloc ```python
+demande) :
+
+| Modele | tokens sortie | dont raisonnement | temps | bloc ? |
+|---|---|---|---|---|
+| `openai/gpt-oss-20b:free` | **371** | 218 | 38,4 s | oui |
+| `nvidia/nemotron-3.5-lightning:free` | 1500 | 1088 | 9,8 s | oui |
+| `cohere/north-mini-code:free` | 1499 | 1246 | 52,8 s | non |
+| `poolside/laguna-s-2.1:free` | 1500 | 1500 | 34,2 s | non |
+| `google/gemma-4-31b-it:free` | — | — | — | 429 fournisseur |
+
+Trois sur cinq epuisent le plafond MBPP de 1500 tokens **des la premiere
+requete**, sur un exercice trivial, dont deux sans ecrire une seule ligne de
+code. `gpt-oss-20b` est le seul a s'arreter de deliberer pour repondre.
+`gpt-oss` expose en plus un `reasoning_effort` (`low`/`medium`/`high`), levier
+disponible avant d'avoir a changer de modele.
+
+**Quota : 50 requetes/jour et par compte** sur les modeles `:free`
+(`limit_source: openrouter_free_tier_daily`, reset a 02:00 locales). 4 cles en
+service, epuisees le meme jour par ~30 requetes de campagne chacune. La
+rotation multi-cles n'est donc pas un confort : c'est ce qui rend une campagne
+de benchmark realisable. A prevoir pour les 5 modeles x 3 taches SWE-bench.
+
+→ Un 429 `free-models-per-day` n'est **pas** un rate limit passager (8 h
+d'attente). La boucle le traite comme transitoire, ce qui est correct tant
+qu'une cle survit ; quand toutes sont dans cet etat, la tache brule son budget
+en reessais. Le corps de la reponse porte pourtant `limit_source`, de quoi
+distinguer "ralentis" de "reviens demain".
+
+#### Releve precedent (2026-08-10) — conserve pour comparaison
 
 Le sujet impose les **offres gratuites exclusivement** : aucun plan payant,
 credit achete ou compte facture. Verifier `usage.cost == 0` sur une requete
@@ -458,9 +557,15 @@ Criteres de choix :
 ### P2.4 — System prompts
 
 - [~] Injection du sandbox manual (fourni par P1) → le slot existe dans
-      `Prompt` (`tools` + `allowed_imports`), mais `agent_mbpp/cli.py:22`
-      passe `tools=None` : le prompt affiche litteralement "None" au modele
+      `Prompt` (`tools` + `allowed_imports`), mais `agent_mbpp/cli.py:30`
+      passe toujours `tools=None` : le prompt affiche litteralement "None" au
+      modele. En attente du manual MCP de P1
 - [x] Slots structures Thought / Code / Observation avec exemples
+- [x] Message d'observation revu (2026-08-16) : `Observation:` en tete dans
+      **tous** les cas, sortie du programme transmise **verbatim** (pas de
+      `strip()` : un saut de ligne final est une donnee), et rappel
+      `final_answer` compose avec la sortie au lieu de l'exclure. Mesure de
+      l'effet : la tache 453 perdait 3 tours a renvoyer le meme bloc
 - [x] Exemples de boucles de raisonnement efficaces → l'exemple `smallest_abs`
       montre un premier essai **faux**, l'observation, puis la correction
 - [x] Prompt MBPP (court, contrainte 6k tokens d'entree au total)
@@ -473,23 +578,47 @@ l'agent, et transcrire ce raisonnement dans le prompt.
 
 ### P2.5 — Les deux agents
 
-- [~] `agent_mbpp` : les 4 options existent et la tache est chargee + validee
-      contre `MBPPTaskInput`. **Mais l'option est declaree `--output-file`
-      alors que le sujet impose `--output`** ; ca ne marche aujourd'hui que
-      par l'abreviation automatique d'argparse, et le `Makefile` en profite.
-      A renommer avant l'eval : un `--output-dir` ajoute plus tard rendrait
-      `--output` ambigu et casserait tout.
-- [ ] `agent_swebench` : memes options → les 4 fichiers sont vides
-- [ ] Ecriture du `solution.json` conforme (`SolutionOutput` complet)
-      → `output_file` est stocke mais jamais utilise ; `run()` ne renvoie
-      qu'un `SolutionOutput` valide contre un dict vide, ce qui ne peut pas
-      passer (13 champs obligatoires)
-- [ ] `final_answer(code)` pour MBPP / `final_answer(get_patch())` pour SWE-bench
-- [~] Respect strict des limites → compteurs en place, arret pas encore propre
-      (cf. P2.1)
-- [ ] Remplissage de **tous** les champs de `StepMetrics` (`llm_output` brut,
-      `sandbox_input`, `sandbox_output`, `retries`) → aucun `StepMetrics`
-      n'est instancie a ce jour
+- [x] `agent_mbpp` : les 4 options du sujet, `--output` corrige (plus
+      d'abreviation `argparse`), tache chargee + validee contre `MBPPTaskInput`
+- [ ] `agent_swebench` : memes options → les 4 fichiers sont toujours vides
+- [x] Ecriture du `solution.json` conforme → `model_dump_json(indent=4)`
+      (`json.dump` ne sait pas serialiser un `BaseModel`).
+      `validate_metrics` repond **YES** sur toutes les taches mesurees
+- [x] `final_answer(code)` pour MBPP
+- [ ] `final_answer(get_patch())` pour SWE-bench
+- [x] Respect strict des limites → arret propre sur chacune des quatre
+      (iterations, tokens entree, tokens sortie, temps)
+- [x] Remplissage de **tous** les champs de `StepMetrics`
+
+### P2.5 bis — `configs/models.json` (exige au rendu, VIDE)
+
+Sujet chap. VIII p.38 : *"Configuration files for sandbox and models"*. Le
+sujet **n'impose aucun schema** pour le versant modeles — a nous de le definir
+et de le defendre. Fichier de 0 octet, lu par personne.
+
+Forme decidee le 2026-08-16 : `--model-name` reste la CLI imposee et devient
+la **cle de recherche** dans le JSON. Trouve → on prend sa config ; absent →
+profil par defaut conservateur (aucun parametre exotique : un modele inconnu
+est un modele dont on ignore les capacites).
+
+- [ ] Y mettre : URL/endpoint du fournisseur, reglages propres au modele
+      (ex. `reasoning_effort`, que `gpt-oss` comprend et Nemotron non)
+- [ ] **Ne PAS y mettre** les limites du benchmark (1500 tokens, 10 iterations,
+      120 s) : ce sont des proprietes de MBPP, pas du modele. Elles vivent dans
+      `constants.MBPP`. Deux sources de verite = divergence garantie
+- [ ] **Ne PAS y mettre** les mesures (ratio de raisonnement, latences) :
+      ce sont des observations, leur place est dans `BENCHMARK_REPORT.md`
+- [ ] Regle de precedence a fixer : l'argument CLI l'emporte sur le fichier.
+      Piege : avec des defauts `argparse` en dur, "passe par l'utilisateur" et
+      "valeur par defaut" sont indistinguables → defauts a `None`
+- [ ] Cle = identifiant exact OpenRouter, prefixe et suffixe `:free` compris
+- [ ] Validation par un model Pydantic, par symetrie avec `SandboxConfig`
+- [ ] Lecture dans `cli.py` (meme frontiere que `get_api_keys()`), **jamais**
+      dans `LLMClient` : le client recoit une config, il ne va pas la chercher
+- [ ] Trois echecs distincts, trois reponses : modele inconnu → repli
+      silencieux ; fichier absent ou JSON invalide → bruyant, au demarrage
+- [ ] Aucune cle dedans. Le JSON dit *quels* modeles et *comment* les appeler,
+      le `.env` fournit *avec quoi*
 
 ### P2.6 — `BENCHMARK_REPORT.md`
 
@@ -510,6 +639,80 @@ Candidats : voir la table des modeles gratuits en P2.3 (12 utilisables).
 - [ ] Les `solution.json` de backing presents dans le repo
 
 → Mesure manuelle acceptee, c'est l'analyse qui compte.
+
+#### Campagnes MBPP deja faites (matiere pour le rapport)
+
+Taches figees dans `cache/run2/task_*.json`, solutions dans `cache/run{2,3,4}/`.
+Reussites **verifiees en executant les `test_list`**, pas d'apres le rapport de
+l'agent — les deux verdicts ont toujours concorde.
+
+| Serie | Modele | reel | sortie mediane | max | duree des 10 |
+|---|---|---|---|---|---|
+| `run2` | `nemotron-3-ultra-550b` | **9/10** | 446 | 730 | 229 s |
+| `run3` | `gpt-oss-20b` | **8/10** | 226 | 624 | 473 s |
+| `run4` | `gpt-oss-20b` (apres correctifs) | **8/10** | 221 | 624 | 461 s |
+
+Barre du sujet : 4/5, soit 80 %. Sur 25 executions distinctes (5 + 10 + 10),
+21 reussites, soit 84 % — on passe, sans marge.
+
+Les trois echecs, et ce qu'ils ont appris :
+
+1. **MBPP 453** (nemotron) — la bonne fonction etait ecrite des le tour 1, mais
+   un appel de 98,3 s a mange 82 % du budget ; le `final_answer` correct du
+   tour 4 est arrive avec 0,08 s de budget sandbox restant. Deux causes :
+   le message d'observation muet sur `final_answer` (3 tours perdus) et
+   l'absence d'echeance reelle. **Les deux corrigees.**
+2. **MBPP 87** (nemotron) — 1500 tokens de sortie **entierement en
+   raisonnement**, aucun bloc de code emis, alors que la reponse figurait a la
+   fin de la deliberation. `finish_reason: length`, garde declenchee. Cause
+   irreductible cote modele. `gpt-oss` passe cette tache du premier coup.
+3. **MBPP 59 et 413** (gpt-oss) — rafales de 429 *"temporarily rate-limited
+   upstream"* du fournisseur, reproduites a l'identique. 0 iteration, 5 et 9
+   requetes, toutes rejetees. La 413 a fini a **135,8 s** → `Metrics valid: NO`.
+   Le depassement etait imputable a la boucle, **corrige** ; l'instabilite du
+   fournisseur ne l'est pas.
+
+→ Les deux modeles echouent pour des raisons **independantes** : verbosite
+d'un cote, instabilite du fournisseur de l'autre. Sur 20 executions la boucle
+n'a commis qu'une seule faute qui lui soit imputable. Avec des taux si
+proches, le choix ne se tranchera pas sur 10 taches — d'ou l'interet d'un
+basculement de modele sur echec repete, a etudier (chantier, pas correctif).
+
+→ Statistiques d'appel sur les 15 premieres taches (28 appels) : duree mediane
+6,3 s, **moyenne 14,8 s, max 98,3 s** ; 5 appels sur 28 depassent les 30 s du
+plafond nominal. C'est cette distribution qui a motive l'echeance par thread.
+
+#### `run4` — les memes 10 taches apres les correctifs (2026-08-16)
+
+Meme modele, memes taches, meme ordre que `run3`. Resultat reel **8/10**, avec
+les **memes deux echecs** (59 et 413). Ce que le rejeu a change :
+
+- **`Metrics valid: YES` sur les 10** (`run3` : 9/10). Les deux echecs
+  s'arretent a **115,0 s exactement** au lieu de 118,6 s et 135,8 s.
+  L'echeance par thread tient la limite des 120 s : c'est la seule faute
+  imputable a la boucle sur 20 executions, et elle a disparu.
+- **Le plafond de 30 s mord maintenant** : 87, 17 et 244 ont demande un appel
+  de plus qu'en `run3` (1 → 3, 1 → 2, 1 → 2). Un appel abandonne a 30 s puis
+  rejoue coute une requete de plus ; il evite l'appel de 98 s qui avait tue la
+  tache 453. Compromis accepte, et documente pour le rapport.
+- Les deux echecs **ne sont plus les memes 429** : `run3` recevait des rafales
+  *"temporarily rate-limited upstream"* (limite du fournisseur du modele),
+  `run4` a bute sur le **quota journalier OpenRouter** — `limit_source:
+  openrouter_free_tier_daily`, `X-RateLimit-Limit: 50`, `Remaining: 0`, les
+  4 clefs epuisees. Ce n'est pas un echec de l'agent : **8/8 hors quota.**
+
+**Defaut mis au jour, non corrige : aucun recul entre deux tentatives.**
+La 413 a emis **2069 requetes en 115 s** (18/s), la 59 en a emis 188. Cause :
+OpenRouter renvoie son 429 en 0,07 s et **sans en-tete `Retry-After`** ; la
+boucle fait donc `time.sleep(0)` et repart aussitot. Le seul signal utilisable
+est ailleurs — `X-RateLimit-Reset` (epoch **en millisecondes**), present a la
+fois en en-tete HTTP et dans `error.metadata.headers`. Deux manques distincts :
+la reprise n'a pas de recul minimal, et la seule source de delai lue est un
+en-tete que ce fournisseur n'envoie pas.
+
+- [x] Rejouer les 10 taches **apres** l'echeance et le message d'observation,
+      pour mesurer l'effet des deux correctifs a jeu egal → `cache/run4/`
+- [ ] Etendre a plus de taches : 10 ne separent pas deux modeles a 87 %
 
 ---
 
@@ -534,24 +737,38 @@ Candidats : voir la table des modeles gratuits en P2.3 (12 utilisables).
 
 ## Ordre de travail recommande
 
-1. **Phase 0 ensemble** (models + interface + setup) — *bloquant*
-   → setup, structure, flat layout et models **faits**. `.env` charge dans
-   `core/agent/loop.py`. Reste : l'interface Sandbox ↔ Orchestrateur (toujours
-   pas figee, c'est le point bloquant), et le chargement config JSON.
-2. **En parallele :**
-   - `ndi-tull` → sandbox minimal qui execute du code + `final_answer`
-     **(pas commence)**
-   - `tchemin` → boucle agent minimale + 1 provider en dur **(en cours :
-     appel API, prompt et extraction faits ; boucle et sortie a finir)**
-3. **Premier jalon :** MBPP end-to-end avec le modele le plus capable disponible
-   et **sans** limites de tokens/iterations. Si ca ne passe pas la, ajouter des
-   contraintes n'aidera pas.
-4. Brancher les vraies limites, mesurer, optimiser le prompt.
-5. Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.
-6. SWE-bench sur les 3 taches conseillees :
+1. [x] **Phase 0 ensemble** — setup, structure, flat layout, models **faits**.
+   `.env` charge dans `agent_mbpp/cli.py` (plus dans `loop.py`). Reste le
+   chargement de la config JSON des modeles (cf. P2.5 bis).
+2. [x] **En parallele** — sandbox qui execute du code + `final_answer`
+   (ndi-tull) et boucle agent avec provider injecte (tchemin) : les deux
+   moities se parlent, l'interface `execute()` est stabilisee.
+3. [x] **Premier jalon : MBPP end-to-end.** Fait, et au-dela — 15 taches
+   reelles mesurees avec les limites branchees, pas seulement sans contraintes.
+4. [~] Mesurer et optimiser le prompt → 3 correctifs issus des mesures
+   (observation, echeance, comptabilite). **Reste : rejouer a jeu egal.**
+5. [ ] Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.
+6. [ ] SWE-bench sur les 3 taches conseillees :
    `sympy__sympy-14711` / `sympy__sympy-13480` / `pydata__xarray-4629`
-7. `BENCHMARK_REPORT.md` une fois les 2 benchmarks fonctionnels.
-8. `README.md` + relecture croisee.
+7. [ ] `BENCHMARK_REPORT.md` une fois les 2 benchmarks fonctionnels
+   (la matiere MBPP existe deja, cf. P2.6).
+8. [ ] `README.md` + relecture croisee.
+
+### Prochaines actions concretes (cote tchemin)
+
+- [x] Rejouer les 10 taches a jeu egal → `cache/run4/`, 8/10, metriques
+      valides sur les 10 (cf. P2.6)
+- [ ] **Recul entre deux tentatives** : 2069 requetes en 115 s sur la 413.
+      Prevoir un delai minimal quand `Retry-After` est absent, et lire
+      `X-RateLimit-Reset` (ms) — en-tete HTTP ou `error.metadata.headers`
+- [ ] `configs/models.json` — livrable exige, aujourd'hui vide (P2.5 bis)
+- [ ] Dette `ruff` : 9 `B904` (`raise ... from`), 1 `I001`, 1 `SIM102`
+- [ ] `agent_mbpp/cli.py:30` passe encore `tools=None` → le prompt affiche
+      litteralement "None" au modele (attend le manual MCP de P1)
+- [ ] `core/llm/keyring.py` : vide et sans emploi depuis que `APIKey` porte
+      l'etat du vivier → a supprimer ou a justifier
+- [ ] `.gitignore` : ajouter `evaluations/`
+- [ ] `README.md` (usage reel de l'IA sur le projet, exige par le sujet)
 
 ---
 
