@@ -1,0 +1,50 @@
+{
+    "openrouter": {
+        "provider": {
+            "url": "https://openrouter.ai/api/v1",
+            "endpoint": "/chat/completions",
+            "header": {
+                "Authorization": "Bearer {api_key}"
+            },
+            "api_key_env_var": "OPENROUTER_API_KEY",
+            "reasoning_name": "reasoning",
+            "retry_after": {
+                    "names": [
+                        "retry-after",
+                        "x-ratelimit-reset"
+                    ]
+                }
+        },
+        "models": {
+            "nvidia/nemotron-3-ultra-550b-a55b:free": {
+                "reasoning": true
+            },
+            "openai/gpt-oss-20b:free":{
+                "reasoning": true
+            }
+        }
+    },
+    "groq": {
+        "provider": {
+            "url": "https://api.groq.com/openai/v1",
+            "endpoint": "/chat/completions",
+            "header": {
+                "Authorization": "Bearer {api_key}"
+            },
+            "api_key_env_var": "GROQ_API_KEY",
+            "reasoning_name": "reasoning",
+            "retry_after": {
+                "names": [
+                    "retry-after",
+                    "x-ratelimit-reset-requests",
+                    "x-ratelimit-reset-tokens"
+                ]
+            }
+        },
+        "models": {
+            "openai/gpt-oss-120b": {
+                "reasoning": true
+            }
+        }
+    }
+}

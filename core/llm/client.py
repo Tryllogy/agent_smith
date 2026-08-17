@@ -43,8 +43,7 @@ class LLMClient:
             request: httpx.Response = httpx.post(
                 url=self.url,
                 headers={
-                    "Authorization":
-                    f"Bearer {self.api_keys[self.index_api_key].get_key()}"
+                    "Authorization": f"Bearer {self.api_keys[self.index_api_key].get_key()}"
                 },
                 json={
                     "model": self.model_name,

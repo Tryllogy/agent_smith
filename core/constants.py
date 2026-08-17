@@ -10,6 +10,8 @@ LLM_START_SEQUENCE = [
     "```python",
 ]
 
+MODELS_CONFIG_FILE = "configs/models.json"
+
 
 @dataclass(frozen=True)
 class Bench:

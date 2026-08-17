@@ -31,11 +31,15 @@ class AgentMBPP:
             allowed_imports=SandboxConfig().authorized_imports,
         )
 
+        self.provider_config, self.model_config = (
+            get_provider_and_model_config(model_name, provider_url)
+        )
+
         self.llm_client: LLMClient = LLMClient(
             url=provider_url,
             endpoint=constants.LLM_ENDPOINT,
             model_name=model_name,
-            api_keys=get_api_keys(),
+            api_keys=get_api_keys(self.provider_config),
             stop_sequence=constants.LLM_STOP_SEQUENCE,
         )
 
@@ -77,11 +81,71 @@ class AgentMBPP:
             )
 
 
-def get_api_keys() -> list[APIKey]:
-    api_keys_env = os.getenv("OPENROUTER_API_KEY")
+def get_provider_and_model_config(
+    model_name: str, provider_url: str
+) -> tuple[dict, dict]:
+    try:
+        with open(constants.MODELS_CONFIG_FILE) as f:
+            models_config = json.load(f)
+            provider_name: str = find_provider_by_url(
+                models_config, provider_url
+            )
+            provider_config = models_config.get(provider_name, {})
+            model_config = provider_config.get("models", {}).get(
+                model_name, {}
+            )
+            if not model_config:
+                raise ValueError(
+                    f"Model '{model_name}' not found in"
+                    f" the configuration for provider '{provider_url}'."
+                )
+            provider_config = provider_config.get("provider")
+            return provider_config, model_config
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"The models configuration file '{constants.MODELS_CONFIG_FILE}'"
+            " was not found."
+        )
+    except json.JSONDecodeError:
+        raise ValueError(
+            f"The models configuration file '{constants.MODELS_CONFIG_FILE}'"
+            " is not a valid JSON file."
+        )
+    except (ValueError, KeyError) as e:
+        raise ValueError(
+            f"Error in models configuration: {e}"
+        )
+    except Exception as e:
+        raise RuntimeError(
+            "An unexpected error occurred while"
+            f" reading the models configuration: {e}"
+        )
+
+
+def find_provider_by_url(models_config: dict, url: str) -> str:
+    for provider_name, config in models_config.items():
+        provider = config.get("provider", None)
+        if provider is None:
+            raise KeyError(
+                f"No 'provider' key in config file for {provider_name}."
+            )
+        if provider.get("url", None) == url:
+            return provider_name
+        if provider.get("url", None) is None:
+            raise KeyError(
+                f"No 'url' key in provider config for {provider_name}."
+            )
+    raise ValueError(
+        f"Provider with URL '{url}' not found in the configuration."
+    )
+
+
+def get_api_keys(provider_config: dict) -> list[APIKey]:
+    key_name: str = provider_config.get("api_key_env_var")
+    api_keys_env = os.getenv(key_name)
     if not api_keys_env:
         raise ValueError(
-            "The OPENROUTER_API_KEY environment variable is not set."
+            f"The {key_name} environment variable is not set."
             " Please ensure it is defined in the .env file."
         )
     keys: list = [
@@ -89,7 +153,7 @@ def get_api_keys() -> list[APIKey]:
     ]
     if not keys:
         raise ValueError(
-            "The OPENROUTER_API_KEY environment variable is empty."
+            f"The {key_name} environment variable is empty."
             " Please provide at least one valid API key."
         )
     return keys
