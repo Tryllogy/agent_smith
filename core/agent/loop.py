@@ -107,7 +107,8 @@ class Loop:
                 "The code has been"
                 " executed without any error or exception but did not"
                 " produce a final answer. No final_answer() captured."
-                " Provide a final_answer() in the next response.")
+                " Provide a final_answer() in the next response."
+            )
             output: str = ""
             if self.sandbox_output.strip() != "":
                 output = (
@@ -116,8 +117,9 @@ class Loop:
             self.prompt.add_message(
                 {
                     "role": "user",
-                    "content":
-                    f"{output}" if output else f"Observation: {content}",
+                    "content": f"{output}"
+                    if output
+                    else f"Observation: {content}",
                 }
             )
             return False

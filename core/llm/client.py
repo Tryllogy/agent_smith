@@ -1,6 +1,6 @@
 import json
-import time
 import threading
+import time
 
 import httpx
 from pydantic import ValidationError
@@ -97,7 +97,8 @@ class LLMClient:
             data: dict = request.json()
             if data.get("error"):
                 self.check_status_error(
-                    status_code=data.get("error").get("code", "Unknown error")
+                    status_code=data.get("error").get("code", "Unknown error"),
+                    timeout_max=timeout_max,
                 )
             if not data.get("choices"):
                 raise errors.PermanentLLMResponseError(
@@ -121,10 +122,22 @@ class LLMClient:
                 status_code=None,
             )
         except httpx.HTTPStatusError as e:
+            retry_after: float | str | None = None
+            if e.response.headers.get("Retry-After"):
+                retry_after = e.response.headers.get("Retry-After")
+            elif e.response.headers.get("x-ratelimit-reset"):
+                retry_after = e.response.headers.get("x-ratelimit-reset")
+                if retry_after.isdigit():
+                    retry_after = (int(retry_after) / 1000) - time.time()
+            try:
+                retry_after = float(retry_after) if retry_after else None
+            except ValueError:
+                retry_after = None
             self.check_status_error(
                 status_code=e.response.status_code,
-                retry_after=e.response.headers.get("Retry-After"),
+                retry_after=retry_after,
                 error=e,
+                timeout_max=timeout_max,
             )
         except KeyboardInterrupt:
             raise KeyboardInterrupt(
@@ -176,17 +189,22 @@ class LLMClient:
         status_code: int,
         retry_after: float | None = None,
         error: Exception | None = None,
+        timeout_max: float = 0.0,
     ) -> None:
+        if retry_after is not None and retry_after < 0:
+            retry_after = 0.0
         if status_code in errors.ERRORS_TRANSIENT:
             if status_code == 429:
                 last_api_key = self.api_keys[self.index_api_key]
                 self.get_next_api_key(status_code=status_code)
                 if last_api_key != self.api_keys[self.index_api_key]:
-                    retry_after = 0
-            if isinstance(retry_after, str) and retry_after.isdigit():
-                retry_after = float(retry_after)
-            else:
-                retry_after = None
+                    retry_after = None
+            if retry_after is not None and retry_after > timeout_max:
+                raise errors.PermanentLLMResponseError(
+                    "The LLM provider has rate limited the requests"
+                    + " and the retry time exceeds the bench timeout.",
+                    status_code=status_code,
+                )
             raise errors.TransientLLMResponseError(
                 f"Transient error from LLM provider: {error}",
                 status_code=status_code,
