@@ -90,7 +90,7 @@ def get_provider_and_model_config(
             provider_name: str = find_provider_by_url(
                 models_config, provider_url
             )
-            provider_config = models_config.get(provider_name, {})
+            provider_config = models_config.get(provider_name)
             model_config = provider_config.get("models", {}).get(
                 model_name, {}
             )
@@ -129,18 +129,24 @@ def find_provider_by_url(models_config: dict, url: str) -> str:
             raise KeyError(
                 f"No 'provider' key in config file for {provider_name}."
             )
-        if provider.get("url", None) == url:
-            return provider_name
         if provider.get("url", None) is None:
             raise KeyError(
                 f"No 'url' key in provider config for {provider_name}."
             )
+        if provider.get("url") == url:
+            return provider_name
     raise ValueError(
         f"Provider with URL '{url}' not found in the configuration."
     )
 
 
 def get_api_keys(provider_config: dict) -> list[APIKey]:
+    if provider_config.get("api_key_env_var") is None:
+        raise KeyError(
+            "Error in models configuration:"
+            " The 'api_key_env_var' key is missing in"
+            " the provider configuration."
+        )
     key_name: str = provider_config.get("api_key_env_var")
     api_keys_env = os.getenv(key_name)
     if not api_keys_env:
