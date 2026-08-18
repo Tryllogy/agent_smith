@@ -7,7 +7,11 @@ from pydantic import ValidationError
 
 from core import errors
 from core.api_key import APIKey
-from core.llm.response import LLMResponse
+from core.llm.provider import Provider
+from core.validators import (
+    LLMResponse,
+    ModelConfig,
+)
 
 
 class LLMClient:
@@ -16,6 +20,8 @@ class LLMClient:
         url: str,
         endpoint: str,
         model_name: str,
+        provider_config: Provider,
+        model_config: ModelConfig,
         api_keys: list[APIKey],
         stop_sequence: list[str] | None = None,
     ) -> None:
@@ -31,6 +37,8 @@ class LLMClient:
         self.api_keys: list[APIKey] = api_keys
         self.stop_sequence = stop_sequence
         self.index_api_key: int = 0
+        self.provider_config = provider_config
+        self.model_config = model_config
 
     def get_reponses(
         self,
@@ -43,7 +51,8 @@ class LLMClient:
             request: httpx.Response = httpx.post(
                 url=self.url,
                 headers={
-                    "Authorization": f"Bearer {self.api_keys[self.index_api_key].get_key()}"
+                    "Authorization":
+                    f"Bearer {self.api_keys[self.index_api_key].get_key()}"
                 },
                 json={
                     "model": self.model_name,
@@ -64,35 +73,48 @@ class LLMClient:
         timeout_max: float,
         messages: list,
         max_tokens: int,
-    ) -> LLMResponse:
+    ) -> tuple[dict, float]:
         start_time = time.time()
+        thread_result: dict = {
+            "error": None,
+            "request": None,
+        }
+        thread = threading.Thread(
+            target=self.get_reponses,
+            args=(thread_result, timeout_max, messages, max_tokens),
+            daemon=True,
+        )
+        thread.start()
+        thread.join(timeout=timeout_max)
+        if thread_result.get("error"):
+            raise thread_result.get("error")
+        if thread_result.get("request") is None:
+            raise errors.TransientLLMResponseError(
+                "The request to the LLM provider timed out.",
+            )
+        request_time_ms: float = round(
+            (time.time() - start_time) * 1000, 2
+        )
+        request = thread_result.get("request")
+        return request, request_time_ms
+
+    def get_llm_reponse(
+        self,
+        timeout_max: float,
+        messages: list,
+        max_tokens: int,
+    ) -> LLMResponse:
         if not self.api_keys:
             raise errors.PermanentLLMResponseError(
                 "No API key provided for LLM client.",
                 status_code=None,
             )
         try:
-            thread_result: dict = {
-                "error": None,
-                "request": None,
-            }
-            thread = threading.Thread(
-                target=self.get_reponses,
-                args=(thread_result, timeout_max, messages, max_tokens),
-                daemon=True,
+            request, request_time_ms = self.make_request(
+                timeout_max=timeout_max,
+                messages=messages,
+                max_tokens=max_tokens,
             )
-            thread.start()
-            thread.join(timeout=timeout_max)
-            if thread_result.get("error"):
-                raise thread_result.get("error")
-            if thread_result.get("request") is None:
-                raise errors.TransientLLMResponseError(
-                    "The request to the LLM provider timed out.",
-                )
-            request_time_ms: float = round(
-                (time.time() - start_time) * 1000, 2
-            )
-            request = thread_result.get("request")
             data: dict = request.json()
             if data.get("error"):
                 self.check_status_error(
@@ -236,9 +258,10 @@ class LLMClient:
         self,
         status_code: int | None = None,
     ) -> str | None:
-        if not self.api_keys:
-            return None
-        if all(not key.get_usable() for key in self.api_keys):
+        if (
+            all(not key.get_usable() for key in self.api_keys)
+            or not self.api_keys
+        ):
             return None
         if status_code == 402:
             self.api_keys[self.index_api_key].set_usable(False)

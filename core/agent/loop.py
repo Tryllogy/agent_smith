@@ -4,7 +4,7 @@ from core import constants, errors
 from core.agent.extraction import extract_code_from_text
 from core.agent.prompt import Prompt
 from core.llm.client import LLMClient
-from core.llm.response import LLMResponse
+from core.validators import LLMResponse
 from core.models import SandboxConfig, SolutionOutput, StepMetrics
 from sandbox.executor import execute
 
@@ -45,7 +45,7 @@ class Loop:
 
     def thought(self, timeout_max: float, max_tokens: int):
         self.requests += 1
-        llm_response: LLMResponse = self.client.make_request(
+        llm_response: LLMResponse = self.client.get_llm_reponse(
             timeout_max=timeout_max,
             messages=self.prompt.prompt,
             max_tokens=max_tokens,

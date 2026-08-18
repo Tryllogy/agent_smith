@@ -9,17 +9,28 @@
             "api_key_env_var": "OPENROUTER_API_KEY",
             "reasoning_name": "reasoning",
             "retry_after": {
-                    "names": [
-                        "retry-after",
-                        "x-ratelimit-reset"
-                    ]
+                "names": {
+                    "retry-after": {
+                        "scale": 1,
+                        "format": [
+                            "duration",
+                            "date"
+                        ]
+                    },
+                    "x-ratelimit-reset": {
+                        "scale": 1000,
+                        "format": [
+                            "epoch"
+                        ]
+                    }
                 }
+            }
         },
         "models": {
             "nvidia/nemotron-3-ultra-550b-a55b:free": {
                 "reasoning": true
             },
-            "openai/gpt-oss-20b:free":{
+            "openai/gpt-oss-20b:free": {
                 "reasoning": true
             }
         }
@@ -32,13 +43,29 @@
                 "Authorization": "Bearer {api_key}"
             },
             "api_key_env_var": "GROQ_API_KEY",
-            "reasoning_name": "reasoning",
+            "reasoning_name": "include_reasoning",
             "retry_after": {
-                "names": [
-                    "retry-after",
-                    "x-ratelimit-reset-requests",
-                    "x-ratelimit-reset-tokens"
-                ]
+                "names": {
+                    "retry-after": {
+                        "scale": 1,
+                        "format": [
+                            "duration",
+                            "date"
+                        ]
+                    },
+                    "x-ratelimit-reset-requests": {
+                        "scale": 1,
+                        "format": [
+                            "duration"
+                        ]
+                    },
+                    "x-ratelimit-reset-tokens": {
+                        "scale": 1,
+                        "format": [
+                            "duration"
+                        ]
+                    }
+                }
             }
         },
         "models": {

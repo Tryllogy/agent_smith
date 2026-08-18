@@ -9,7 +9,16 @@ from core.agent.loop import Loop
 from core.agent.prompt import Prompt
 from core.api_key import APIKey
 from core.llm.client import LLMClient
-from core.models import MBPPTaskInput, SandboxConfig, SolutionOutput
+from core.llm.provider import Provider
+from core.validators import (
+    ProviderConfig,
+    ModelConfig
+)
+from core.models import (
+    MBPPTaskInput,
+    SandboxConfig,
+    SolutionOutput
+)
 
 load_dotenv()
 
@@ -41,6 +50,8 @@ class AgentMBPP:
             model_name=model_name,
             api_keys=get_api_keys(self.provider_config),
             stop_sequence=constants.LLM_STOP_SEQUENCE,
+            provider_config=Provider.from_config(self.provider_config),
+            model_config=self.model_config,
         )
 
         self.loop = Loop(
@@ -83,7 +94,7 @@ class AgentMBPP:
 
 def get_provider_and_model_config(
     model_name: str, provider_url: str
-) -> tuple[dict, dict]:
+) -> tuple[ProviderConfig, ModelConfig]:
     try:
         with open(constants.MODELS_CONFIG_FILE) as f:
             models_config = json.load(f)
@@ -91,6 +102,8 @@ def get_provider_and_model_config(
                 models_config, provider_url
             )
             provider_config = models_config.get(provider_name)
+            provider = ProviderConfig.model_validate(
+                provider_config.get("provider", {}))
             model_config = provider_config.get("models", {}).get(
                 model_name, {}
             )
@@ -99,8 +112,8 @@ def get_provider_and_model_config(
                     f"Model '{model_name}' not found in"
                     f" the configuration for provider '{provider_url}'."
                 )
-            provider_config = provider_config.get("provider")
-            return provider_config, model_config
+            model = ModelConfig.model_validate(model_config)
+            return provider, model
     except FileNotFoundError:
         raise FileNotFoundError(
             f"The models configuration file '{constants.MODELS_CONFIG_FILE}'"
@@ -112,9 +125,7 @@ def get_provider_and_model_config(
             " is not a valid JSON file."
         )
     except (ValueError, KeyError) as e:
-        raise ValueError(
-            f"Error in models configuration: {e}"
-        )
+        raise ValueError(f"Error in models configuration: {e}")
     except Exception as e:
         raise RuntimeError(
             "An unexpected error occurred while"
