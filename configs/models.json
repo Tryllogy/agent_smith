@@ -8,6 +8,7 @@
             },
             "api_key_env_var": "OPENROUTER_API_KEY",
             "reasoning_name": "reasoning",
+            "message": "choices",
             "retry_after": {
                 "names": {
                     "retry-after": {
@@ -44,6 +45,7 @@
             },
             "api_key_env_var": "GROQ_API_KEY",
             "reasoning_name": "include_reasoning",
+            "message": "choices", 
             "retry_after": {
                 "names": {
                     "retry-after": {

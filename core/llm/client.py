@@ -20,7 +20,7 @@ class LLMClient:
         url: str,
         endpoint: str,
         model_name: str,
-        provider_config: Provider,
+        provider: Provider,
         model_config: ModelConfig,
         api_keys: list[APIKey],
         stop_sequence: list[str] | None = None,
@@ -37,7 +37,7 @@ class LLMClient:
         self.api_keys: list[APIKey] = api_keys
         self.stop_sequence = stop_sequence
         self.index_api_key: int = 0
-        self.provider_config = provider_config
+        self.provider = provider
         self.model_config = model_config
 
     def get_reponses(
@@ -51,8 +51,7 @@ class LLMClient:
             request: httpx.Response = httpx.post(
                 url=self.url,
                 headers={
-                    "Authorization":
-                    f"Bearer {self.api_keys[self.index_api_key].get_key()}"
+                    "Authorization": f"Bearer {self.api_keys[self.index_api_key].get_key()}"
                 },
                 json={
                     "model": self.model_name,
@@ -92,9 +91,7 @@ class LLMClient:
             raise errors.TransientLLMResponseError(
                 "The request to the LLM provider timed out.",
             )
-        request_time_ms: float = round(
-            (time.time() - start_time) * 1000, 2
-        )
+        request_time_ms: float = round((time.time() - start_time) * 1000, 2)
         request = thread_result.get("request")
         return request, request_time_ms
 
@@ -127,43 +124,12 @@ class LLMClient:
                     + " 'choices' field.",
                     status_code=request.status_code,
                 )
-        except json.JSONDecodeError:
-            raise errors.TransientLLMResponseError(
-                "The LLM response is not a valid JSON.",
-                status_code=request.status_code,
+        except Exception as e:
+            error: Exception | None = self.check_error(
+                error=e, timeout_max=timeout_max
             )
-        except httpx.TimeoutException:
-            raise errors.TransientLLMResponseError(
-                "The request to the LLM provider timed out.",
-            )
-        except httpx.RequestError as e:
-            raise errors.TransientLLMResponseError(
-                "An error occurred while making the request to"
-                f" the LLM provider: {e}",
-                status_code=None,
-            )
-        except httpx.HTTPStatusError as e:
-            retry_after: float | str | None = None
-            if e.response.headers.get("Retry-After"):
-                retry_after = e.response.headers.get("Retry-After")
-            elif e.response.headers.get("x-ratelimit-reset"):
-                retry_after = e.response.headers.get("x-ratelimit-reset")
-                if retry_after.isdigit():
-                    retry_after = (int(retry_after) / 1000) - time.time()
-            try:
-                retry_after = float(retry_after) if retry_after else None
-            except ValueError:
-                retry_after = None
-            self.check_status_error(
-                status_code=e.response.status_code,
-                retry_after=retry_after,
-                error=e,
-                timeout_max=timeout_max,
-            )
-        except KeyboardInterrupt:
-            raise KeyboardInterrupt(
-                "The operation was interrupted by the user."
-            )
+            if error:
+                raise error
         message: dict = data.get("choices")[0].get("message")
         if message is None:
             raise errors.PermanentLLMResponseError(
@@ -204,6 +170,40 @@ class LLMClient:
                 + f" schema: {e}",
                 status_code=request.status_code,
             )
+
+    def check_error(
+        self,
+        error: Exception,
+        timeout_max: float,
+    ) -> Exception | None:
+        match error:
+            case json.JSONDecodeError():
+                raise errors.TransientLLMResponseError(
+                    "The LLM response is not a valid JSON.",
+                    status_code=None,
+                )
+            case httpx.TimeoutException():
+                raise errors.TransientLLMResponseError(
+                    "The request to the LLM provider timed out.",
+                )
+            case httpx.RequestError():
+                raise errors.TransientLLMResponseError(
+                    "An error occurred while making the request to"
+                    f" the LLM provider: {error}",
+                    status_code=None,
+                )
+            case httpx.HTTPStatusError():
+                retry_after: float | None = self.provider.get_retry_after(
+                    error.response.headers
+                )
+                self.check_status_error(
+                    status_code=error.response.status_code,
+                    retry_after=retry_after,
+                    error=error,
+                    timeout_max=timeout_max,
+                )
+            case _:
+                return error
 
     def check_status_error(
         self,

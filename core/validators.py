@@ -1,5 +1,6 @@
-from pydantic import BaseModel, ConfigDict, RootModel
 from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, RootModel
 
 # ===== LLMResponse ======
 
@@ -17,6 +18,7 @@ class LLMResponse(BaseModel):
 
 
 # ===== ProviderConfig ======
+
 
 class NameRetryAfterEnum(str, Enum):
     EPOCH = "epoch"
@@ -45,6 +47,7 @@ class ProviderConfig(BaseModel):
     header: dict
     api_key_env_var: str
     reasoning_name: str
+    message: str
     retry_after: RetryAfterConfig
 
 

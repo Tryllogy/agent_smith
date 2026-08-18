@@ -10,15 +10,8 @@ from core.agent.prompt import Prompt
 from core.api_key import APIKey
 from core.llm.client import LLMClient
 from core.llm.provider import Provider
-from core.validators import (
-    ProviderConfig,
-    ModelConfig
-)
-from core.models import (
-    MBPPTaskInput,
-    SandboxConfig,
-    SolutionOutput
-)
+from core.models import MBPPTaskInput, SandboxConfig, SolutionOutput
+from core.validators import ModelConfig, ProviderConfig
 
 load_dotenv()
 
@@ -50,7 +43,7 @@ class AgentMBPP:
             model_name=model_name,
             api_keys=get_api_keys(self.provider_config),
             stop_sequence=constants.LLM_STOP_SEQUENCE,
-            provider_config=Provider.from_config(self.provider_config),
+            provider=Provider(self.provider_config),
             model_config=self.model_config,
         )
 
@@ -103,7 +96,8 @@ def get_provider_and_model_config(
             )
             provider_config = models_config.get(provider_name)
             provider = ProviderConfig.model_validate(
-                provider_config.get("provider", {}))
+                provider_config.get("provider", {})
+            )
             model_config = provider_config.get("models", {}).get(
                 model_name, {}
             )
@@ -151,14 +145,8 @@ def find_provider_by_url(models_config: dict, url: str) -> str:
     )
 
 
-def get_api_keys(provider_config: dict) -> list[APIKey]:
-    if provider_config.get("api_key_env_var") is None:
-        raise KeyError(
-            "Error in models configuration:"
-            " The 'api_key_env_var' key is missing in"
-            " the provider configuration."
-        )
-    key_name: str = provider_config.get("api_key_env_var")
+def get_api_keys(provider_config: ProviderConfig) -> list[APIKey]:
+    key_name: str = provider_config.api_key_env_var
     api_keys_env = os.getenv(key_name)
     if not api_keys_env:
         raise ValueError(
