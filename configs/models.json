@@ -7,8 +7,16 @@
                 "Authorization": "Bearer {api_key}"
             },
             "api_key_env_var": "OPENROUTER_API_KEY",
-            "reasoning_name": "reasoning",
-            "message": "choices",
+            "choice": "choices",
+            "reasoning": "reasoning",
+            "usage": "usage",
+            "model": "model",
+            "error": "error",
+            "content": "content",
+            "input_tokens": "prompt_tokens",
+            "output_tokens": "completion_tokens",
+            "finish_reason": "finish_reason",
+            "message": "message",
             "retry_after": {
                 "names": {
                     "retry-after": {
@@ -44,8 +52,16 @@
                 "Authorization": "Bearer {api_key}"
             },
             "api_key_env_var": "GROQ_API_KEY",
-            "reasoning_name": "include_reasoning",
-            "message": "choices", 
+            "choice": "choices",
+            "reasoning": "reasoning",
+            "usage": "usage",
+            "model": "model",
+            "error": "error",
+            "content": "content",
+            "input_tokens": "prompt_tokens",
+            "output_tokens": "completion_tokens",
+            "finish_reason": "finish_reason",
+            "message": "message",
             "retry_after": {
                 "names": {
                     "retry-after": {

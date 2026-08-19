@@ -46,7 +46,15 @@ class ProviderConfig(BaseModel):
     endpoint: str
     header: dict
     api_key_env_var: str
-    reasoning_name: str
+    reasoning: str
+    choice: str
+    usage: str
+    model: str
+    error: str
+    content: str
+    input_tokens: str
+    output_tokens: str
+    finish_reason: str
     message: str
     retry_after: RetryAfterConfig
 

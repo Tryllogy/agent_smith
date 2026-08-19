@@ -51,7 +51,8 @@ class LLMClient:
             request: httpx.Response = httpx.post(
                 url=self.url,
                 headers={
-                    "Authorization": f"Bearer {self.api_keys[self.index_api_key].get_key()}"
+                    "Authorization":
+                    f"Bearer {self.api_keys[self.index_api_key].get_key()}"
                 },
                 json={
                     "model": self.model_name,
@@ -113,16 +114,12 @@ class LLMClient:
                 max_tokens=max_tokens,
             )
             data: dict = request.json()
-            if data.get("error"):
+            error_provider: dict = self.provider.get_error(data)
+            if error_provider:
                 self.check_status_error(
-                    status_code=data.get("error").get("code", "Unknown error"),
+                    status_code=error_provider.get(
+                        "code", "Unknown error"),
                     timeout_max=timeout_max,
-                )
-            if not data.get("choices"):
-                raise errors.PermanentLLMResponseError(
-                    "The LLM response does not contain the expected"
-                    + " 'choices' field.",
-                    status_code=request.status_code,
                 )
         except Exception as e:
             error: Exception | None = self.check_error(
@@ -130,38 +127,38 @@ class LLMClient:
             )
             if error:
                 raise error
-        message: dict = data.get("choices")[0].get("message")
+        message: dict = self.provider.get_message(data)
         if message is None:
             raise errors.PermanentLLMResponseError(
                 "The LLM response does not contain the expected"
                 + " 'message' field.",
                 status_code=request.status_code,
             )
+        content: str = self.provider.get_content(data)
         if (
-            message.get("content") is None
-            or message.get("content").strip() == ""
+            content is None
+            or content.strip() == ""
         ):
             raise errors.TransientLLMResponseError(
                 "The LLM response does not contain the expected"
                 + " 'content' field.",
                 status_code=request.status_code,
             )
-        if not data.get("usage"):
+        if self.provider.get_usage(data) is None:
             raise errors.PermanentLLMResponseError(
                 "The LLM response does not contain the expected"
                 + " 'usage' field.",
                 status_code=request.status_code,
             )
         try:
+            model: str | None = self.provider.get_model(data)
             return LLMResponse(
-                content=message.get("content", ""),
-                reasoning=message.get("reasoning"),
-                input_tokens=data.get("usage", {}).get("prompt_tokens", 0),
-                output_tokens=data.get("usage", {}).get(
-                    "completion_tokens", 0
-                ),
-                model_name=data.get("model", self.model_name),
-                finish_reason=data.get("choices")[0].get("finish_reason", ""),
+                content=content,
+                reasoning=self.provider.get_reasoning(data),
+                input_tokens=self.provider.get_input_tokens(data),
+                output_tokens=self.provider.get_output_tokens(data),
+                model_name=model if model != "" else self.model_name,
+                finish_reason=self.provider.get_finish_reason(data),
                 request_time_ms=request_time_ms,
             )
         except ValidationError as e:
