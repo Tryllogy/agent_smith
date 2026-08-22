@@ -115,12 +115,23 @@ class LLMClient:
                 max_tokens=max_tokens,
             )
             data: dict = request.json()
+            if not isinstance(data, dict):
+                raise errors.TransientLLMResponseError(
+                    "The LLM response is not a valid JSON.",
+                    status_code=request.status_code,
+                )
             error_provider: dict = self.provider.get_error(data)
             if error_provider:
                 self.check_status_error(
                     status_code=error_provider.get(
                         "code", request.status_code),
                     timeout_max=timeout_max,
+                    retry_after=self.provider.get_retry_after(
+                        request.headers
+                    ),
+                    error=Exception(
+                        f"{error_provider.get('message')}"
+                    ),
                 )
         except Exception as e:
             error: Exception | None = self.check_error(
@@ -194,10 +205,19 @@ class LLMClient:
                 retry_after: float | None = self.provider.get_retry_after(
                     error.response.headers
                 )
+                try:
+                    reponse_error: dict = error.response.json()
+                    if not isinstance(reponse_error, dict):
+                        reponse_error = {}
+                    provider_error: dict = self.provider.get_error(
+                        reponse_error
+                    )
+                except json.JSONDecodeError:
+                    provider_error = {}
                 self.check_status_error(
                     status_code=error.response.status_code,
                     retry_after=retry_after,
-                    error=error,
+                    error=provider_error.get("message", error),
                     timeout_max=timeout_max,
                 )
             case _:
@@ -207,7 +227,7 @@ class LLMClient:
         self,
         status_code: int,
         retry_after: float | None = None,
-        error: Exception | None = None,
+        error: Exception | str | None = None,
         timeout_max: float = 0.0,
     ) -> None:
         if retry_after is not None and retry_after < 0:

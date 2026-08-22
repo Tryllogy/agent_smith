@@ -170,8 +170,11 @@ class Loop:
                 time.sleep(self.retry_after)
                 continue
             except errors.PermanentLLMResponseError as e:
+                self.retries += 1
+                self.iteration += 1
+                self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
-                    error=f"Permanent LLM error: {str(e)}"
+                    error=f"{str(e)}"
                 )
             if (
                 self.finish_reason == "length"

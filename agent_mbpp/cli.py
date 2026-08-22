@@ -98,15 +98,13 @@ def get_provider_and_model_config(
             provider = ProviderConfig.model_validate(
                 provider_config.get("provider", {})
             )
-            model_config = provider_config.get("models", {}).get(
+            model_config: dict = provider_config.get("models", {}).get(
                 model_name, {}
             )
-            if not model_config:
-                raise ValueError(
-                    f"Model '{model_name}' not found in"
-                    f" the configuration for provider '{provider_url}'."
-                )
-            model = ModelConfig.model_validate(model_config)
+            if model_config == {} or model_config is None:
+                model = ModelConfig.model_validate({"reasoning": False})
+            else:
+                model = ModelConfig.model_validate(model_config)
             return provider, model
     except FileNotFoundError:
         raise FileNotFoundError(
