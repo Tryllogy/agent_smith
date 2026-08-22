@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 MARGIN_EXECUTION_TIME = 5
 LLM_TIMEOUT_SECONDS = 30
-LLM_ENDPOINT = "/chat/completions"
 LLM_STOP_SEQUENCE = [
     "<end_code>",
 ]

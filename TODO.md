@@ -13,7 +13,8 @@
 
 ## Etat actuel
 
-*(maj : 2026-08-16 — MBPP end-to-end, 9/10 mesure sur taches reelles)*
+*(maj : 2026-08-22 — couche provider generique + `configs/models.json` en
+service ; le defaut « aucun recul entre deux tentatives » est corrige)*
 
 - [x] `en.subject.pdf` + `RESUME.md` → RESUME complete (section MCP ajoutee :
       definition, "les outils MCP sont les mains de l'agent", qui ecrit quoi)
@@ -27,17 +28,23 @@
 - [~] `.gitignore` → `.env`, `__pycache__`, `cache`, `moulinette`, `tests` OK ;
       il manque toujours `evaluations/`
 
-### Qui a du code, au 2026-08-16
+### Qui a du code, au 2026-08-22
 
 | Ecrit | Encore vide |
 |---|---|
 | `core/models.py`, `core/constants.py`, `core/errors.py` | `core/llm/keyring.py` |
-| `core/api_key.py` (nouveau) | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
-| `core/llm/client.py`, `core/llm/response.py` | tout `sandbox/mcp_client/` |
+| `core/validators.py` (nouveau), `core/api_key.py` | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
+| `core/llm/client.py`, `core/llm/provider.py` (nouveau) | tout `sandbox/mcp_client/` |
 | `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `mcp_tools/`, les 2 `mcp_tools_*.py` racine |
 | `agent_mbpp/` : `cli.py`, `__main__.py` | tout `agent_swebench/` (4 fichiers) |
-| `sandbox/executor.py` | `configs/models.json`, `sandbox_template.json` |
+| `sandbox/executor.py`, `configs/models.json` (nouveau) | `sandbox_template.json` |
 | `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | `BENCHMARK_REPORT.md`, `README.md` |
+
+**`core/llm/response.py` supprime** : `LLMResponse` a demenage dans
+`core/validators.py`, aux cotes de `ProviderConfig` et `ModelConfig`.
+→ Il y a desormais **deux** fichiers de models Pydantic, `core/models.py`
+(contrats du sujet) et `core/validators.py` (configuration interne). La
+frontiere se defend, mais il faut savoir la dire en soutenance — ou fusionner.
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent ; le sandbox execute du code et remonte `final_answer`, ce qui a
@@ -52,9 +59,11 @@ separe aurait duplique l'etat sans proprietaire clair.
 ```
 racine         . mcp_tools_mbpp.py  . mcp_tools_swebench.py
                . sandbox_template.json  . BENCHMARK_REPORT.md  . README.md
-core/          + models.py  + errors.py  + constants.py  + api_key.py
+core/          + models.py  + validators.py  + errors.py  + constants.py
+               + api_key.py
   agent/       + loop.py  + extraction.py  + prompt.py
-  llm/         + client.py  + response.py  . keyring.py   (usage.py supprime)
+  llm/         + client.py  + provider.py  . keyring.py
+               (usage.py et response.py supprimes)
 sandbox/       . cli.py  + executor.py  . manual.py
   security/    + imports.py  + filesystem.py  + builtins.py  + network.py
                + ast_guard.py  . limits.py
@@ -62,8 +71,8 @@ sandbox/       . cli.py  + executor.py  . manual.py
 mcp_tools/     . tools_fs.py  . tools_search.py  . tools_exec.py
 agent_mbpp/    + __main__.py  + cli.py
 agent_swebench/. __main__.py  . cli.py  . docker.py
-configs/       . models.json
-tests/         + banc d'essai local, gitignore, hors rendu (158 tests)
+configs/       + models.json
+tests/         + banc d'essai local, gitignore, hors rendu (183 tests)
 ```
 
 ### Flat layout coherent (3 corrections faites)
@@ -228,7 +237,8 @@ Tant que ce n'est pas fige, chacun code contre du vide.
   - la config part en `model_copy()` : le budget du tour n'ecrase pas le
     reglage injecte
 - [x] Chargement `.env` (`OPENROUTER_API_KEY`, liste separee par virgules)
-- [ ] Chargement de la config JSON des modeles (cf. P2.5 bis)
+- [x] Chargement de la config JSON des modeles → `configs/models.json` lu et
+      valide dans `agent_mbpp/cli.py` (cf. P2.5 bis)
 
 ---
 
@@ -362,8 +372,9 @@ le rapport de benchmark.
       observation apres chaque execution
 - [x] Gestion de la taille du contexte → `max_tokens` de chaque requete
       derive du budget restant, arret propre a l'epuisement
-- [x] Aucun crash possible : 158 tests, dont 16 sur l'etancheite de la
-      hierarchie d'exceptions
+- [x] Aucun crash possible : 183 tests (78 client, 52 boucle, 20 extraction,
+      19 provider, 10 samples, 4 stop sequences), dont 16 sur l'etancheite de
+      la hierarchie d'exceptions
 
 **Corrige le 2026-08-16 — message d'observation.** Le rappel "aucun
 `final_answer` capture" n'existait que dans la branche "sortie vide" : un code
@@ -423,13 +434,24 @@ Raisons, a savoir redire en soutenance :
 - [x] Abstraction provider → `LLMClient` (`core/llm/client.py`) est le **seul**
       module qui importe `httpx`. Injecte dans `Loop`, donc testable sans
       reseau ni `monkeypatch` de `httpx`
+- [x] **`core/llm/provider.py` (2026-08-18)** — le client ne connait plus la
+      *forme* des reponses. Chaque champ (`choices`, `message`, `content`,
+      `usage`, `reasoning`, `error`, `finish_reason`, en-tetes de delai) est
+      designe par un nom lu dans `configs/models.json`. Brancher un second
+      fournisseur devient une entree JSON, pas une branche `if`. Deux
+      fournisseurs declares : `openrouter` et `groq`
 - [x] Multi-tokens par provider + **rotation** → 429 fait tourner sans
       condamner, 402 marque la cle epuisee et saute les mortes, vivier vide
       remonte en `Permanent`. Verifie sur 5 situations limites
-- [ ] Fallback entre providers (un seul provider en service)
+- [~] Fallback entre providers → la **configuration** est multi-provider, mais
+      le choix est fige au demarrage par `--provider-url`. Aucun basculement
+      automatique en cours de tache
 - [x] `stop_sequences` → `constants.LLM_STOP_SEQUENCE` envoye dans le payload
-- [~] Retry comptabilise dans `StepMetrics.retries` ; le **backoff** se limite
-      a `sleep(retry_after)` quand l'en-tete est present, sinon 0
+- [x] Retry comptabilise dans `StepMetrics.retries` ; le **delai** vient
+      desormais de `Provider.get_retry_after()`, qui sait lire trois formes
+      d'en-tete — duree (`Retry-After`), date HTTP, et instant epoch
+      (`X-RateLimit-Reset`, en ms chez OpenRouter). Voir « recul entre deux
+      tentatives » ci-dessous
 - [x] Cles API depuis env vars uniquement → `load_dotenv()` sans test de
       retour (le fichier est un confort local, pas une obligation), la seule
       question posee est `os.getenv`. L'import ne leve plus jamais
@@ -465,6 +487,27 @@ qui empeche l'interpreteur de l'attendre a la sortie (mesure : 8,65 s contre
 `try`**, sinon les gestionnaires `httpx.*` ne voient plus rien passer.
 Le `timeout=` de `httpx` est conserve **en plus** : il coupe les serveurs
 muets, l'echeance borne les serveurs lents.
+
+**Recul entre deux tentatives (2026-08-22) — le defaut des 2069 requetes est
+corrige.** Trois pieces, dans trois fichiers differents :
+
+1. `Provider.get_retry_after()` lit `X-RateLimit-Reset` — un **instant** epoch
+   en millisecondes, pas une duree — et le convertit en delai. Le format de
+   chaque en-tete (`epoch` / `duration` / `date`) et son echelle sont declares
+   dans `configs/models.json`, donc lisibles pour un fournisseur qui n'a pas
+   les memes conventions.
+2. `APIKey` porte un `next_retry_time` : une clef sait quand son quota revient,
+   ce n'est plus une information perdue entre deux appels.
+3. `LLMClient.get_next_api_key()` refuse toute clef dont le delai depasse le
+   budget de la tache, la condamne, et recommence. Vivier entierement epuise →
+   `Permanent`, la tache s'arrete au lieu de bruler son budget en reessais.
+
+Le piege etait dans l'ordre des tests : tant que le delai n'etait verifie que
+sur le candidat **immediat** de la rotation, une clef atteinte en sautant une
+morte passait sans controle. Avec 4 clefs, deux d'entre elles n'etaient jamais
+examinees et la rafale ne s'arretait pas. Le test
+`test_an_entirely_exhausted_pool_stops_asking` etait `xfail` a ce titre ; il
+passe, la marque est retiree.
 
 #### Modeles gratuits OpenRouter (releve du 2026-08-16)
 
@@ -590,35 +633,53 @@ l'agent, et transcrire ce raisonnement dans le prompt.
       (iterations, tokens entree, tokens sortie, temps)
 - [x] Remplissage de **tous** les champs de `StepMetrics`
 
-### P2.5 bis — `configs/models.json` (exige au rendu, VIDE)
+### P2.5 bis — `configs/models.json` (ECRIT, 2026-08-18)
 
 Sujet chap. VIII p.38 : *"Configuration files for sandbox and models"*. Le
 sujet **n'impose aucun schema** pour le versant modeles — a nous de le definir
-et de le defendre. Fichier de 0 octet, lu par personne.
+et de le defendre.
 
-Forme decidee le 2026-08-16 : `--model-name` reste la CLI imposee et devient
-la **cle de recherche** dans le JSON. Trouve → on prend sa config ; absent →
-profil par defaut conservateur (aucun parametre exotique : un modele inconnu
-est un modele dont on ignore les capacites).
+Schema retenu : deux niveaux par fournisseur. `provider` decrit **comment
+parler** au fournisseur (URL, endpoint, en-tetes, variable d'environnement de
+la cle, et le nom de chaque champ de reponse) ; `models` decrit **ce que sait
+faire** chaque modele. Le fournisseur est retrouve par son URL, le modele par
+`--model-name`.
 
-- [ ] Y mettre : URL/endpoint du fournisseur, reglages propres au modele
-      (ex. `reasoning_effort`, que `gpt-oss` comprend et Nemotron non)
-- [ ] **Ne PAS y mettre** les limites du benchmark (1500 tokens, 10 iterations,
+- [x] Y mettre : URL/endpoint du fournisseur, en-tetes, `api_key_env_var`, la
+      table `retry_after.names` (nom d'en-tete → `scale` + `format`), et les
+      reglages propres au modele
+- [x] **Ne PAS y mettre** les limites du benchmark (1500 tokens, 10 iterations,
       120 s) : ce sont des proprietes de MBPP, pas du modele. Elles vivent dans
-      `constants.MBPP`. Deux sources de verite = divergence garantie
-- [ ] **Ne PAS y mettre** les mesures (ratio de raisonnement, latences) :
-      ce sont des observations, leur place est dans `BENCHMARK_REPORT.md`
-- [ ] Regle de precedence a fixer : l'argument CLI l'emporte sur le fichier.
-      Piege : avec des defauts `argparse` en dur, "passe par l'utilisateur" et
-      "valeur par defaut" sont indistinguables → defauts a `None`
-- [ ] Cle = identifiant exact OpenRouter, prefixe et suffixe `:free` compris
-- [ ] Validation par un model Pydantic, par symetrie avec `SandboxConfig`
-- [ ] Lecture dans `cli.py` (meme frontiere que `get_api_keys()`), **jamais**
-      dans `LLMClient` : le client recoit une config, il ne va pas la chercher
-- [ ] Trois echecs distincts, trois reponses : modele inconnu → repli
-      silencieux ; fichier absent ou JSON invalide → bruyant, au demarrage
-- [ ] Aucune cle dedans. Le JSON dit *quels* modeles et *comment* les appeler,
-      le `.env` fournit *avec quoi*
+      `constants.MBPP`. Tenu
+- [x] **Ne PAS y mettre** les mesures (ratio de raisonnement, latences) :
+      ce sont des observations, leur place est dans `BENCHMARK_REPORT.md`. Tenu
+- [x] Cle = identifiant exact du fournisseur, prefixe et suffixe `:free` compris
+- [x] Validation par des models Pydantic (`ProviderConfig`, `ModelConfig`,
+      `RootModelConfig` dans `core/validators.py`), par symetrie avec
+      `SandboxConfig`
+- [x] Lecture dans `cli.py` (`get_provider_and_model_config`, meme frontiere
+      que `get_api_keys()`), **jamais** dans `LLMClient` : le client recoit une
+      config, il ne va pas la chercher. Tenu
+- [x] Aucune cle dedans. Le JSON dit *quels* modeles et *comment* les appeler,
+      le `.env` fournit *avec quoi* — c'est `api_key_env_var` qui fait le lien
+
+**Trois points restes ouverts, a trancher :**
+
+- [ ] **Le repli sur modele inconnu n'a pas ete fait** : `cli.py:104` leve un
+      `ValueError` quand `--model-name` n'est pas dans le JSON. La decision du
+      2026-08-16 disait « absent → profil par defaut conservateur ». Il faut
+      soit implementer le repli, soit assumer et reecrire la decision — un
+      identifiant OpenRouter qui disparait du catalogue rend l'agent
+      inutilisable la veille de l'eval
+- [ ] **Le fournisseur est retrouve par egalite stricte d'URL**
+      (`find_provider_by_url`) : un `/` final de trop dans `--provider-url` et
+      rien ne matche. Normaliser, ou chercher par nom
+- [ ] **`ModelConfig` n'a qu'un champ `reasoning`, et il n'est lu nulle part**
+      — `LLMClient` le stocke (`client.py:41`) sans jamais s'en servir. Soit
+      il pilote quelque chose (`reasoning_effort`, budget de sortie), soit il
+      degage : un champ de config mort est indefendable en soutenance
+- [ ] Regle de precedence CLI > fichier : sans objet tant qu'aucun reglage
+      n'est expose en double. A rouvrir des qu'un l'est
 
 ### P2.6 — `BENCHMARK_REPORT.md`
 
@@ -701,14 +762,17 @@ les **memes deux echecs** (59 et 413). Ce que le rejeu a change :
   openrouter_free_tier_daily`, `X-RateLimit-Limit: 50`, `Remaining: 0`, les
   4 clefs epuisees. Ce n'est pas un echec de l'agent : **8/8 hors quota.**
 
-**Defaut mis au jour, non corrige : aucun recul entre deux tentatives.**
-La 413 a emis **2069 requetes en 115 s** (18/s), la 59 en a emis 188. Cause :
-OpenRouter renvoie son 429 en 0,07 s et **sans en-tete `Retry-After`** ; la
-boucle fait donc `time.sleep(0)` et repart aussitot. Le seul signal utilisable
-est ailleurs — `X-RateLimit-Reset` (epoch **en millisecondes**), present a la
-fois en en-tete HTTP et dans `error.metadata.headers`. Deux manques distincts :
-la reprise n'a pas de recul minimal, et la seule source de delai lue est un
-en-tete que ce fournisseur n'envoie pas.
+**Defaut mis au jour le 2026-08-16, corrige le 2026-08-22 : aucun recul entre
+deux tentatives.** La 413 a emis **2069 requetes en 115 s** (18/s), la 59 en a
+emis 188. Cause : OpenRouter renvoie son 429 en 0,07 s et **sans en-tete
+`Retry-After`** ; la boucle faisait donc `time.sleep(0)` et repartait aussitot.
+Le seul signal utilisable etait ailleurs — `X-RateLimit-Reset` (epoch **en
+millisecondes**). Les deux manques sont traites : `Provider` lit cet en-tete,
+et une clef dont le reset depasse le budget de la tache est condamnee au lieu
+d'etre reservie (detail en P2.3).
+
+→ **A mesurer** : rejouer 59 et 413 en quota epuise pour verifier le nombre de
+requetes emises. Le correctif est teste unitairement, pas encore en campagne.
 
 - [x] Rejouer les 10 taches **apres** l'echeance et le message d'observation,
       pour mesurer l'effet des deux correctifs a jeu egal → `cache/run4/`
@@ -738,15 +802,16 @@ en-tete que ce fournisseur n'envoie pas.
 ## Ordre de travail recommande
 
 1. [x] **Phase 0 ensemble** — setup, structure, flat layout, models **faits**.
-   `.env` charge dans `agent_mbpp/cli.py` (plus dans `loop.py`). Reste le
-   chargement de la config JSON des modeles (cf. P2.5 bis).
+   `.env` charge dans `agent_mbpp/cli.py` (plus dans `loop.py`), config JSON
+   des modeles lue au meme endroit (cf. P2.5 bis).
 2. [x] **En parallele** — sandbox qui execute du code + `final_answer`
    (ndi-tull) et boucle agent avec provider injecte (tchemin) : les deux
    moities se parlent, l'interface `execute()` est stabilisee.
 3. [x] **Premier jalon : MBPP end-to-end.** Fait, et au-dela — 15 taches
    reelles mesurees avec les limites branchees, pas seulement sans contraintes.
-4. [~] Mesurer et optimiser le prompt → 3 correctifs issus des mesures
-   (observation, echeance, comptabilite). **Reste : rejouer a jeu egal.**
+4. [~] Mesurer et optimiser le prompt → 4 correctifs issus des mesures
+   (observation, echeance, comptabilite, recul entre tentatives). Rejeu a jeu
+   egal fait (`run4`). **Reste : une campagne apres la couche `Provider`.**
 5. [ ] Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.
 6. [ ] SWE-bench sur les 3 taches conseillees :
    `sympy__sympy-14711` / `sympy__sympy-13480` / `pydata__xarray-4629`
@@ -758,15 +823,23 @@ en-tete que ce fournisseur n'envoie pas.
 
 - [x] Rejouer les 10 taches a jeu egal → `cache/run4/`, 8/10, metriques
       valides sur les 10 (cf. P2.6)
-- [ ] **Recul entre deux tentatives** : 2069 requetes en 115 s sur la 413.
-      Prevoir un delai minimal quand `Retry-After` est absent, et lire
-      `X-RateLimit-Reset` (ms) — en-tete HTTP ou `error.metadata.headers`
-- [ ] `configs/models.json` — livrable exige, aujourd'hui vide (P2.5 bis)
-- [ ] Dette `ruff` : 9 `B904` (`raise ... from`), 1 `I001`, 1 `SIM102`
-- [ ] `agent_mbpp/cli.py:30` passe encore `tools=None` → le prompt affiche
+- [x] **Recul entre deux tentatives** : `X-RateLimit-Reset` lu, delai porte par
+      `APIKey`, clef hors budget condamnee, vivier mort → `Permanent` (P2.3)
+- [x] `configs/models.json` — livrable exige, ecrit (P2.5 bis)
+- [ ] **Repli sur modele inconnu** : aujourd'hui `--model-name` absent du JSON
+      = plantage au demarrage (P2.5 bis)
+- [ ] **`ModelConfig.reasoning` est mort** : stocke par `LLMClient`, lu par
+      personne. Le brancher ou le retirer (P2.5 bis)
+- [ ] **Campagne de controle** apres les correctifs provider + backoff : les
+      chiffres de `run4` datent d'avant la couche `Provider`
+- [ ] Dette `ruff` : 13 erreurs — 11 `B904` (`raise ... from`), 1 `SIM102`,
+      1 `SIM110`. Le `I001` est resorbe ; les `B904` ont augmente de 9 a 11
+- [ ] `agent_mbpp/cli.py:31` passe encore `tools=None` → le prompt affiche
       litteralement "None" au modele (attend le manual MCP de P1)
 - [ ] `core/llm/keyring.py` : vide et sans emploi depuis que `APIKey` porte
       l'etat du vivier → a supprimer ou a justifier
+- [ ] Deux fichiers de models Pydantic (`core/models.py` / `core/validators.py`)
+      → justifier la frontiere ou fusionner
 - [ ] `.gitignore` : ajouter `evaluations/`
 - [ ] `README.md` (usage reel de l'IA sur le projet, exige par le sujet)
 

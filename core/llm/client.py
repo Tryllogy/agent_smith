@@ -39,6 +39,7 @@ class LLMClient:
         self.index_api_key: int = 0
         self.provider = provider
         self.model_config = model_config
+        self.last_api_key_index: int = 0
 
     def get_reponses(
         self,
@@ -48,11 +49,11 @@ class LLMClient:
         max_tokens: int,
     ) -> None:
         try:
+            header = self.replace_header_api_key(self.provider.config.header)
             request: httpx.Response = httpx.post(
                 url=self.url,
                 headers={
-                    "Authorization":
-                    f"Bearer {self.api_keys[self.index_api_key].get_key()}"
+                    **header
                 },
                 json={
                     "model": self.model_name,
@@ -118,7 +119,7 @@ class LLMClient:
             if error_provider:
                 self.check_status_error(
                     status_code=error_provider.get(
-                        "code", "Unknown error"),
+                        "code", request.status_code),
                     timeout_max=timeout_max,
                 )
         except Exception as e:
@@ -213,14 +214,24 @@ class LLMClient:
             retry_after = 0.0
         if status_code in errors.ERRORS_TRANSIENT:
             if status_code == 429:
-                last_api_key = self.api_keys[self.index_api_key]
-                self.get_next_api_key(status_code=status_code)
-                if last_api_key != self.api_keys[self.index_api_key]:
+                self.last_api_key_index = self.index_api_key
+                api_key: str | None = self.get_next_api_key(
+                    timeout_max=timeout_max,
+                    status_code=status_code,
+                    retry_after=retry_after
+                    )
+                if self.last_api_key_index != self.index_api_key:
                     retry_after = None
+                elif api_key is None:
+                    raise errors.PermanentLLMResponseError(
+                        "The LLM provider has rate limited the requests"
+                        " and there are no more usable API keys.",
+                        status_code=status_code,
+                    )
             if retry_after is not None and retry_after > timeout_max:
                 raise errors.PermanentLLMResponseError(
                     "The LLM provider has rate limited the requests"
-                    + " and the retry time exceeds the bench timeout.",
+                    " and the retry time exceeds the bench timeout.",
                     status_code=status_code,
                 )
             raise errors.TransientLLMResponseError(
@@ -234,7 +245,10 @@ class LLMClient:
                 status_code=status_code,
             )
         elif status_code == 402:
-            if self.get_next_api_key(status_code=status_code) is None:
+            if self.get_next_api_key(
+                timeout_max=timeout_max,
+                status_code=status_code
+            ) is None:
                 raise errors.PermanentLLMResponseError(
                     "Payment required error from LLM provider. "
                     "No more API keys available.",
@@ -253,13 +267,16 @@ class LLMClient:
 
     def get_next_api_key(
         self,
+        timeout_max: float,
         status_code: int | None = None,
+        retry_after: float = 0.0,
     ) -> str | None:
         if (
             all(not key.get_usable() for key in self.api_keys)
             or not self.api_keys
         ):
             return None
+        self.api_keys[self.index_api_key].set_retry_time(retry_after)
         if status_code == 402:
             self.api_keys[self.index_api_key].set_usable(False)
         self.index_api_key = (self.index_api_key + 1) % len(self.api_keys)
@@ -268,4 +285,22 @@ class LLMClient:
             if self.index_api_key == 0:
                 if all(not key.get_usable() for key in self.api_keys):
                     return None
+        next_retry_time = self.api_keys[self.index_api_key].get_retry_time()
+        if next_retry_time > timeout_max:
+            self.api_keys[self.index_api_key].set_usable(False)
+            return self.get_next_api_key(
+                timeout_max=timeout_max,
+                status_code=status_code,
+                retry_after=retry_after,
+            )
         return self.api_keys[self.index_api_key]
+
+    def replace_header_api_key(self, headers: dict) -> dict:
+        header = headers.copy()
+        for key, value in header.items():
+            if "{api_key}" in value:
+                header[key] = value.replace(
+                    "{api_key}",
+                    self.api_keys[self.index_api_key].get_key()
+                )
+        return header

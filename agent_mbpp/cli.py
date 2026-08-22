@@ -39,7 +39,7 @@ class AgentMBPP:
 
         self.llm_client: LLMClient = LLMClient(
             url=provider_url,
-            endpoint=constants.LLM_ENDPOINT,
+            endpoint=self.provider_config.endpoint,
             model_name=model_name,
             api_keys=get_api_keys(self.provider_config),
             stop_sequence=constants.LLM_STOP_SEQUENCE,
