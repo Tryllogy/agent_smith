@@ -52,9 +52,7 @@ class LLMClient:
             header = self.replace_header_api_key(self.provider.config.header)
             request: httpx.Response = httpx.post(
                 url=self.url,
-                headers={
-                    **header
-                },
+                headers={**header},
                 json={
                     "model": self.model_name,
                     "messages": messages,
@@ -124,14 +122,11 @@ class LLMClient:
             if error_provider:
                 self.check_status_error(
                     status_code=error_provider.get(
-                        "code", request.status_code),
+                        "code", request.status_code
+                    ),
                     timeout_max=timeout_max,
-                    retry_after=self.provider.get_retry_after(
-                        request.headers
-                    ),
-                    error=Exception(
-                        f"{error_provider.get('message')}"
-                    ),
+                    retry_after=self.provider.get_retry_after(request.headers),
+                    error=Exception(f"{error_provider.get('message')}"),
                 )
         except Exception as e:
             error: Exception | None = self.check_error(
@@ -147,10 +142,7 @@ class LLMClient:
                 status_code=request.status_code,
             )
         content: str = self.provider.get_content(data)
-        if (
-            content is None
-            or content.strip() == ""
-        ):
+        if content is None or content.strip() == "":
             raise errors.TransientLLMResponseError(
                 "The LLM response does not contain the expected"
                 + " 'content' field.",
@@ -238,8 +230,8 @@ class LLMClient:
                 api_key: str | None = self.get_next_api_key(
                     timeout_max=timeout_max,
                     status_code=status_code,
-                    retry_after=retry_after
-                    )
+                    retry_after=retry_after,
+                )
                 if self.last_api_key_index != self.index_api_key:
                     retry_after = None
                 elif api_key is None:
@@ -265,10 +257,12 @@ class LLMClient:
                 status_code=status_code,
             )
         elif status_code == 402:
-            if self.get_next_api_key(
-                timeout_max=timeout_max,
-                status_code=status_code
-            ) is None:
+            if (
+                self.get_next_api_key(
+                    timeout_max=timeout_max, status_code=status_code
+                )
+                is None
+            ):
                 raise errors.PermanentLLMResponseError(
                     "Payment required error from LLM provider. "
                     "No more API keys available.",
@@ -320,7 +314,6 @@ class LLMClient:
         for key, value in header.items():
             if "{api_key}" in value:
                 header[key] = value.replace(
-                    "{api_key}",
-                    self.api_keys[self.index_api_key].get_key()
+                    "{api_key}", self.api_keys[self.index_api_key].get_key()
                 )
         return header

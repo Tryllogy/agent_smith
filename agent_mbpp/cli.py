@@ -28,6 +28,7 @@ class AgentMBPP:
         self.output_file: str = output_file
 
         prompt: Prompt = Prompt(
+            bench=constants.MBPP,
             task=self.task,
             tools=None,
             allowed_imports=SandboxConfig().authorized_imports,

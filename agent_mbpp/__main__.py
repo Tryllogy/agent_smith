@@ -12,14 +12,10 @@ def check_args(args):
 def main():
     parser = argparse.ArgumentParser(description="Run the MBPP agent.")
     parser.add_argument(
-        "--task-file",
-        required=True,
-        help="Path to the task file."
+        "--task-file", required=True, help="Path to the task file."
     )
     parser.add_argument(
-        "--output",
-        default="output.json",
-        help="Path to the output file."
+        "--output", default="output.json", help="Path to the output file."
     )
     parser.add_argument(
         "--model-name",

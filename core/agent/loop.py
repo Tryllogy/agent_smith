@@ -103,12 +103,20 @@ class Loop:
             self.success = True
             return True
         elif error is None and not is_final:
-            content: str = (
-                "The code has been"
-                " executed without any error or exception but did not"
-                " produce a final answer. No final_answer() captured."
-                " Provide a final_answer() in the next response."
-            )
+            if stdout.strip() == "":
+                content: str = (
+                    "The code has been executed without any error"
+                    " or exception but did not produce any output."
+                    " Make SURE to make AND print the asserts like"
+                    " assert cond, '...'."
+                )
+            else:
+                content: str = (
+                    "The code has been"
+                    " executed without any error or exception but did not"
+                    " produce a final answer. No final_answer() captured."
+                    " Provide a final_answer() in the next response."
+                )
             output: str = ""
             if self.sandbox_output.strip() != "":
                 output = (
@@ -147,11 +155,13 @@ class Loop:
                     - self.start_time
                     + constants.MARGIN_EXECUTION_TIME
                 ) > self.timeout_limit:
+                    self.step_metrics.append(self.make_step_metrics())
                     return self.make_solution_output(
                         error="Timeout limit exceeded"
                     )
                 max_tokens: int = self.max_tokens_output - self.usage_output
                 if max_tokens <= 0:
+                    self.step_metrics.append(self.make_step_metrics())
                     return self.make_solution_output(
                         error="Output token limit exceeded"
                     )
@@ -170,29 +180,22 @@ class Loop:
                 time.sleep(self.retry_after)
                 continue
             except errors.PermanentLLMResponseError as e:
-                self.retries += 1
-                self.iteration += 1
                 self.step_metrics.append(self.make_step_metrics())
-                return self.make_solution_output(
-                    error=f"{str(e)}"
-                )
+                return self.make_solution_output(error=f"{str(e)}")
             if (
                 self.finish_reason == "length"
                 or self.usage_output > self.max_tokens_output
             ):
-                self.iteration += 1
                 self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
                     error="LLM response exceeded the maximum token limit"
                 )
             if time.time() - self.start_time > self.timeout_limit:
-                self.iteration += 1
                 self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
                     error="Timeout limit exceeded"
                 )
             if self.usage_input > self.max_tokens_input:
-                self.iteration += 1
                 self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
                     error="Input token limit exceeded"
@@ -204,22 +207,23 @@ class Loop:
                 - constants.MARGIN_EXECUTION_TIME
             )
             if max_execution_time <= 0:
-                self.iteration += 1
                 self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
                     error="Timeout limit exceeded"
                 )
             if self.observation(max_execution_time=max_execution_time):
-                self.iteration += 1
                 self.step_metrics.append(self.make_step_metrics())
+                self.iteration += 1
                 return self.make_solution_output()
-            self.iteration += 1
             self.step_metrics.append(self.make_step_metrics())
+            self.iteration += 1
             self.retries = 0
         return self.make_solution_output(error="Iteration limit exceeded")
 
     def make_solution_output(self, error: str | None = None) -> SolutionOutput:
-        if self.name_bench == "mbpp":
+        if self.name_bench == constants.BenchName.MBPP.value:
+            self.task_id = str(self.task_id)
+        else:
             self.task_id = str(self.task_id)
 
         solution: dict = {
@@ -252,7 +256,7 @@ class Loop:
         llm_output += " " + self.thoughts[-1] if self.thoughts else ""
 
         step_metric: dict = {
-            "step": self.iteration,
+            "step": self.iteration + 1,
             "input_tokens": self.last_usage_input,
             "output_tokens": self.last_usage_output,
             "request_time_ms": self.request_time_ms,

@@ -46,9 +46,7 @@ class Provider:
                     retry_after_date = calendar.timegm(
                         retry_after_date.utctimetuple()
                     )
-                    return self.convert_from_epoch_to_delay(
-                        retry_after_date
-                    )
+                    return self.convert_from_epoch_to_delay(retry_after_date)
         return None
 
     def get_choice(self, data: dict) -> dict | None:
