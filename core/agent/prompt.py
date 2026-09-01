@@ -1,4 +1,9 @@
-from core.constants import Bench, BenchName
+from core.constants import (
+    MBPP_PROMPT_EXEMPLE,
+    SWE_PROMPT_EXEMPLE,
+    Bench,
+    BenchName,
+)
 
 
 class Prompt:
@@ -38,24 +43,21 @@ class Prompt:
     def make_prompt_swe(self, task: dict) -> list:
         instance_id: str = task.get("instance_id", "")
         problem_statement: str = task.get("problem_statement", "")
-        docker_image: str = task.get("docker_image", "")
-        eval_script: str = task.get("eval_script", "")
         hints_text: str = task.get("hints_text", "")
         repo: str = task.get("repo", "")
         self.user_prompt = (
             f"instance_id: {instance_id}\n"
             f"problem_statement: {problem_statement}\n"
-            f"docker_image: {docker_image}\n"
-            f"eval_script: {eval_script}\n"
             f"hints_text: {hints_text}\n"
             f"repo: {repo}"
         )
         final_answer_str: str = (
-            "final_answer(get_patch()) -> None:"
-            " This function is used"
-            " to return the final answer.\n"
             "get_patch() -> str:"
-            " get_path() return the git patch retrieved.\n"
+            " get_patch() returns the git patch retrieved.\n"
+            "final_answer(patch: str) -> None:"
+            " This function is used to return the final answer.\n"
+            "Call get_patch() first, check the patch is not empty,"
+            " then pass it to final_answer().\n"
         )
         self.prompt: list = [
             {
@@ -65,7 +67,45 @@ class Prompt:
                 "To solve the task, you must plan forward to proceed in a"
                 " series of steps, in a cycle of 'thought:', 'code:',"
                 " and 'observation:' sequences."
-            }
+                " You don't have access to the internet."
+                " At each step, in the 'thought:', you should"
+                " first explain your reasoning towards solving the task"
+                " and the tools that you want to use."
+                " If you have doubts about how work a tool, execute it"
+                " instead of making assumptions\n."
+                " Then in the 'code:', you should write the"
+                " code in simple Python."
+                " In the end you have to return a final answer using the"
+                " `final_answer()` if the task is finished."
+                " final_answer() MUST be inside a code block ```python code```"
+                " Here is the format of the final answer:\n"
+                f"{final_answer_str}\n"
+                " \nYou will be generating code and must"
+                " finish with <end_code> to indicate the end of your code."
+                " You have been given access to a list of tools:"
+                " These tools are MCP functions which you can call with code."
+                " Here are the tools you have access to:\n"
+                f"{self.tools_str}\n"
+                " Here are the allowed imports you can use:\n"
+                f"{self.allowed_imports_str}\n"
+                " It is FORBIDDEN to git commit or make a patch empty."
+                " ONLY make 1 and ONLY 1 code block per step."
+                " A tool call alone prints NOTHING: wrap every tool call in"
+                " print() or you will get an empty observation.\n"
+                " read_file() prefixes each line with '<line_number>: '."
+                " These prefixes are NOT part of the file content: never"
+                " include them in the old_str of edit_file(), which matches"
+                " the file EXACTLY, indentation included.\n"
+                " It is FORBIDDEN to modify test files: the evaluation script"
+                " restores them before judging, so editing them changes"
+                " nothing and only pollutes the patch.\n"
+                " Here is an example:\n"
+                f"{SWE_PROMPT_EXEMPLE}",
+            },
+            {
+                "role": "user",
+                "content": f"Now, the real task is: {self.user_prompt}",
+            },
         ]
         return self.prompt
 
@@ -123,41 +163,7 @@ class Prompt:
                 "Here are the allowed imports you can use:\n"
                 f"{self.allowed_imports_str}\n"
                 "Here is an example:\n"
-                "Task:\ntask_definition: Return the smallest"
-                " absolute value"
-                " in a list of integers.\n"
-                "function_definition: def smallest_abs(a):\n"
-                "test_list: assert smallest_abs([3, -1, 5]) == 1\n"
-                "assert smallest_abs([-5, 2]) == 2\n"
-                "Thought: Smallest absolute value means I take the minimum,"
-                " then its absolute"
-                " value. Let me set up the first case.\n"
-                "Code:\n"
-                "```python\n"
-                "print(abs(min([-5, 2])))\n"
-                "```<end_code>\n"
-                "Observation: 5\n"
-                "Thought: Expected 2, got 5. `min` picks -5 because it is"
-                " the smallest signed"
-                " value, and abs only runs afterwards. I must map abs over"
-                " the list first, then take the minimum.\n"
-                "Code:\n"
-                "```python\n"
-                "def smallest_abs(a):\n"
-                "    return min(map(abs,a))\n"
-                "assert smallest_abs([3, -1, 5]) == 1,"
-                " 'smallest_abs([3, -1, 5]) == 1'\n"
-                "assert smallest_abs([-5, 2]) == 2\n,"
-                " 'smallest_abs([-5, 2]) == 2'"
-                "```<end_code>\n"
-                'Obvservation: True'
-                'Thought: I have solved the task, now I will'
-                ' return the final answer.\n'
-                "Code:\n"
-                "```python\n"
-                'final_answer("def smallest_abs(a):\n'
-                'return min(map(abs,a))")\n'
-                "```<end_code>\n"
+                f"{MBPP_PROMPT_EXEMPLE}",
             },
             {
                 "role": "user",
