@@ -268,6 +268,45 @@ Livrables : le sandbox, le serveur MCP, les 9 outils, l'integration Docker.
       → primitive **du sandbox**, pas un outil MCP, toujours presente
 - [ ] Namespace = wrappers MCP decouverts dynamiquement + `final_answer`, rien d'autre
 
+#### Qui contient qui — la question tranchee par le sujet (p. 16)
+
+Ni le sandbox dans le serveur, ni le serveur dans le sandbox. **Le serveur MCP
+est un processus separe** ; ce qui vit dans le sandbox, c'est le **client**.
+
+```
+Sandbox  ⊃  client MCP  --stdio/HTTP-->  serveur MCP (autre processus)  -->  outils
+```
+
+> *"The sandbox is the central execution layer. It connects to an MCP server
+> and exposes its tools as callable Python functions within the sandbox
+> namespace. **The sandbox wraps the MCP client, not the other way around.**"*
+
+**Deux domaines de securite independants**, et c'est le point de soutenance :
+
+> *"The sandbox and MCP tools are independent security domains: the sandbox
+> restricts what LLM-generated Python code can do (imports, paths, timeout,
+> memory), while **MCP tool actions happen outside the sandbox**."*
+
+| | Ce qui est contraint | Par quoi |
+|---|---|---|
+| Code Python du LLM | imports, chemins, RAM, timeout | notre sandbox |
+| Actions des outils MCP | rien de tout ca | le serveur, ailleurs |
+
+Ce n'est **pas** un trou de securite, c'est ce qui rend le projet realisable :
+`run_command` doit pouvoir lancer un processus et `edit_file` ecrire dans
+`/testbed` — deux choses que `make_guarded_import` et `make_guarded_directory`
+interdisent formellement au code du modele. A savoir dire dans ces termes.
+
+- [ ] **Le timeout du sandbox ne borne pas les appels MCP.** Le sujet est
+      explicite : *"The sandbox timeout only applies to code block executed
+      within the sandbox. Actions performed by the MCP server (e.g., spawning
+      external processes) are not subject to the sandbox timeout."*
+      Consequence concrete : `max_execution_time_seconds = 30` ne coupe pas un
+      `run_tests()` qui part lancer une suite sympy pendant 3 minutes, alors
+      que SWE-bench plafonne a 900 s au total. **Il faut une echeance cote
+      appel d'outil.** C'est le meme probleme que P2 a deja resolu cote LLM
+      (thread + `join(timeout=...)`, cf. P2.3) — la solution est transposable
+
 ### P1.2 — Feedback au LLM
 
 *Souvent oublie, mais explicitement exige.*
@@ -297,6 +336,56 @@ Livrables : le sandbox, le serveur MCP, les 9 outils, l'integration Docker.
 - [ ] Wrappers Python generes automatiquement depuis les schemas
 - [ ] Generation dynamique du "sandbox manual" (noms, descriptions, params)
       → change automatiquement si on branche un autre serveur MCP
+
+#### La chaine complete, et ou elle casse (releve du 2026-09-01)
+
+```
+prompt (manuel)      <- decouverte <- serveur MCP
+namespace du sandbox -> wrapper    -> client MCP -> serveur -> outil
+```
+
+Trois maillons sur cinq sont vides : `sandbox/mcp_client/` (`client.py`,
+`transports.py`), `mcp_tools/`, et la generation du manuel. Le namespace de
+`executor.py:32` ne contient toujours que `final_answer`.
+
+**Citations du sujet a garder sous la main** (§ V.4, p. 14-16) :
+
+> *"The sandbox provides two kinds of callable functions in the execution
+> namespace: (a) MCP tool wrappers, discovered dynamically from the connected
+> MCP server ; (b) final_answer, always present, provided by the sandbox
+> itself. When you connect a different MCP server, the MCP tool wrappers
+> change but final_answer remains."*
+
+> *"The sandbox manual should be dynamically generated from the connected MCP
+> server's tool schemas — tool names, descriptions, and parameter types. [...]
+> The manual is what the LLM reads to understand what tools are available and
+> how to call them."*
+
+> *"The system will be tested with an unknown MCP server."*
+> *"Your mandatory tools are only present when your own MCP server is
+> connected."*
+
+**Ce que ca impose, point par point :**
+
+- [ ] Le manuel contient le **contrat** (nom, description, types des
+      parametres), **jamais le code** de l'outil. Le modele doit savoir ce que
+      fait la fonction, pas comment — l'implementation peut changer sous lui
+      (cf. le *"depending on the implementation"* de `get_patch()`)
+- [ ] Une liste d'outils **ecrite en dur** passerait nos 3 taches et
+      **echouerait a l'evaluation** : le serveur de test est inconnu. La
+      decouverte n'est pas un confort, c'est la condition de la note
+- [ ] Le wrapper est une simple entree du dict `ns` d'`executor.py`. Quand le
+      LLM ecrit `run_tests()`, Python resout le nom dans ce dict : **aucune
+      magie**. Consequence de securite : un `def run_tests():` ecrit par le
+      modele **ecrase le wrapper**. C'etait le bug de l'ancien exemple SWE, ou
+      le modele redefinissait `get_patch()` et fabriquait son propre diff —
+      un contournement complet du dispositif, a tester explicitement (P1.7)
+
+**Interface avec P2 :** le manuel est le livrable que consomme `Prompt(tools=)`.
+Tant qu'il n'existe pas, les deux CLI passent `tools=None` et le prompt affiche
+litteralement "None" au modele. Il faut donc s'accorder sur **le format rendu**
+(une liste de chaines ? de dicts ? deja mis en forme ?) — P2 ne fait que
+l'inserer, il ne le compose pas.
 
 ### P1.5 — Les 9 outils obligatoires
 
@@ -345,7 +434,18 @@ points d'entree fins, l'emplacement racine etant impose par le sujet.
 ### P1.6 — Docker / SWE-bench
 
 - [ ] Choisir : sandbox **dans** le container, ou sandbox sur l'hote + outils MCP
-      faisant le pont vers Docker (les 2 sont valides)
+      faisant le pont vers Docker (les 2 sont valides). **C'est LA decision
+      d'architecture** : elle change l'implementation des 9 outils en entier,
+      pas un detail. Ce qui ne bouge pas dans les deux cas : le serveur MCP
+      reste un processus distinct du sandbox, et le client reste dedans
+      (cf. P1.1, « Qui contient qui »)
+  - **(a) sandbox + serveur MCP DANS le conteneur** — les outils manipulent des
+    chemins locaux, implementation simple. Prix a payer : installer nos
+    dependances (`mcp`, `pydantic`...) dans l'image, **dans l'environnement
+    conda `testbed`** (l'image SWE-bench en a un, cf. l'`eval_script`)
+  - **(b) sandbox sur l'hote, serveur MCP faisant le pont par `docker exec`** —
+    l'image reste intacte, mais chacun des 9 outils devient un aller-retour
+    vers le conteneur
 - [ ] Pull / run de l'image (`docker_image` de la tache)
 - [ ] Montage de `${TESTBED_PATH}` si necessaire
 - [ ] `git -c core.fileMode=false diff` pour `get_patch()`
@@ -362,6 +462,16 @@ points d'entree fins, l'emplacement racine etant impose par le sujet.
 - [ ] timeout
 - [ ] limite memoire
 - [ ] protocole MCP
+- [ ] **Masquage d'un wrapper MCP** : le code du LLM qui fait
+      `def run_tests(): ...` ou `def get_patch(): ...` ecrase l'entree du dict
+      `ns` et contourne l'outil. Vu pour de vrai dans un exemple de prompt, ou
+      le modele redefinissait `get_patch()` pour rendre un diff invente.
+      Decider : on laisse (c'est le namespace du modele, il se sabote seul),
+      on detecte, ou on refuse. Dans tous les cas, savoir le dire (cf. P1.4)
+- [ ] `KeyboardInterrupt` / `SystemExit` **ne doivent pas** etre avales par le
+      sandbox : le sujet l'exige explicitement pour l'arret propre de la boucle.
+      Deja tenu par `executor.py` (`except (KeyboardInterrupt, SystemExit):
+      raise`) — a garder sous test pour que ca ne regresse pas
 
 → Ecrire nos propres tests pour chacun **avant** l'eval.
 
@@ -920,6 +1030,14 @@ prompt ne dit pas au modele comment travailler ni comment rendre sa reponse.
   - surveiller le cout : MBPP plafonne a 6000 tokens d'entree **cumules**,
     chaque description d'outil est rejouee a chaque tour. D'ou la prudence sur
     le *"any additional tools"* — l'invitation du sujet n'est pas gratuite
+  - **ne pas rendre le prompt dependant de `run_tests`** : le sujet teste avec
+    un serveur MCP inconnu, ou l'outil n'existe pas (*"Your mandatory tools are
+    only present when your own MCP server is connected"*). Les `assert` doivent
+    rester un repli utilisable, pas un vestige a supprimer
+  - les descriptions ne sont **pas a rediger a la main** : elles viennent des
+    schemas du serveur, via le manuel de P1.4. Ce que P2 controle, c'est la
+    mise en forme et les consignes autour (quand appeler, dans quel ordre,
+    avant `final_answer`)
 
   **A trancher avec ndi-tull** : le sujet ne donne pour MBPP **ni signature ni
   format de sortie** (contrairement aux 9 outils SWE du § V.5, entierement
@@ -942,7 +1060,12 @@ prompt ne dit pas au modele comment travailler ni comment rendre sa reponse.
 - Format `sandbox_input` / `sandbox_output` : a caler tot, c'est l'interface entre
   les deux moities du projet.
 - Le **sandbox manual** est produit par P1 et consomme par P2 : definir sa forme
-  des que la decouverte MCP marche.
+  des que la decouverte MCP marche. **Le format rendu est l'interface** — P2 se
+  contente de l'inserer dans `Prompt(tools=)`, il ne le compose pas (cf. P1.4).
+- **Aucune consigne du prompt ne doit supposer qu'un outil precis existe** :
+  le sujet teste avec un serveur MCP inconnu, ou `run_tests` n'est pas la.
+  D'ou l'interet de garder la validation par `assert` comme repli cote MBPP,
+  plutot que de dependre entierement de `run_tests` (cf. « Prochaines actions »).
 - **`run_tests` MBPP** (P1.5) : livrable exige par le § V.3 mais non specifie.
   P1 choisit la signature, P2 la decrit dans le prompt et mesure l'effet.
   A caler ensemble, sinon le prompt decrira un outil qui n'a pas cette forme.
