@@ -133,7 +133,7 @@ class LLMClient:
                 error=e, timeout_max=timeout_max
             )
             if error:
-                raise error
+                raise error from e
         message: dict = self.provider.get_message(data)
         if message is None:
             raise errors.PermanentLLMResponseError(
@@ -170,7 +170,7 @@ class LLMClient:
                 "The LLM response does not match the expected"
                 + f" schema: {e}",
                 status_code=request.status_code,
-            )
+            ) from e
 
     def check_error(
         self,
@@ -296,9 +296,10 @@ class LLMClient:
         self.index_api_key = (self.index_api_key + 1) % len(self.api_keys)
         while not self.api_keys[self.index_api_key].get_usable():
             self.index_api_key = (self.index_api_key + 1) % len(self.api_keys)
-            if self.index_api_key == 0:
-                if all(not key.get_usable() for key in self.api_keys):
-                    return None
+            if self.index_api_key == 0 and all(
+                not key.get_usable() for key in self.api_keys
+            ):
+                return None
         next_retry_time = self.api_keys[self.index_api_key].get_retry_time()
         if next_retry_time > timeout_max:
             self.api_keys[self.index_api_key].set_usable(False)

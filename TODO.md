@@ -324,6 +324,20 @@ Livrables : le sandbox, le serveur MCP, les 9 outils, l'integration Docker.
 - [~] `mcp_tools_mbpp.py` **a la racine** du repo (fichier cree, vide)
 - [~] `mcp_tools_swebench.py` **a la racine** du repo (fichier cree, vide)
 
+**Cote MBPP, le sujet exige un outil lui aussi** (§ V.3, point 2, souvent
+oublie parce que les 9 outils du § V.5 sont annonces "in the context of the
+SWE-bench benchmark") :
+
+- [ ] `run_tests` pour MBPP → `mcp_tools_mbpp.py`. **Aucune signature ni
+      format de sortie imposes** par le sujet, contrairement aux 9 outils SWE.
+      Liberte de conception, donc charge de la defendre en soutenance
+- [ ] Decider si c'est le **meme** outil que le `run_tests()` du § V.5.3
+      (qui lance l'`eval_script` du conteneur) ou une seconde implementation :
+      cote MBPP il n'y a pas d'`eval_script`, la specification ce sont les
+      `test_list` de la tache. Meme nom, deux sources de verite
+- [ ] Prevenir P2 des que c'est livre : le branchement cote prompt et la
+      campagne d'ablation qui va avec sont decrits dans « Prochaines actions »
+
 → la logique des 9 outils va dans le package `mcp_tools/` (`tools_fs.py`,
 `tools_search.py`, `tools_exec.py`) ; les 2 fichiers racine ne sont que des
 points d'entree fins, l'emplacement racine etant impose par le sujet.
@@ -888,6 +902,32 @@ prompt ne dit pas au modele comment travailler ni comment rendre sa reponse.
       pas du style : c'est le bug du prompt SWE que ruff a attrape
 - [ ] `agent_mbpp/cli.py:33` passe encore `tools=None` → le prompt affiche
       litteralement "None" au modele (attend le manual MCP de P1)
+- [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (depend de
+      P1.5). Sujet § V.3, point 2 : *"Implement MBPP MCP tools — the
+      `run_tests` tool ; you may implement any additional tools you consider
+      useful"*. C'est un **livrable exige**, pas une option, et il vit dans
+      `mcp_tools_mbpp.py` a la racine (emplacement impose).
+      Ce qu'il restera a faire **cote P2** une fois l'outil livre :
+  - passer la liste des outils a `Prompt` au lieu de `tools=None`, pour que
+    `tools_str` cesse d'afficher "None"
+  - decrire `run_tests` dans le prompt systeme MBPP et **remplacer la consigne
+    actuelle** ("Make SURE to use the assert to VALIDATE your code") ou la
+    composer avec : aujourd'hui le modele valide par `assert` et fait 8/10,
+    mais il ne sait meme pas que l'outil existe
+  - rejouer les 10 taches a jeu egal : c'est une **etude d'ablation** toute
+    trouvee pour `BENCHMARK_REPORT.md` (assert seul vs `run_tests`), sur le
+    meme modele et les memes taches
+  - surveiller le cout : MBPP plafonne a 6000 tokens d'entree **cumules**,
+    chaque description d'outil est rejouee a chaque tour. D'ou la prudence sur
+    le *"any additional tools"* — l'invitation du sujet n'est pas gratuite
+
+  **A trancher avec ndi-tull** : le sujet ne donne pour MBPP **ni signature ni
+  format de sortie** (contrairement aux 9 outils SWE du § V.5, entierement
+  normes et testes hors boucle). Le `run_tests()` du § V.5.3 lance
+  l'`eval_script` du conteneur ; cote MBPP il n'y a pas d'`eval_script`, la
+  specification ce sont les `test_list` de la tache. **Meme nom, deux sources
+  de verite.** Un seul outil parametre ou deux implementations ? La reponse se
+  defend en soutenance, il faut l'avoir choisie et pas subie.
 - [ ] `core/llm/keyring.py` : vide et sans emploi depuis que `APIKey` porte
       l'etat du vivier → a supprimer ou a justifier
 - [ ] Deux fichiers de models Pydantic (`core/models.py` / `core/validators.py`)
@@ -903,6 +943,9 @@ prompt ne dit pas au modele comment travailler ni comment rendre sa reponse.
   les deux moities du projet.
 - Le **sandbox manual** est produit par P1 et consomme par P2 : definir sa forme
   des que la decouverte MCP marche.
+- **`run_tests` MBPP** (P1.5) : livrable exige par le § V.3 mais non specifie.
+  P1 choisit la signature, P2 la decrit dans le prompt et mesure l'effet.
+  A caler ensemble, sinon le prompt decrira un outil qui n'a pas cette forme.
 - MBPP end-to-end **avant** de toucher a Docker.
 - Ne pas optimiser (tokens, choix de modele) avant que l'approche soit prouvee sur
   une tache.
