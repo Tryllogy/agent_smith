@@ -13,8 +13,9 @@
 
 ## Etat actuel
 
-*(maj : 2026-08-22 — couche provider generique + `configs/models.json` en
-service ; le defaut « aucun recul entre deux tentatives » est corrige)*
+*(maj : 2026-09-01 — reprise apres une semaine d'arret. Depuis le 2026-08-22 :
+repli sur modele inconnu livre (`b9a43ad`), et le prompt SWE-bench entame mais
+**laisse en plan** (`f851c81`, cf. P2.4). Rien d'autre n'a bouge.)*
 
 - [x] `en.subject.pdf` + `RESUME.md` → RESUME complete (section MCP ajoutee :
       definition, "les outils MCP sont les mains de l'agent", qui ecrit quoi)
@@ -28,7 +29,7 @@ service ; le defaut « aucun recul entre deux tentatives » est corrige)*
 - [~] `.gitignore` → `.env`, `__pycache__`, `cache`, `moulinette`, `tests` OK ;
       il manque toujours `evaluations/`
 
-### Qui a du code, au 2026-08-22
+### Qui a du code, au 2026-09-01
 
 | Ecrit | Encore vide |
 |---|---|
@@ -49,6 +50,11 @@ frontiere se defend, mais il faut savoir la dire en soutenance — ou fusionner.
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent ; le sandbox execute du code et remonte `final_answer`, ce qui a
 debloque la boucle de P2. Restent le CLI/REPL, le manual, et tout MCP.
+
+**Branche `origin/ndi-tull` non mergee** (au 2026-09-01) : elle est a
+`eedbf20` « Thread SandboxConfig through execute() », en avance sur ce que
+`thomas` contient. A rapatrier avant de mesurer quoi que ce soit, sinon les
+deux moities divergent.
 
 **`core/llm/usage.py` supprime** (decision du 2026-08-14) : le suivi d'usage
 vit dans `Loop` (`usage_input` / `usage_output` / `requests`), un module
@@ -600,7 +606,7 @@ Criteres de choix :
 ### P2.4 — System prompts
 
 - [~] Injection du sandbox manual (fourni par P1) → le slot existe dans
-      `Prompt` (`tools` + `allowed_imports`), mais `agent_mbpp/cli.py:30`
+      `Prompt` (`tools` + `allowed_imports`), mais `agent_mbpp/cli.py:33`
       passe toujours `tools=None` : le prompt affiche litteralement "None" au
       modele. En attente du manual MCP de P1
 - [x] Slots structures Thought / Code / Observation avec exemples
@@ -612,8 +618,23 @@ Criteres de choix :
 - [x] Exemples de boucles de raisonnement efficaces → l'exemple `smallest_abs`
       montre un premier essai **faux**, l'observation, puis la correction
 - [x] Prompt MBPP (court, contrainte 6k tokens d'entree au total)
-- [ ] Prompt SWE-bench (methodologie d'exploration : chercher, lire, editer,
-      tester, relire l'echec)
+- [~] Prompt SWE-bench (methodologie d'exploration : chercher, lire, editer,
+      tester, relire l'echec) → **entame le 2026-08-23, laisse en plan.**
+      `make_prompt_swe` (`prompt.py:38`) construit bien le `user_prompt` a
+      partir des 6 champs de la tache, mais :
+  - le message `system` s'arrete a deux phrases generiques : ni les slots
+    Thought/Code/Observation, ni les regles, ni l'exemple de raisonnement —
+    tout ce qui fait la valeur de `make_prompt_mbpp` manque
+  - `final_answer_str` est construit (`prompt.py:53`) puis **jamais insere**
+    dans le prompt → c'est le `F841` de ruff, un symptome et non un detail
+    de style : le modele n'apprend jamais qu'il doit appeler
+    `final_answer(get_patch())`
+  - `tools` et `allowed_imports` ne sont pas rappeles cote SWE
+- [ ] Le prompt SWE devra dire la methodologie *d'exploration d'un depot*,
+      pas seulement d'ecriture de code : localiser le fichier fautif, lire
+      autour, editer, lancer `eval_script`, relire la trace d'echec.
+      `cache/swebench_task.json` (instance `sympy__sympy-14711`) est deja en
+      place pour servir de banc d'essai
 - [x] `allowed_imports` alimente depuis `SandboxConfig().authorized_imports`
 
 → **Methode :** resoudre une tache a la main avec seulement les outils de
@@ -663,21 +684,27 @@ faire** chaque modele. Le fournisseur est retrouve par son URL, le modele par
 - [x] Aucune cle dedans. Le JSON dit *quels* modeles et *comment* les appeler,
       le `.env` fournit *avec quoi* — c'est `api_key_env_var` qui fait le lien
 
-**Trois points restes ouverts, a trancher :**
+**Points restes ouverts, a trancher :**
 
-- [ ] **Le repli sur modele inconnu n'a pas ete fait** : `cli.py:104` leve un
-      `ValueError` quand `--model-name` n'est pas dans le JSON. La decision du
-      2026-08-16 disait « absent → profil par defaut conservateur ». Il faut
-      soit implementer le repli, soit assumer et reecrire la decision — un
-      identifiant OpenRouter qui disparait du catalogue rend l'agent
-      inutilisable la veille de l'eval
+- [x] **Repli sur modele inconnu — FAIT** (`b9a43ad`, 2026-08-22).
+      `cli.py:105-108` : quand `--model-name` est absent du JSON, un profil
+      par defaut conservateur est construit (`ModelConfig(reasoning=False)`)
+      au lieu du `ValueError`. La decision du 2026-08-16 est donc tenue, et
+      un identifiant OpenRouter qui disparait du catalogue ne bloque plus
+      l'agent. *(A defendre en soutenance : le repli est silencieux — aucun
+      avertissement n'est affiche. Assumer, ou logger.)*
 - [ ] **Le fournisseur est retrouve par egalite stricte d'URL**
-      (`find_provider_by_url`) : un `/` final de trop dans `--provider-url` et
-      rien ne matche. Normaliser, ou chercher par nom
+      (`find_provider_by_url`, `cli.py:140`) : un `/` final de trop dans
+      `--provider-url` et rien ne matche. Normaliser, ou chercher par nom.
+      *Toujours ouvert au 2026-09-01*
 - [ ] **`ModelConfig` n'a qu'un champ `reasoning`, et il n'est lu nulle part**
       — `LLMClient` le stocke (`client.py:41`) sans jamais s'en servir. Soit
       il pilote quelque chose (`reasoning_effort`, budget de sortie), soit il
-      degage : un champ de config mort est indefendable en soutenance
+      degage : un champ de config mort est indefendable en soutenance.
+      *Toujours ouvert au 2026-09-01.* Attention au faux ami : le `reasoning`
+      de `LLMResponse` (lu par `Loop`, via `Provider.get_reasoning`) est un
+      **autre** champ, bien vivant celui-la — c'est le `reasoning` **bool** de
+      `ModelConfig` (`validators.py:68`) qui est mort
 - [ ] Regle de precedence CLI > fichier : sans objet tant qu'aucun reglage
       n'est expose en double. A rouvrir des qu'un l'est
 
@@ -744,6 +771,13 @@ basculement de modele sur echec repete, a etudier (chantier, pas correctif).
 plafond nominal. C'est cette distribution qui a motive l'echeance par thread.
 
 #### `run4` — les memes 10 taches apres les correctifs (2026-08-16)
+
+> **Traces perdues (constat du 2026-09-01).** `cache/run4/` n'existe plus :
+> `cache/` est dans le `.gitignore`, rien n'a jamais ete commite. Les chiffres
+> ci-dessous sont tout ce qu'il reste de `run1`..`run4`. Ils suffisent au
+> recit du rapport, pas a une verification. **Pour la prochaine campagne :
+> sortir les `solution.json` de `cache/` et les versionner** — le sujet exige
+> les fichiers de backing dans le repo (P2.6, dernier item).
 
 Meme modele, memes taches, meme ordre que `run3`. Resultat reel **8/10**, avec
 les **memes deux echecs** (59 et 413). Ce que le rejeu a change :
@@ -813,6 +847,8 @@ requetes emises. Le correctif est teste unitairement, pas encore en campagne.
    (observation, echeance, comptabilite, recul entre tentatives). Rejeu a jeu
    egal fait (`run4`). **Reste : une campagne apres la couche `Provider`.**
 5. [ ] Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.
+5 bis. [~] **SWE-bench : premiere pierre posee le 2026-08-23** — le prompt est
+   entame mais inacheve (P2.4), `agent_swebench/` toujours vide (P2.5).
 6. [ ] SWE-bench sur les 3 taches conseillees :
    `sympy__sympy-14711` / `sympy__sympy-13480` / `pydata__xarray-4629`
 7. [ ] `BENCHMARK_REPORT.md` une fois les 2 benchmarks fonctionnels
@@ -826,15 +862,31 @@ requetes emises. Le correctif est teste unitairement, pas encore en campagne.
 - [x] **Recul entre deux tentatives** : `X-RateLimit-Reset` lu, delai porte par
       `APIKey`, clef hors budget condamnee, vivier mort → `Permanent` (P2.3)
 - [x] `configs/models.json` — livrable exige, ecrit (P2.5 bis)
-- [ ] **Repli sur modele inconnu** : aujourd'hui `--model-name` absent du JSON
-      = plantage au demarrage (P2.5 bis)
+- [x] **Repli sur modele inconnu** — fait le 2026-08-22 (`b9a43ad`), profil
+      par defaut conservateur au lieu du plantage (P2.5 bis)
+
+**Le point de reprise, au 2026-09-01 : finir `make_prompt_swe`.** C'est la
+que la derniere session s'est arretee en plein milieu, et c'est le prealable
+a tout le reste de SWE-bench — inutile d'ecrire `agent_swebench/` tant que le
+prompt ne dit pas au modele comment travailler ni comment rendre sa reponse.
+
+- [ ] **Finir le prompt SWE-bench** (P2.4) : message `system` complet, et
+      surtout **inserer `final_answer_str`** — il est construit et jete
+- [ ] **`agent_swebench/`** : les 4 fichiers sont toujours vides (P2.5)
+- [ ] **Rapatrier `origin/ndi-tull`** (`eedbf20`) dans `thomas` avant toute
+      nouvelle mesure
 - [ ] **`ModelConfig.reasoning` est mort** : stocke par `LLMClient`, lu par
       personne. Le brancher ou le retirer (P2.5 bis)
 - [ ] **Campagne de controle** apres les correctifs provider + backoff : les
-      chiffres de `run4` datent d'avant la couche `Provider`
-- [ ] Dette `ruff` : 13 erreurs — 11 `B904` (`raise ... from`), 1 `SIM102`,
-      1 `SIM110`. Le `I001` est resorbe ; les `B904` ont augmente de 9 a 11
-- [ ] `agent_mbpp/cli.py:31` passe encore `tools=None` → le prompt affiche
+      chiffres de `run4` datent d'avant la couche `Provider`.
+      **Attention : `cache/run4/` n'existe plus sur le disque** (`cache/` est
+      gitignore) — les traces brutes citees en P2.6 ont disparu, seuls les
+      chiffres recopies dans ce TODO subsistent. Raison de plus pour rejouer
+- [ ] Dette `ruff` : **14** erreurs (13 au 2026-08-22) — 11 `B904`
+      (`raise ... from`), 1 `SIM102`, 1 `SIM110`, et 1 **`F841` nouveau**
+      (`prompt.py:53`, `final_answer_str` jamais utilise). Ce dernier n'est
+      pas du style : c'est le bug du prompt SWE que ruff a attrape
+- [ ] `agent_mbpp/cli.py:33` passe encore `tools=None` → le prompt affiche
       litteralement "None" au modele (attend le manual MCP de P1)
 - [ ] `core/llm/keyring.py` : vide et sans emploi depuis que `APIKey` porte
       l'etat du vivier → a supprimer ou a justifier
