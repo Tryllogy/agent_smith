@@ -13,9 +13,63 @@
 
 ## Etat actuel
 
-*(maj : 2026-09-01 — reprise apres une semaine d'arret. Depuis le 2026-08-22 :
-repli sur modele inconnu livre (`b9a43ad`), et le prompt SWE-bench entame mais
-**laisse en plan** (`f851c81`, cf. P2.4). Rien d'autre n'a bouge.)*
+*(maj : 2026-09-01, fin de journee — reprise apres une semaine d'arret, puis
+grosse session. 4 commits : prompt SWE **fini**, `agent_swebench/` ecrit,
+helpers CLI factorises, dette ruff **soldee**.)*
+
+### Ce qui a ete fait le 2026-09-01 (cote tchemin)
+
+`15aff15` → `0e86329`, 714 insertions sur 13 fichiers.
+
+- [x] **Prompt SWE-bench termine** (P2.4). Le squelette du 23-08 est devenu un
+      prompt complet : `final_answer_str` insere (il etait construit et jete),
+      exemple d'exploration reelle, et **5 regles** ajoutees — pas de commit,
+      pas de patch vide, un seul bloc de code par tour, envelopper les appels
+      d'outils dans `print()`, les prefixes `<n>: ` de `read_file` ne font pas
+      partie du fichier, interdiction de modifier les tests
+- [x] **Tour `user` ajoute a la conversation SWE.** C'etait le defaut bloquant :
+      `user_prompt` etait construit puis jamais envoye, donc l'agent SWE ne
+      recevait **jamais l'enonce**. Les 2 `xfail` de `tests/test_prompt.py`
+      sont tombes avec
+- [x] **Exemples deplaces dans `core/constants.py`** (`SWE_PROMPT_EXEMPLE`,
+      `MBPP_PROMPT_EXEMPLE`), les deux en `r"""` — voir le bug ci-dessous
+- [x] **`agent_swebench/` ecrit** : `__init__.py`, `__main__.py`, `cli.py`
+      (P2.5). Seul `docker.py` reste vide (c'est P1.6)
+- [x] **`core/agent_cli_helper.py`** (nouveau, 120 lignes) : `check_args`,
+      `get_task_from_file`, `get_api_keys`, `get_provider_and_model_config`,
+      `find_provider_by_url` mutualises. `agent_mbpp/cli.py` fond de 163 a
+      **63 lignes**, `agent_swebench/cli.py` fait 63 lignes en miroir
+- [x] **Dette ruff soldee : 13 → 0.** Les 11 `B904` tranches un par un
+      (9 `from None`, 5 `from e`, voir P2.3), plus `SIM102`, `SIM110`, `I001`,
+      `F841`. `E501` neutralise sur `core/constants.py` via
+      `[tool.ruff.lint.per-file-ignores]` dans `pyproject.toml`
+- [x] **220 tests passent** (215 + 5 nouveaux/reactives)
+- [x] **Premier lancement reel de `agent_swebench`** sur
+      `cache/swebench_task.json` : `solution.json` conforme produit
+      (`task_id: sympy__sympy-14711`, `benchmark: swebench`, metriques
+      remplies, `error` renseigne). Arret sur un `Permanent` du provider —
+      `openai/gpt-oss-20b:free` **n'est plus gratuit** chez OpenRouter, le
+      slug est desormais `openai/gpt-oss-20b`. Le releve de modeles gratuits
+      du 2026-08-16 (P2.3) est donc a refaire avant la campagne
+
+#### Trois bugs trouves et corriges, qui valent d'etre sus
+
+1. **Les appels d'outils nus ne produisaient aucune observation.** L'exemple
+   SWE appelait `run_command(...)`, `read_file(...)` etc. sans `print()`. Or
+   `executor.py:38` fait `exec(code, ns)` : en `exec`, la valeur d'une
+   expression isolee est **jetee** — ce n'est pas un REPL. Un modele qui
+   imitait l'exemple aurait lu des fichiers sans rien voir, edite sans
+   confirmation, lance les tests sans resultat. **Echec silencieux total.**
+2. **`SWE_PROMPT_EXEMPLE` etait une `"""` ordinaire.** Les `\n` et `\"` ecrits
+   dans la source etaient interpretes **a la compilation de `constants.py`**,
+   donc 3 blocs de code sur 4 arrivaient au modele en Python invalide
+   (`unterminated string literal`). Corrige par `r"""`. Verifie a l'`ast` :
+   les 4 blocs compilent. `MBPP_PROMPT_EXEMPLE` est passe en `r"""` aussi,
+   rendu identique octet pour octet, par prophylaxie
+3. **`get_task_from_file()` appelee avec 1 argument sur 2**, dans les **deux**
+   CLI a la fois. La factorisation avait ajoute le parametre `bench_input`
+   sans mettre a jour les appelants → `TypeError` a la construction. Invisible
+   des tests : **aucun test ne construit `AgentMBPP` ni `AgentSWEBENCH`**
 
 - [x] `en.subject.pdf` + `RESUME.md` → RESUME complete (section MCP ajoutee :
       definition, "les outils MCP sont les mains de l'agent", qui ecrit quoi)
@@ -37,8 +91,10 @@ repli sur modele inconnu livre (`b9a43ad`), et le prompt SWE-bench entame mais
 | `core/validators.py` (nouveau), `core/api_key.py` | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
 | `core/llm/client.py`, `core/llm/provider.py` (nouveau) | tout `sandbox/mcp_client/` |
 | `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `mcp_tools/`, les 2 `mcp_tools_*.py` racine |
-| `agent_mbpp/` : `cli.py`, `__main__.py` | tout `agent_swebench/` (4 fichiers) |
-| `sandbox/executor.py`, `configs/models.json` (nouveau) | `sandbox_template.json` |
+| `core/agent_cli_helper.py` (nouveau, 2026-09-01) | `agent_swebench/docker.py` (seul reste vide) |
+| `agent_mbpp/` : `cli.py`, `__main__.py` | `sandbox_template.json` |
+| `agent_swebench/` : `cli.py`, `__main__.py`, `__init__.py` (2026-09-01) | |
+| `sandbox/executor.py`, `configs/models.json` (nouveau) | |
 | `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | `BENCHMARK_REPORT.md`, `README.md` |
 
 **`core/llm/response.py` supprime** : `LLMResponse` a demenage dans
@@ -66,7 +122,7 @@ separe aurait duplique l'etat sans proprietaire clair.
 racine         . mcp_tools_mbpp.py  . mcp_tools_swebench.py
                . sandbox_template.json  . BENCHMARK_REPORT.md  . README.md
 core/          + models.py  + validators.py  + errors.py  + constants.py
-               + api_key.py
+               + api_key.py  + agent_cli_helper.py
   agent/       + loop.py  + extraction.py  + prompt.py
   llm/         + client.py  + provider.py  . keyring.py
                (usage.py et response.py supprimes)
@@ -76,10 +132,15 @@ sandbox/       . cli.py  + executor.py  . manual.py
   mcp_client/  . client.py  . transports.py
 mcp_tools/     . tools_fs.py  . tools_search.py  . tools_exec.py
 agent_mbpp/    + __main__.py  + cli.py
-agent_swebench/. __main__.py  . cli.py  . docker.py
+agent_swebench/+ __main__.py  + cli.py  . docker.py
 configs/       + models.json
-tests/         + banc d'essai local, gitignore, hors rendu (183 tests)
+tests/         + banc d'essai local, gitignore, hors rendu (220 tests)
 ```
+
+**`core/constants.py` heberge desormais les deux exemples de prompt**
+(`SWE_PROMPT_EXEMPLE`, `MBPP_PROMPT_EXEMPLE`), d'ou l'exemption `E501` du
+`pyproject.toml`. A rouvrir si le fichier grossit : un module dedie
+(`core/agent/prompt_examples.py`) permettrait de n'exempter que lui.
 
 ### Flat layout coherent (3 corrections faites)
 
@@ -742,23 +803,25 @@ Criteres de choix :
 - [x] Exemples de boucles de raisonnement efficaces → l'exemple `smallest_abs`
       montre un premier essai **faux**, l'observation, puis la correction
 - [x] Prompt MBPP (court, contrainte 6k tokens d'entree au total)
-- [~] Prompt SWE-bench (methodologie d'exploration : chercher, lire, editer,
-      tester, relire l'echec) → **entame le 2026-08-23, laisse en plan.**
-      `make_prompt_swe` (`prompt.py:38`) construit bien le `user_prompt` a
-      partir des 6 champs de la tache, mais :
-  - le message `system` s'arrete a deux phrases generiques : ni les slots
-    Thought/Code/Observation, ni les regles, ni l'exemple de raisonnement —
-    tout ce qui fait la valeur de `make_prompt_mbpp` manque
-  - `final_answer_str` est construit (`prompt.py:53`) puis **jamais insere**
-    dans le prompt → c'est le `F841` de ruff, un symptome et non un detail
-    de style : le modele n'apprend jamais qu'il doit appeler
-    `final_answer(get_patch())`
-  - `tools` et `allowed_imports` ne sont pas rappeles cote SWE
-- [ ] Le prompt SWE devra dire la methodologie *d'exploration d'un depot*,
-      pas seulement d'ecriture de code : localiser le fichier fautif, lire
-      autour, editer, lancer `eval_script`, relire la trace d'echec.
-      `cache/swebench_task.json` (instance `sympy__sympy-14711`) est deja en
-      place pour servir de banc d'essai
+- [x] **Prompt SWE-bench — ECRIT le 2026-09-01** (entame le 23-08, fini
+      aujourd'hui). Le message `system` porte desormais la methodologie
+      d'exploration, les 9 outils, les regles, et un exemple complet
+- [x] La conversation SWE a **deux tours** (`system` + `user`) comme MBPP :
+      l'enonce atteint enfin le modele. Sans ce tour, l'agent SWE serait parti
+      resoudre le probleme de l'exemple, seul enonce sous ses yeux
+- [x] Les 5 regles ajoutees, chacune adossee a un mode d'echec observe :
+  - envelopper les appels d'outils dans `print()` — `exec()` jette la valeur
+    d'une expression isolee, sans quoi **observation vide** et agent aveugle
+  - les prefixes `<n>: ` de `read_file` ne font pas partie du fichier — 1er
+    motif d'echec d'`edit_file`, qui compare a l'exact
+  - interdiction de modifier les tests — l'`eval_script` les restaure avant de
+    juger, donc l'edition ne sert a rien et pollue le patch
+  - pas de `git commit` (le patch deviendrait vide) ni de patch vide
+  - un seul bloc de code par tour — `extraction.py:20` ne garde que le premier
+- [ ] **Rien de tout ca n'est encore mesure.** Le prompt a ete verifie par
+      lecture et par `ast`, jamais par une execution reelle : il faut
+      `mcp_tools/` pour ca. `cache/swebench_task.json` (`sympy__sympy-14711`)
+      attend comme banc d'essai
 - [x] `allowed_imports` alimente depuis `SandboxConfig().authorized_imports`
 
 → **Methode :** resoudre une tache a la main avec seulement les outils de
@@ -768,12 +831,22 @@ l'agent, et transcrire ce raisonnement dans le prompt.
 
 - [x] `agent_mbpp` : les 4 options du sujet, `--output` corrige (plus
       d'abreviation `argparse`), tache chargee + validee contre `MBPPTaskInput`
-- [ ] `agent_swebench` : memes options → les 4 fichiers sont toujours vides
+- [x] `agent_swebench` : memes options, ecrit le 2026-09-01. Tache validee
+      contre `SWEBenchTaskInput`, `instance_id` (et non `task_id`) passe a
+      `Loop.run`. **Lancement reel verifie** : `solution.json` conforme produit.
+      Seul `docker.py` reste vide — c'est P1.6
+- [x] **Helpers CLI factorises** dans `core/agent_cli_helper.py` : les deux
+      `cli.py` tombent a 63 lignes chacun (MBPP en faisait 163). La frontiere
+      se defend : le helper lit l'environnement et les fichiers, les CLI
+      cablent les objets
 - [x] Ecriture du `solution.json` conforme → `model_dump_json(indent=4)`
       (`json.dump` ne sait pas serialiser un `BaseModel`).
       `validate_metrics` repond **YES** sur toutes les taches mesurees
 - [x] `final_answer(code)` pour MBPP
-- [ ] `final_answer(get_patch())` pour SWE-bench
+- [x] `final_answer(get_patch())` pour SWE-bench — enseigne dans le prompt sous
+      la forme en trois temps : recuperer le patch, verifier qu'il n'est pas
+      vide, puis le rendre. **Non teste en execution** : `get_patch()` est un
+      outil MCP de P1.5, il n'existe pas encore
 - [x] Respect strict des limites → arret propre sur chacune des quatre
       (iterations, tokens entree, tokens sortie, temps)
 - [x] Remplissage de **tous** les champs de `StepMetrics`
@@ -971,8 +1044,10 @@ requetes emises. Le correctif est teste unitairement, pas encore en campagne.
    (observation, echeance, comptabilite, recul entre tentatives). Rejeu a jeu
    egal fait (`run4`). **Reste : une campagne apres la couche `Provider`.**
 5. [ ] Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.
-5 bis. [~] **SWE-bench : premiere pierre posee le 2026-08-23** — le prompt est
-   entame mais inacheve (P2.4), `agent_swebench/` toujours vide (P2.5).
+5 bis. [x] **Cote P2, SWE-bench est pret a etre branche** (2026-09-01) : prompt
+   fini avec ses 2 tours (P2.4), `agent_swebench/` ecrit et lance pour de vrai
+   (P2.5). **Le chemin critique est passe cote P1** — sans `mcp_tools/`, sans
+   client MCP et sans Docker, rien de tout ca ne peut resoudre une tache.
 6. [ ] SWE-bench sur les 3 taches conseillees :
    `sympy__sympy-14711` / `sympy__sympy-13480` / `pydata__xarray-4629`
 7. [ ] `BENCHMARK_REPORT.md` une fois les 2 benchmarks fonctionnels
@@ -989,16 +1064,37 @@ requetes emises. Le correctif est teste unitairement, pas encore en campagne.
 - [x] **Repli sur modele inconnu** — fait le 2026-08-22 (`b9a43ad`), profil
       par defaut conservateur au lieu du plantage (P2.5 bis)
 
-**Le point de reprise, au 2026-09-01 : finir `make_prompt_swe`.** C'est la
-que la derniere session s'est arretee en plein milieu, et c'est le prealable
-a tout le reste de SWE-bench — inutile d'ecrire `agent_swebench/` tant que le
-prompt ne dit pas au modele comment travailler ni comment rendre sa reponse.
+- [x] **Prompt SWE-bench fini** le 2026-09-01 (P2.4), tour `user` compris
+- [x] **`agent_swebench/` ecrit** le 2026-09-01 (P2.5), `docker.py` excepte
+- [x] **Dette ruff soldee** le 2026-09-01 : 13 → 0
 
-- [ ] **Finir le prompt SWE-bench** (P2.4) : message `system` complet, et
-      surtout **inserer `final_answer_str`** — il est construit et jete
-- [ ] **`agent_swebench/`** : les 4 fichiers sont toujours vides (P2.5)
+**Le point de reprise, au soir du 2026-09-01.** Tout ce qui pouvait etre fait
+sans `mcp_tools/` cote SWE l'a ete. Le prompt et les deux CLI tiennent, mais
+**rien n'est mesure** : le prompt SWE n'a jamais tourne contre un vrai depot,
+et les chiffres MBPP datent d'avant la couche `Provider`.
+Priorite : **remesurer MBPP**, qui est debloque et nourrit le rapport.
+
+- [ ] **Campagne de controle MBPP** — le chantier le plus rentable, et il ne
+      depend de personne. Prealable : **refaire le releve des modeles gratuits**
+      (celui du 2026-08-16 est perime, `openai/gpt-oss-20b:free` a disparu)
 - [ ] **Rapatrier `origin/ndi-tull`** (`eedbf20`) dans `thomas` avant toute
       nouvelle mesure
+- [ ] **Aucun test ne construit `AgentMBPP` ni `AgentSWEBENCH`.** C'est ce trou
+      qui a laisse passer la signature de `get_task_from_file` dans les deux
+      CLI a la fois — `TypeError` a la construction, 220 tests au vert. Un test
+      qui instancie les deux classes sur les taches de `cache/` attraperait
+      cette classe de regression sans toucher au reseau
+- [ ] **Corriger l'exemple MBPP**, qui porte le meme piege que celui corrige
+      cote SWE : son `final_answer("def smallest_abs(a):` est coupe par un vrai
+      retour a la ligne, donc le modele voit une chaine non terminee. Plus deux
+      coquilles, `Obvservation` et un `assert ... == 2\n,` dont la virgule
+      passe apres le saut de ligne. **Mesurer l'effet a jeu egal** : c'est une
+      seconde etude d'ablation pour `BENCHMARK_REPORT.md`
+- [ ] **Consigne de prompt qui a fuit dans la boucle** : `loop.py`, methode
+      `observation()`, contient en dur *"Make SURE to make AND print the
+      asserts like assert cond, '...'"*. Ce message part pour **les deux**
+      benchmarks — cote SWE il reclame des asserts dont le prompt ne parle
+      jamais. A rendre dependant du bench, ou a remonter dans le prompt
 - [ ] **`ModelConfig.reasoning` est mort** : stocke par `LLMClient`, lu par
       personne. Le brancher ou le retirer (P2.5 bis)
 - [ ] **Campagne de controle** apres les correctifs provider + backoff : les
@@ -1006,12 +1102,18 @@ prompt ne dit pas au modele comment travailler ni comment rendre sa reponse.
       **Attention : `cache/run4/` n'existe plus sur le disque** (`cache/` est
       gitignore) — les traces brutes citees en P2.6 ont disparu, seuls les
       chiffres recopies dans ce TODO subsistent. Raison de plus pour rejouer
-- [ ] Dette `ruff` : **14** erreurs (13 au 2026-08-22) — 11 `B904`
-      (`raise ... from`), 1 `SIM102`, 1 `SIM110`, et 1 **`F841` nouveau**
-      (`prompt.py:53`, `final_answer_str` jamais utilise). Ce dernier n'est
-      pas du style : c'est le bug du prompt SWE que ruff a attrape
-- [ ] `agent_mbpp/cli.py:33` passe encore `tools=None` → le prompt affiche
-      litteralement "None" au modele (attend le manual MCP de P1)
+- [x] **Dette `ruff` : 0** (2026-09-01, etait a 14). Les 11 `B904` tranches un
+      par un plutot qu'au `sed` — 9 `from None` sur les erreurs de fichier et
+      dans le sandbox (la cause encombrerait l'appelant ou couterait des tokens
+      au modele), 5 `from e` sur les schemas et les `except Exception`.
+      Plus `SIM102`, `SIM110`, `I001`, `F841`. `E501` exempte sur
+      `core/constants.py` : les retours a la ligne des exemples de prompt font
+      partie du message envoye au LLM, les recouper le changerait
+- [ ] **`tools=None` dans les DEUX CLI** (`agent_mbpp/cli.py`,
+      `agent_swebench/cli.py`) → le prompt affiche litteralement "None".
+      Cote SWE c'est plus grave : le prompt systeme decrit une methode
+      entierement fondee sur 9 outils dont il ne donne jamais la liste.
+      Attend le manual MCP de P1.4
 - [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (depend de
       P1.5). Sujet § V.3, point 2 : *"Implement MBPP MCP tools — the
       `run_tests` tool ; you may implement any additional tools you consider
