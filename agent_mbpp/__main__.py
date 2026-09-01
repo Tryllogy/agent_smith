@@ -2,11 +2,7 @@ import argparse
 import sys
 
 from agent_mbpp.cli import AgentMBPP
-
-
-def check_args(args):
-    if not args.model_name or args.model_name.strip() == "":
-        raise ValueError("Model name is required.")
+from core.agent_cli_helper import check_args
 
 
 def main():
@@ -44,7 +40,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-        exit(0)
+        sys.exit(0)
     except Exception as e:
         sys.stderr.write(f"Error: {e}\n")
-        exit(1)
+        sys.exit(1)
