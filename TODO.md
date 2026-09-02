@@ -11,210 +11,75 @@
 
 ---
 
-## Etat actuel
+## Etat actuel — 2026-09-02
 
-*(maj : 2026-09-01, soir — reprise apres une semaine d'arret, puis grosse
-session. 4 commits : prompt SWE **fini**, `agent_swebench/` ecrit, helpers CLI
-factorises, dette ruff **soldee**. Puis une session du soir, **non commitee** :
-trou de tests comble (220 → **293 tests**), `core/validators.py` renomme
-`core/config_models.py`, `ModelConfig.reasoning` renomme `is_reasoning`,
-`RootModelConfig` et `core/llm/keyring.py` supprimes, exemple MBPP nettoye,
-`evaluations/` gitignore. **Deux regressions introduites par le renommage**,
-voir plus bas.)*
+**Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
+extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
+modeles. **295 tests verts, dette ruff a 0.**
 
-### Ce qui a ete fait le 2026-09-01 (cote tchemin)
+**Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
+existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
+debloque la boucle. Restent le CLI/REPL, le manual, **et tout MCP**.
 
-`15aff15` → `0e86329`, 714 insertions sur 13 fichiers.
+> **Le chemin critique est cote P1.** Sans `mcp_tools/`, sans client MCP et sans
+> Docker, ni SWE-bench ni le rapport de benchmark ne peuvent avancer. Le prompt
+> SWE n'a jamais tourne contre un vrai depot.
 
-- [x] **Prompt SWE-bench termine** (P2.4). Le squelette du 23-08 est devenu un
-      prompt complet : `final_answer_str` insere (il etait construit et jete),
-      exemple d'exploration reelle, et **5 regles** ajoutees — pas de commit,
-      pas de patch vide, un seul bloc de code par tour, envelopper les appels
-      d'outils dans `print()`, les prefixes `<n>: ` de `read_file` ne font pas
-      partie du fichier, interdiction de modifier les tests
-- [x] **Tour `user` ajoute a la conversation SWE.** C'etait le defaut bloquant :
-      `user_prompt` etait construit puis jamais envoye, donc l'agent SWE ne
-      recevait **jamais l'enonce**. Les 2 `xfail` de `tests/test_prompt.py`
-      sont tombes avec
-- [x] **Exemples deplaces dans `core/constants.py`** (`SWE_PROMPT_EXEMPLE`,
-      `MBPP_PROMPT_EXEMPLE`), les deux en `r"""` — voir le bug ci-dessous
-- [x] **`agent_swebench/` ecrit** : `__init__.py`, `__main__.py`, `cli.py`
-      (P2.5). Seul `docker.py` reste vide (c'est P1.6)
-- [x] **`core/agent_cli_helper.py`** (nouveau, 120 lignes) : `check_args`,
-      `get_task_from_file`, `get_api_keys`, `get_provider_and_model_config`,
-      `find_provider_by_url` mutualises. `agent_mbpp/cli.py` fond de 163 a
-      **63 lignes**, `agent_swebench/cli.py` fait 63 lignes en miroir
-- [x] **Dette ruff soldee : 13 → 0.** Les 11 `B904` tranches un par un
-      (9 `from None`, 5 `from e`, voir P2.3), plus `SIM102`, `SIM110`, `I001`,
-      `F841`. `E501` neutralise sur `core/constants.py` via
-      `[tool.ruff.lint.per-file-ignores]` dans `pyproject.toml`
-- [x] **220 tests passent** (215 + 5 nouveaux/reactives)
-- [x] **Premier lancement reel de `agent_swebench`** sur
-      `cache/swebench_task.json` : `solution.json` conforme produit
-      (`task_id: sympy__sympy-14711`, `benchmark: swebench`, metriques
-      remplies, `error` renseigne). Arret sur un `Permanent` du provider —
-      `openai/gpt-oss-20b:free` **n'est plus gratuit** chez OpenRouter, le
-      slug est desormais `openai/gpt-oss-20b`. Le releve de modeles gratuits
-      du 2026-08-16 (P2.3) est donc a refaire avant la campagne
+**Deux dettes qui bloquent la mesure :**
 
-#### Trois bugs trouves et corriges, qui valent d'etre sus
+1. **`origin/ndi-tull` (`eedbf20`) n'est pas mergee** dans `thomas` — a
+   rapatrier avant toute nouvelle mesure, sinon les deux moities divergent.
+2. **Le releve des modeles gratuits est perime** (2026-08-16) :
+   `openai/gpt-oss-20b:free` n'existe plus chez OpenRouter, le slug est
+   `openai/gpt-oss-20b` et il n'est plus gratuit. A refaire avant toute campagne.
 
-1. **Les appels d'outils nus ne produisaient aucune observation.** L'exemple
-   SWE appelait `run_command(...)`, `read_file(...)` etc. sans `print()`. Or
-   `executor.py:38` fait `exec(code, ns)` : en `exec`, la valeur d'une
-   expression isolee est **jetee** — ce n'est pas un REPL. Un modele qui
-   imitait l'exemple aurait lu des fichiers sans rien voir, edite sans
-   confirmation, lance les tests sans resultat. **Echec silencieux total.**
-2. **`SWE_PROMPT_EXEMPLE` etait une `"""` ordinaire.** Les `\n` et `\"` ecrits
-   dans la source etaient interpretes **a la compilation de `constants.py`**,
-   donc 3 blocs de code sur 4 arrivaient au modele en Python invalide
-   (`unterminated string literal`). Corrige par `r"""`. Verifie a l'`ast` :
-   les 4 blocs compilent. `MBPP_PROMPT_EXEMPLE` est passe en `r"""` aussi,
-   rendu identique octet pour octet, par prophylaxie
-3. **`get_task_from_file()` appelee avec 1 argument sur 2**, dans les **deux**
-   CLI a la fois. La factorisation avait ajoute le parametre `bench_input`
-   sans mettre a jour les appelants → `TypeError` a la construction. Invisible
-   des tests : **aucun test ne construit `AgentMBPP` ni `AgentSWEBENCH`**
+### Journal condense
 
-#### Session du soir (2026-09-01) — dans l'arbre de travail, pas encore commitee
+**2026-09-01, jour** (`15aff15` → `0e86329`, 714 insertions / 13 fichiers) :
+prompt SWE fini avec son tour `user`, `agent_swebench/` ecrit et **lance pour de
+vrai** (`solution.json` conforme sur `sympy__sympy-14711`), helpers CLI
+factorises dans `core/agent_cli_helper.py` (les deux `cli.py` tombent a 63
+lignes, MBPP en faisait 163), dette ruff 13 → 0.
 
-- [x] **Le trou de tests est comble : `tests/test_agent_cli.py`, 73 tests.**
-      Total **293** (291 verts + **2 `xfail`**, voir regression 1). Ce que le
-      fichier tient, en cinq groupes :
-      construction des deux agents sur **chaque** tache de `cache/` ; cablage
-      obtenu (bench de la boucle contre `constants.MBPP`/`SWE`, tache presente
-      dans `prompt.user_prompt`, `loop.client is llm_client`, URL/modele/
-      `stop_sequence` du client, cles converties en `APIKey`) ; les sept
-      echecs nommes (fichier absent, JSON casse, tache du mauvais bench dans
-      chaque agent, URL provider inconnue, config absente, cle d'API absente) ;
-      la forme d'appel de `get_task_from_file` (la **classe** du model, pas une
-      instance) ; et `run()` avec une fausse boucle — identifiant transmis
-      (`task_id` cote MBPP, `instance_id` cote SWE) et `solution.json` relu en
-      `SolutionOutput`. **Aucun reseau, aucune cle valide requise** : construire
-      un agent ne fait pas d'appel, seul `run()` en ferait
-- [x] **Pouvoir de detection verifie par deux mutants** (plugins pytest hors
-      depot, aucun fichier de production touche) : `get_task_from_file` rendant
-      le model au lieu du dict → **57 echecs** ; signature a un seul argument,
-      le `TypeError` du matin → **64 echecs**. Sans ce fichier, les deux
-      passaient inapercus
-- [x] **Les taches viennent de `cache/`, triees par validation Pydantic** et
-      non par nom — `cache/` contient aussi des `solution.json`, qui portent
-      eux aussi un `task_id`. Une tache minimale ecrite dans `tmp_path` est
-      **toujours** ajoutee au jeu de parametres : le garde-fou survit a un
-      `make clean-all`, qui efface `cache/`
-- [x] **`constants.MODELS_CONFIG_FILE` neutralise en test** : c'est un chemin
-      relatif, donc les tests ne passeraient que lances depuis la racine. Une
-      fixture le remplace par un absolu et pose les cles factices de **chaque**
-      `api_key_env_var` declare dans `configs/models.json` — ajouter un
-      fournisseur au JSON le fait couvrir sans toucher aux tests
-- [x] **`core/validators.py` → `core/config_models.py`** (+ les 6 imports :
-      `agent_cli_helper`, `agent/loop`, `llm/client`, `llm/provider`, et 3
-      fichiers de `tests/`). La frontiere entre les deux fichiers de models
-      porte enfin son critere : **qui possede le schema** (voir « Qui a du
-      code » ci-dessous)
-- [x] **`ModelConfig.reasoning` → `is_reasoning`, avec un defaut** (`= True`)
-      au lieu d'etre requis. Le nom leve la collision : dans le meme
-      `configs/models.json`, `reasoning` cote `provider` designe le **nom du
-      champ** a lire dans la reponse, `is_reasoning` cote `models` est un
-      **booleen**. Les 3 entrees du JSON sont renommees avec
-- [x] **`RootModelConfig` supprime** (jamais importe, jamais instancie) et
-      **`core/llm/keyring.py` supprime** (sans emploi depuis qu'`APIKey` porte
-      l'etat du vivier). Deux items de « Prochaines actions » fermes
-- [ ] **Regression 1 — le repli sur modele inconnu ne replie plus.**
-      `agent_cli_helper.py:34` valide toujours `{"reasoning": False}` : la cle
-      n'existe plus, Pydantic est en `extra="ignore"`, donc elle est
-      **silencieusement jetee** et le repli rend le defaut du champ, `True` —
-      exactement l'inverse du profil conservateur decide le 2026-08-22.
-      Constate par `tests/test_agent_cli.py`, ou le test est passe en
-      `xfail(strict=True)` : il repassera au vert le jour de la correction, et
-      il faudra retirer la marque
-- [ ] **Regression 2 — dette ruff : 0 → 4.** `F401` sur
-      `core/config_models.py:3` (`RootModel` importe mais plus utilise depuis
-      la suppression de `RootModelConfig`) et **3 `I001`** : `core.config_models`
-      se trie avant `core.llm.*` et `core.models`, l'ordre des imports de
-      `core/agent/loop.py`, `core/agent_cli_helper.py` et `core/llm/client.py`
-      n'a pas suivi le renommage. `make format` les regle
-- [x] **Une cle inconnue reste silencieusement jetee** (`extra="ignore"` par
-      defaut chez Pydantic) : la structure n'est extensible qu'en apparence
-      tant que `extra=` n'est pas choisi explicitement — c'est d'ailleurs cette
-      politique par defaut qui produit la regression 1
-- [x] **Exemple MBPP de `core/constants.py` nettoye** : coquille
-      `Obvservation`, `assert ... == 2` dont le message passait apres un saut
-      de ligne, ``` ``` ``` recolle, et indentation du corps dans le
-      `final_answer`. **Le piege principal reste** (voir « Prochaines actions »)
-- [x] **`.gitignore` : `evaluations/` ajoute** — le dernier manque de Phase 0
-- [x] `tests/README.md` mis a jour : ligne du tableau et un paragraphe sur ce
-      qu'un test qui ne fait que *construire* attrape
+**2026-09-01, soir** (`b2bcaa4`) : `core/validators.py` → `core/config_models.py`
+(+ 6 imports), `RootModelConfig` et `core/llm/keyring.py` supprimes, exemple MBPP
+nettoye, `evaluations/` gitignore, et surtout **le trou de tests comble** —
+`tests/test_agent_cli.py`, aucun autre ne construisait `AgentMBPP` ni
+`AgentSWEBENCH`.
 
-- [x] `en.subject.pdf` + `RESUME.md` → RESUME complete (section MCP ajoutee :
-      definition, "les outils MCP sont les mains de l'agent", qui ecrit quoi)
-- [x] `core/models.py` → les 5 models Pydantic sont ecrits
-      (ex-`src/validators.py`, deplace en flat)
-- [x] `pyproject.toml` → rempli (2 cles a corriger, voir plus bas)
-- [x] `Makefile` → rempli
-- [x] Python 3.10 → `.venv` en 3.10.20, `requires-python` OK
-- [x] Arborescence flat layout → creee
-- [ ] `README.md` → toujours VIDE
-- [x] `.gitignore` → `.env`, `__pycache__`, `cache`, `moulinette`, `tests`,
-      et `evaluations/` ajoute le 2026-09-01 au soir
+**2026-09-02** (dans l'arbre de travail, **non commite**) : `ModelConfig`
+supprime, `is_reasoning` retire partout, consigne d'`assert` rendue dependante du
+bench. Detail en P2.5 bis et P2.1.
 
-### Qui a du code, au 2026-09-01
+### Trois bugs du 2026-09-01 qui valent d'etre sus
+
+1. **Les appels d'outils nus ne produisaient aucune observation.** L'exemple SWE
+   appelait `run_command(...)` sans `print()`. Or `executor.py:38` fait
+   `exec(code, ns)` : en `exec`, la valeur d'une expression isolee est **jetee**,
+   ce n'est pas un REPL. Un modele imitant l'exemple aurait lu des fichiers sans
+   rien voir et lance les tests sans resultat. **Echec silencieux total.**
+2. **`SWE_PROMPT_EXEMPLE` etait une `"""` ordinaire** : les `\n` et `\"` etaient
+   interpretes a la compilation de `constants.py`, donc 3 blocs sur 4 arrivaient
+   au modele en Python invalide. Corrige par `r"""`, verifie a l'`ast`.
+3. **`get_task_from_file()` appelee avec 1 argument sur 2, dans les deux CLI** :
+   `TypeError` a la construction, invisible parce qu'**aucun test ne construisait
+   les agents**. C'est ce trou qu'a comble `tests/test_agent_cli.py`.
+
+### Qui a du code
 
 | Ecrit | Encore vide |
 |---|---|
-| `core/models.py`, `core/constants.py`, `core/errors.py` | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
-| `core/config_models.py` (ex-`validators.py`), `core/api_key.py` | tout `sandbox/mcp_client/` |
-| `core/llm/client.py`, `core/llm/provider.py` (nouveau) | tout `mcp_tools/`, les 2 `mcp_tools_*.py` racine |
-| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | `agent_swebench/docker.py` |
-| `core/agent_cli_helper.py` (nouveau, 2026-09-01) | `sandbox_template.json` |
-| `agent_mbpp/` : `cli.py`, `__main__.py` | `BENCHMARK_REPORT.md`, `README.md` |
-| `agent_swebench/` : `cli.py`, `__main__.py`, `__init__.py` (2026-09-01) | |
-| `sandbox/executor.py`, `configs/models.json` (nouveau) | |
-| `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | |
+| `core/` : `models.py`, `config_models.py`, `errors.py`, `constants.py`, `api_key.py`, `agent_cli_helper.py` | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
+| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `sandbox/mcp_client/` |
+| `core/llm/` : `client.py`, `provider.py` | tout `mcp_tools/` + les 2 `mcp_tools_*.py` racine |
+| `agent_mbpp/`, `agent_swebench/` (sauf `docker.py`) | `agent_swebench/docker.py` |
+| `sandbox/executor.py`, `configs/models.json` | `sandbox_template.json` |
+| `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | `BENCHMARK_REPORT.md`, `README.md` |
 
-**`core/llm/keyring.py` supprime** (2026-09-01, soir) : vide et sans emploi
-depuis qu'`APIKey` porte l'etat du vivier. `core/llm/` ne contient plus que
-`client.py` et `provider.py`.
-
-**`core/llm/response.py` supprime** : `LLMResponse` a demenage dans
-`core/config_models.py` (ex-`core/validators.py`, renomme le 2026-09-01 au
-soir), aux cotes de `ProviderConfig` et `ModelConfig`.
-
-→ Il y a **deux** fichiers de models Pydantic, et le critere qui les separe se
-dit en une phrase : **qui possede le schema.**
-
-| Fichier | Schema possede par | Ce qu'on a le droit d'y ecrire |
-|---|---|---|
-| `core/models.py` | la moulinette (`moulinette/models_public.py`) | rien de neuf : c'est une copie, un `diff` doit le prouver |
-| `core/config_models.py` | nous (`LLMResponse`, `ProviderConfig`, `ModelConfig`) | ce qu'on veut, ca bouge a chaque fournisseur ajoute |
-
-Le premier ne bouge jamais et un champ ajoute casse l'evaluation en silence ;
-le second vit. C'est ce critere qu'on defend en soutenance, pas « les models
-d'un cote, les validateurs de l'autre » — qui ne dit rien de ce qu'on peut
-ecrire ou non dans chaque fichier.
-
-**Reste une classe a cheval : `SandboxConfig`.** Elle est dans
-`models_public.py` (forme imposee, defauts vides) mais notre copie porte nos
-valeurs — la liste d'imports, `/testbed`, 30 s, 512 Mo. C'est le seul des cinq
-models a n'etre **jamais echange** avec la moulinette. La moulinette elle-meme
-resout ce cas par heritage (`moulinette/moulinette/models.py:23` sous-classe
-son propre modele public pour y mettre ses defauts) : c'est le precedent a
-citer si on garde la classe dans le fichier contrat.
-
-**Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
-existent ; le sandbox execute du code et remonte `final_answer`, ce qui a
-debloque la boucle de P2. Restent le CLI/REPL, le manual, et tout MCP.
-
-**Branche `origin/ndi-tull` non mergee** (au 2026-09-01) : elle est a
-`eedbf20` « Thread SandboxConfig through execute() », en avance sur ce que
-`thomas` contient. A rapatrier avant de mesurer quoi que ce soit, sinon les
-deux moities divergent.
-
-**`core/llm/usage.py` supprime** (decision du 2026-08-14) : le suivi d'usage
-vit dans `Loop` (`usage_input` / `usage_output` / `requests`), un module
-separe aurait duplique l'etat sans proprietaire clair.
-
-### Arborescence (`+` ecrit, `.` encore vide)
+Trois modules supprimes, avec leur raison : **`usage.py`** (le suivi d'usage vit
+dans `Loop`, un module separe aurait duplique l'etat sans proprietaire),
+**`response.py`** (`LLMResponse` a demenage dans `config_models.py`),
+**`keyring.py`** (sans emploi depuis qu'`APIKey` porte l'etat du vivier).
 
 ```
 racine         . mcp_tools_mbpp.py  . mcp_tools_swebench.py
@@ -223,7 +88,6 @@ core/          + models.py  + config_models.py  + errors.py  + constants.py
                + api_key.py  + agent_cli_helper.py
   agent/       + loop.py  + extraction.py  + prompt.py
   llm/         + client.py  + provider.py
-               (usage.py, response.py et keyring.py supprimes)
 sandbox/       . cli.py  + executor.py  . manual.py
   security/    + imports.py  + filesystem.py  + builtins.py  + network.py
                + ast_guard.py  . limits.py
@@ -232,25 +96,30 @@ mcp_tools/     . tools_fs.py  . tools_search.py  . tools_exec.py
 agent_mbpp/    + __main__.py  + cli.py
 agent_swebench/+ __main__.py  + cli.py  . docker.py
 configs/       + models.json
-tests/         + banc d'essai local, gitignore, hors rendu (293 tests)
+tests/         + banc d'essai local, gitignore, hors rendu (295 tests)
 ```
 
-**`core/constants.py` heberge desormais les deux exemples de prompt**
-(`SWE_PROMPT_EXEMPLE`, `MBPP_PROMPT_EXEMPLE`), d'ou l'exemption `E501` du
-`pyproject.toml`. A rouvrir si le fichier grossit : un module dedie
-(`core/agent/prompt_examples.py`) permettrait de n'exempter que lui.
+### Deux fichiers de models Pydantic — le critere est « qui possede le schema »
 
-### Flat layout coherent (3 corrections faites)
+| Fichier | Schema possede par | Ce qu'on a le droit d'y ecrire |
+|---|---|---|
+| `core/models.py` | la moulinette (`models_public.py`) | rien de neuf : c'est une copie, un `diff` doit le prouver |
+| `core/config_models.py` | nous (`LLMResponse`, `ProviderConfig`) | ce qu'on veut, ca bouge a chaque fournisseur ajoute |
 
-- [x] 1. `[project.scripts]` = `"sandbox.cli:main"` (plus de prefixe `src`)
-- [x] 2. `[tool.hatch...]` packages = `core`, `sandbox`, `agent_mbpp`,
-       `agent_swebench`, `mcp_tools`
-- [x] 3. `src/` supprime : `validators.py` → `core/models.py` (`git mv`),
-       `__main__.py` vide supprime.
+Le premier ne bouge jamais et un champ ajoute casse l'evaluation en silence ; le
+second vit. C'est ce critere qu'on defend, pas « les models d'un cote, les
+validateurs de l'autre » — qui ne dit rien de ce qu'on peut ecrire dans chaque.
 
-**Reste a verifier :** `uv run sandbox` ne marchera qu'une fois
-`sandbox/cli.py:main()` ecrit (le fichier est encore vide).
+- [ ] **`SandboxConfig` est a cheval sur cette frontiere** : forme imposee par
+      `models_public.py`, valeurs par defaut a nous (imports, `/testbed`, 30 s,
+      512 Mo). C'est le seul des cinq models **jamais echange** avec la
+      moulinette. Trois sorties, par ordre de preference — sous-classer comme le
+      fait la moulinette elle-meme (`moulinette/moulinette/models.py:23`),
+      externaliser les valeurs dans `sandbox_template.json` (**vide
+      aujourd'hui**, alors que le `Makefile` le propose en `CONFIG=`), ou assumer
+      la divergence en la commentant.
 
+---
 
 ## Rappel des limites
 
@@ -271,180 +140,72 @@ tests/         + banc d'essai local, gitignore, hors rendu (293 tests)
 
 ---
 
-## Dependances & imports
+## Phase 0 — faite
 
-### `pyproject.toml`
+Setup uv, `pyproject.toml`, Python 3.10 (`.venv` en 3.10.20), Makefile,
+`.gitignore` (`.env`, `__pycache__`, `cache`, `tests`, `moulinette`,
+`evaluations/`), flat layout (`src/` supprime, `[project.scripts]` et
+`[tool.hatch]` corriges), les **5 models Pydantic** figes, l'interface
+`execute(code, config) → (stdout, stderr, error, is_final, answer)` stabilisee et
+en service, chargement du `.env` et de `configs/models.json` dans les CLI.
 
-*(ECRIT — relire les 2 cles signalees en Etat actuel)*
+- [ ] **Relire `core/models.py` champ par champ contre le sujet (V.3 / V.4)**
+      avant d'aller plus loin. Une signature fausse casse les deux moities du
+      projet et n'est detectee qu'a la validation moulinette.
+- [ ] `uv run sandbox` ne marchera qu'une fois `sandbox/cli.py:main()` ecrit.
 
-```toml
-[project]
-name = "agent-smith"
-requires-python = "==3.10.*"
-dependencies = [
-    "pydantic>=2.0",        # models imposes par le sujet
-    "mcp>=1.2",             # SDK officiel MCP (serveur + client)
-    "httpx>=0.27",          # appels HTTP vers les APIs LLM
-    "python-dotenv>=1.0",   # chargement du .env passe a l'eval
-    "docker>=7.0",          # containers SWE-bench (ou subprocess docker CLI)
-]
+### Dependances
 
-[project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.6"]
+`pydantic>=2`, `mcp>=1.2`, `httpx>=0.27`, `python-dotenv>=1`, `docker>=7` ;
+dev : `pytest>=8`, `ruff>=0.6`.
+**INTERDIT** (reimplementent l'orchestration) : `smolagents`, `langgraph`,
+`crewai`, `autogen`, `llama-index`, `langchain-agents`.
+Optionnels selon les choix : `openai` (si SDK plutot que httpx brut), `psutil`
+(RAM), `tiktoken` (fallback de comptage — normalement inutile, l'API renvoie
+`usage`).
 
-[project.scripts]
-sandbox = "sandbox.cli:main"   # -> uv run sandbox  (flat layout :
-                               #    PAS "src.sandbox.cli:main")
+**Sandbox = stdlib uniquement.** `ast` (validation avant exec), `builtins` +
+`importlib` (allowlists), `sys`, `os.path`/`pathlib` (`realpath` pour l'allowlist
+FS), `resource` (`RLIMIT_AS`/`RLIMIT_CPU`), `signal`, `multiprocessing`
+(isolation, approche recommandee), `subprocess` (serveur MCP stdio, docker),
+`socket` (neutralisation reseau), `io`/`contextlib` (capture de sortie),
+`traceback`, `types`, `threading`/`queue`, `tempfile`, `json`, `time`.
 
-[tool.hatch.build.targets.wheel]
-packages = ["core", "sandbox", "agent_mbpp", "agent_swebench", "mcp_tools"]
-```
+**MCP** — serveur : `from mcp.server.fastmcp import FastMCP`. Client (les **deux**
+transports sont obligatoires) : `ClientSession`, `StdioServerParameters`,
+`mcp.client.stdio.stdio_client`, `mcp.client.streamable_http.streamablehttp_client`.
+C'est `list_tools()` qui alimente la generation du manuel. *(verifier les
+signatures selon la version installee)*
 
-**Optionnel selon les choix :**
-
-| Paquet | Quand |
-|---|---|
-| `openai>=1.0` | si on passe par le SDK OpenAI plutot que httpx brut (tous les providers vises sont OpenAI-compatible) |
-| `psutil` | si on veut mesurer la RAM autrement que par `resource` |
-| `tiktoken` | fallback de comptage de tokens (normalement inutile : l'API renvoie `usage.prompt_tokens` / `completion_tokens`) |
-
-**INTERDIT** (reimplementent l'orchestration d'agents) : `smolagents`,
-`langgraph`, `crewai`, `autogen`, `llama-index`, `langchain-agents`.
-
-### Imports stdlib pour le SANDBOX
-
-Securite = **stdlib uniquement**.
-
-| Module | Usage |
-|---|---|
-| `ast` | parsing/validation du code avant exec, detection des imports |
-| `builtins` | construction du dict de builtins restreints |
-| `importlib` | hook d'import custom pour l'allowlist |
-| `sys` | `sys.modules`, `sys.path`, redirection stdout/stderr |
-| `os`, `os.path` | resolution des chemins (`realpath`) pour l'allowlist FS |
-| `pathlib` | manipulation de chemins |
-| `resource` | `RLIMIT_AS` (memoire), `RLIMIT_CPU` → limites dures |
-| `signal` | `SIGALRM` / `SIGKILL` pour le timeout |
-| `multiprocessing` | isolation dans un process separe (approche recommandee) |
-| `subprocess` | lancement du serveur MCP stdio, commandes docker |
-| `socket` | neutralisation du reseau (monkeypatch avant exec) |
-| `io` | `StringIO` pour capturer la sortie |
-| `contextlib` | `redirect_stdout` / `redirect_stderr` |
-| `traceback` | formatage des erreurs renvoyees au LLM |
-| `types` | construction de modules/namespaces |
-| `threading`, `queue` | communication et watchdog |
-| `tempfile` | zone scratch |
-| `json` | configs, serialisation |
-| `time`, `datetime` | metriques et timestamps |
-
-### Imports MCP (SDK officiel)
-
-**Serveur :**
-
-```python
-from mcp.server.fastmcp import FastMCP
-```
-
-**Client** (les DEUX transports sont obligatoires) :
-
-```python
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from mcp.client.streamable_http import streamablehttp_client
-```
-
-Session : `list_tools()` / `call_tool()` / `list_resources()` / `list_prompts()`
-→ c'est `list_tools()` qui alimente la generation dynamique du manuel.
-*(verifier la signature exacte selon la version du SDK installee)*
-
-### Dependances a installer DANS le container SWE-bench (optionnel)
-
-| Paquet | Pourquoi |
-|---|---|
-| `jedi` | tres utile pour `find_references` / resolution de symboles |
-| `ruff` | verification syntaxe/lint apres un `edit_file` |
-| `tree` | exploration rapide de l'arborescence |
-
----
-
-## Phase 0 — a faire ensemble, en premier (BLOQUANT)
-
-Tant que ce n'est pas fige, chacun code contre du vide.
-
-- [x] Setup uv + `pyproject.toml` + Python 3.10 + structure de dossiers
-- [x] Makefile (install / run / lint / clean)
-- [x] `.gitignore` (`.env`, `__pycache__`, `cache`, `tests`, `moulinette`,
-      `evaluations/`)
-- [x] **FIGER TOUS les models Pydantic** (`core/models.py`) :
-  - [x] `SandboxConfig` — `authorized_imports`, `allowed_directories`,
-        `max_execution_time_seconds`, `max_memory_mb`
-  - [x] `MBPPTaskInput` — `task_id`, `task_definition`, `function_definition`,
-        `test_imports`, `test_list`
-  - [x] `SWEBenchTaskInput` — `instance_id`, `problem_statement`, `docker_image`,
-        `eval_script`, `hints_text`, `repo` (l'heritage `BaseException` est corrige)
-  - [x] `StepMetrics` — `step`, `input_tokens`, `output_tokens`, `request_time_ms`,
-        `timestamp`, `api_url`, `model_name`, `llm_output`, `sandbox_input`,
-        `sandbox_output`, `retries`
-  - [x] `SolutionOutput` — `task_id`, `benchmark`, `success`, `solution`,
-        `iterations`, `total_requests`, `total_input_tokens`, `total_output_tokens`,
-        `total_time_seconds`, `steps`, `system_prompt`, `error`, `timestamp`
-
-  **Reste :** relire champ par champ contre le sujet (V.3 / V.4) avant de coder
-  dessus. Une signature fausse ici casse les deux moities du projet et n'est
-  detectee qu'a la validation moulinette.
-- [x] **Interface Sandbox ↔ Orchestrateur figee et en service :**
-  - `execute(code, config)` → `(stdout, stderr, error, is_final, answer)`
-  - `sandbox_input` = le bloc extrait, `sandbox_output` = `stdout + stderr`
-    (+ `error` s'il y en a un), remis a zero en tete de chaque tour
-  - `final_answer()` remonte par `is_final` / `answer` — un **fait
-    d'execution**, jamais une relecture du source. La boucle exige en plus que
-    `answer` soit une `str`
-  - la config part en `model_copy()` : le budget du tour n'ecrase pas le
-    reglage injecte
-- [x] Chargement `.env` (`OPENROUTER_API_KEY`, liste separee par virgules)
-- [x] Chargement de la config JSON des modeles → `configs/models.json` lu et
-      valide dans `agent_mbpp/cli.py` (cf. P2.5 bis)
+Dans le container SWE-bench (optionnel) : `jedi` (`find_references`), `ruff`
+(verification apres `edit_file`), `tree`.
 
 ---
 
 ## Personne 1 — ndi-tull : Execution & Outils
 
-Domaine : tout ce qui execute du code et touche au systeme.
-Livrables : le sandbox, le serveur MCP, les 9 outils, l'integration Docker.
+### P1.1 — Sandbox (priorite absolue)
 
-### P1.1 — Sandbox (coeur du projet, priorite absolue)
+- [ ] Approche d'isolation (process separe recommande : timeout et RAM
+      applicables proprement)
+- [ ] Allowlist d'imports (`authorized_imports`, motifs `module.*`)
+- [ ] Allowlist filesystem (`allowed_directories`, chemins resolus **dans** le
+      sandbox)
+- [ ] Blocage reseau total, timeout d'execution, limite RAM, builtins restreints
+- [ ] Propagation de `KeyboardInterrupt` / `SystemExit` — **exigee par le
+      sujet**, deja tenue par `executor.py`, a garder sous test
+- [ ] Namespace = wrappers MCP decouverts dynamiquement + `final_answer`, rien
+      d'autre. `final_answer` est une primitive **du sandbox**, pas un outil MCP
 
-- [ ] Choisir l'approche d'isolation (process separe recommande : timeout et
-      limites RAM applicables proprement)
-- [ ] Allowlist d'imports (`authorized_imports`, support des motifs `module.*`)
-- [ ] Allowlist filesystem (`allowed_directories`, chemins resolus DANS le sandbox)
-- [ ] Blocage reseau total (entrant + sortant)
-- [ ] Timeout d'execution (uniquement le code sandboxe, **pas** les actions MCP)
-- [ ] Limite RAM (`max_memory_mb`)
-- [ ] Builtins restreints (retirer/surcharger les dangereux)
-- [ ] Propagation de `KeyboardInterrupt` / `SystemExit` (jamais captures en silence)
-- [ ] Injection de `final_answer()` dans le namespace
-      → primitive **du sandbox**, pas un outil MCP, toujours presente
-- [ ] Namespace = wrappers MCP decouverts dynamiquement + `final_answer`, rien d'autre
-
-#### Qui contient qui — la question tranchee par le sujet (p. 16)
-
-Ni le sandbox dans le serveur, ni le serveur dans le sandbox. **Le serveur MCP
-est un processus separe** ; ce qui vit dans le sandbox, c'est le **client**.
+#### Qui contient qui — tranche par le sujet (p. 16)
 
 ```
 Sandbox  ⊃  client MCP  --stdio/HTTP-->  serveur MCP (autre processus)  -->  outils
 ```
 
-> *"The sandbox is the central execution layer. It connects to an MCP server
-> and exposes its tools as callable Python functions within the sandbox
-> namespace. **The sandbox wraps the MCP client, not the other way around.**"*
+> *"The sandbox wraps the MCP client, not the other way around."*
 
 **Deux domaines de securite independants**, et c'est le point de soutenance :
-
-> *"The sandbox and MCP tools are independent security domains: the sandbox
-> restricts what LLM-generated Python code can do (imports, paths, timeout,
-> memory), while **MCP tool actions happen outside the sandbox**."*
 
 | | Ce qui est contraint | Par quoi |
 |---|---|---|
@@ -453,364 +214,270 @@ Sandbox  ⊃  client MCP  --stdio/HTTP-->  serveur MCP (autre processus)  -->  o
 
 Ce n'est **pas** un trou de securite, c'est ce qui rend le projet realisable :
 `run_command` doit pouvoir lancer un processus et `edit_file` ecrire dans
-`/testbed` — deux choses que `make_guarded_import` et `make_guarded_directory`
-interdisent formellement au code du modele. A savoir dire dans ces termes.
+`/testbed` — deux choses que le sandbox interdit formellement au code du modele.
 
-- [ ] **Le timeout du sandbox ne borne pas les appels MCP.** Le sujet est
-      explicite : *"The sandbox timeout only applies to code block executed
-      within the sandbox. Actions performed by the MCP server (e.g., spawning
-      external processes) are not subject to the sandbox timeout."*
-      Consequence concrete : `max_execution_time_seconds = 30` ne coupe pas un
-      `run_tests()` qui part lancer une suite sympy pendant 3 minutes, alors
-      que SWE-bench plafonne a 900 s au total. **Il faut une echeance cote
-      appel d'outil.** C'est le meme probleme que P2 a deja resolu cote LLM
-      (thread + `join(timeout=...)`, cf. P2.3) — la solution est transposable
+- [ ] **Le timeout du sandbox ne borne pas les appels MCP** (*"Actions performed
+      by the MCP server are not subject to the sandbox timeout"*).
+      `max_execution_time_seconds = 30` ne coupe pas un `run_tests()` qui lance
+      une suite sympy pendant 3 minutes, alors que SWE-bench plafonne a 900 s.
+      **Il faut une echeance cote appel d'outil** — meme probleme que P2 a resolu
+      cote LLM (thread + `join(timeout=...)`, cf. P2.3), solution transposable
 
 ### P1.2 — Feedback au LLM
 
-*Souvent oublie, mais explicitement exige.*
+*Souvent oublie, explicitement exige.* Aucun echec silencieux, sinon le LLM
+hallucine ses observations.
 
-- [ ] aucun bloc de code trouve
-- [ ] bloc malforme mais interprete quand meme → expliquer comment
-- [ ] timeout atteint → renvoyer la sortie partielle
-- [ ] sortie tronquee (limite de taille) → le dire
-- [ ] edit ayant casse la syntaxe / le lint
-
-→ **Aucun echec silencieux** : sinon le LLM hallucine ses observations.
+- [ ] aucun bloc trouve / bloc malforme interprete quand meme (dire comment) /
+      timeout atteint (renvoyer la sortie partielle) / sortie tronquee (le dire) /
+      edit ayant casse la syntaxe ou le lint
 
 ### P1.3 — CLI sandbox
 
-- [ ] `uv run sandbox` (REPL interactif)
-- [ ] `uv run sandbox sandbox_template.json` (config custom)
-- [ ] `uv run sandbox --mcp-stdio "python mcp_tools_mbpp.py" sandbox_template.json`
-- [ ] `uv run sandbox --mcp-server <URL>` (HTTP streamable)
-- [ ] REPL : memes restrictions, sortie propre sur `exit` et Ctrl+D (EOF)
+- [ ] `uv run sandbox` (REPL), `... sandbox_template.json` (config custom),
+      `--mcp-stdio "python mcp_tools_mbpp.py"`, `--mcp-server <URL>` (HTTP)
+- [ ] REPL : memes restrictions, sortie propre sur `exit` **et** Ctrl+D (EOF)
 
 ### P1.4 — MCP
 
-- [ ] Serveur MCP : transports stdio **et** HTTP streamable
-- [ ] Client MCP integre dans le sandbox
-- [ ] Decouverte dynamique → doit marcher avec un serveur MCP **inconnu**
-- [ ] Exposition des tools + resources + prompts
-- [ ] Wrappers Python generes automatiquement depuis les schemas
-- [ ] Generation dynamique du "sandbox manual" (noms, descriptions, params)
-      → change automatiquement si on branche un autre serveur MCP
-
-#### La chaine complete, et ou elle casse (releve du 2026-09-01)
+- [ ] Serveur : transports stdio **et** HTTP streamable
+- [ ] Client integre dans le sandbox, decouverte dynamique, tools + resources +
+      prompts, wrappers generes depuis les schemas
+- [ ] Generation dynamique du **sandbox manual** depuis les schemas du serveur
 
 ```
 prompt (manuel)      <- decouverte <- serveur MCP
 namespace du sandbox -> wrapper    -> client MCP -> serveur -> outil
 ```
 
-Trois maillons sur cinq sont vides : `sandbox/mcp_client/` (`client.py`,
-`transports.py`), `mcp_tools/`, et la generation du manuel. Le namespace de
-`executor.py:32` ne contient toujours que `final_answer`.
+Trois maillons sur cinq sont vides : `sandbox/mcp_client/`, `mcp_tools/`, et la
+generation du manuel. Le namespace d'`executor.py:32` ne contient toujours que
+`final_answer`.
 
-**Citations du sujet a garder sous la main** (§ V.4, p. 14-16) :
-
-> *"The sandbox provides two kinds of callable functions in the execution
-> namespace: (a) MCP tool wrappers, discovered dynamically from the connected
-> MCP server ; (b) final_answer, always present, provided by the sandbox
-> itself. When you connect a different MCP server, the MCP tool wrappers
-> change but final_answer remains."*
-
-> *"The sandbox manual should be dynamically generated from the connected MCP
-> server's tool schemas — tool names, descriptions, and parameter types. [...]
-> The manual is what the LLM reads to understand what tools are available and
-> how to call them."*
-
-> *"The system will be tested with an unknown MCP server."*
-> *"Your mandatory tools are only present when your own MCP server is
-> connected."*
-
-**Ce que ca impose, point par point :**
-
-- [ ] Le manuel contient le **contrat** (nom, description, types des
-      parametres), **jamais le code** de l'outil. Le modele doit savoir ce que
-      fait la fonction, pas comment — l'implementation peut changer sous lui
-      (cf. le *"depending on the implementation"* de `get_patch()`)
+- [ ] Le manuel contient le **contrat** (nom, description, types), **jamais le
+      code** : l'implementation peut changer sous le modele
 - [ ] Une liste d'outils **ecrite en dur** passerait nos 3 taches et
-      **echouerait a l'evaluation** : le serveur de test est inconnu. La
-      decouverte n'est pas un confort, c'est la condition de la note
-- [ ] Le wrapper est une simple entree du dict `ns` d'`executor.py`. Quand le
-      LLM ecrit `run_tests()`, Python resout le nom dans ce dict : **aucune
-      magie**. Consequence de securite : un `def run_tests():` ecrit par le
-      modele **ecrase le wrapper**. C'etait le bug de l'ancien exemple SWE, ou
-      le modele redefinissait `get_patch()` et fabriquait son propre diff —
-      un contournement complet du dispositif, a tester explicitement (P1.7)
+      **echouerait a l'evaluation** (*"The system will be tested with an unknown
+      MCP server"*). La decouverte n'est pas un confort, c'est la condition de la
+      note
+- [ ] Le wrapper est une entree du dict `ns` d'`executor.py` : **aucune magie**,
+      donc un `def run_tests():` ecrit par le modele **ecrase le wrapper**. Vu
+      pour de vrai dans un ancien exemple, ou le modele redefinissait
+      `get_patch()` et fabriquait son propre diff (cf. P1.7)
 
 **Interface avec P2 :** le manuel est le livrable que consomme `Prompt(tools=)`.
 Tant qu'il n'existe pas, les deux CLI passent `tools=None` et le prompt affiche
-litteralement "None" au modele. Il faut donc s'accorder sur **le format rendu**
-(une liste de chaines ? de dicts ? deja mis en forme ?) — P2 ne fait que
-l'inserer, il ne le compose pas.
+litteralement "None". **Le format rendu est l'interface** — liste de chaines ? de
+dicts ? deja mise en forme ? P2 insere, il ne compose pas.
 
 ### P1.5 — Les 9 outils obligatoires
 
 *Testes independamment de la boucle.*
 
-**Filesystem :**
+- [ ] **FS** : `read_file(filepath, start_line, end_line)` (format `cat -n` :
+      `"<line>: <content>"`), `edit_file(filepath, old_str, new_str)`
+      (remplacement exact), `list_files(directory, pattern)`
+- [ ] **Recherche** (format commun `/abs/path.py:<line> <content>`) :
+      `search_code`, `search_function_or_class_definition_in_code`,
+      `find_references`
+- [ ] **Execution** : `run_tests()` (lance l'`eval_script`), `get_patch()` (git
+      diff unifie), `run_command(command, workdir)`
+- [~] `mcp_tools_mbpp.py` et `mcp_tools_swebench.py` a la **racine** (crees, vides)
 
-- [ ] `read_file(filepath, start_line, end_line)` → format `cat -n` :
-      `"<line_number>: <content>"`
-- [ ] `edit_file(filepath, old_str, new_str)` → remplacement exact
-- [ ] `list_files(directory, pattern)`
+La logique va dans `mcp_tools/` (`tools_fs`, `tools_search`, `tools_exec`) ; les
+2 fichiers racine ne sont que des points d'entree fins, l'emplacement etant
+impose.
 
-**Recherche** (format commun : `/abs/path.py:<line> <content>`) :
-
-- [ ] `search_code(pattern, file_pattern)`
-- [ ] `search_function_or_class_definition_in_code(name)`
-- [ ] `find_references(name, filepath, line)`
-
-**Execution :**
-
-- [ ] `run_tests()` → lance l'`eval_script`
-- [ ] `get_patch()` → git diff unifie
-- [ ] `run_command(command, workdir)` → stdout, stderr, exit code
-
-- [~] `mcp_tools_mbpp.py` **a la racine** du repo (fichier cree, vide)
-- [~] `mcp_tools_swebench.py` **a la racine** du repo (fichier cree, vide)
-
-**Cote MBPP, le sujet exige un outil lui aussi** (§ V.3, point 2, souvent
-oublie parce que les 9 outils du § V.5 sont annonces "in the context of the
-SWE-bench benchmark") :
-
-- [ ] `run_tests` pour MBPP → `mcp_tools_mbpp.py`. **Aucune signature ni
-      format de sortie imposes** par le sujet, contrairement aux 9 outils SWE.
-      Liberte de conception, donc charge de la defendre en soutenance
-- [ ] Decider si c'est le **meme** outil que le `run_tests()` du § V.5.3
-      (qui lance l'`eval_script` du conteneur) ou une seconde implementation :
-      cote MBPP il n'y a pas d'`eval_script`, la specification ce sont les
-      `test_list` de la tache. Meme nom, deux sources de verite
-- [ ] Prevenir P2 des que c'est livre : le branchement cote prompt et la
-      campagne d'ablation qui va avec sont decrits dans « Prochaines actions »
-
-→ la logique des 9 outils va dans le package `mcp_tools/` (`tools_fs.py`,
-`tools_search.py`, `tools_exec.py`) ; les 2 fichiers racine ne sont que des
-points d'entree fins, l'emplacement racine etant impose par le sujet.
+- [ ] **`run_tests` MBPP** — exige par le § V.3 point 2, souvent oublie parce que
+      les 9 outils sont annonces "in the context of SWE-bench". **Aucune
+      signature ni format imposes**, donc liberte de conception et charge de la
+      defendre. **A trancher avec P2** : le `run_tests()` du § V.5.3 lance
+      l'`eval_script` du conteneur ; cote MBPP il n'y a pas d'`eval_script`, la
+      specification ce sont les `test_list`. Meme nom, deux sources de verite —
+      un outil parametre ou deux implementations ?
 
 ### P1.6 — Docker / SWE-bench
 
-- [ ] Choisir : sandbox **dans** le container, ou sandbox sur l'hote + outils MCP
-      faisant le pont vers Docker (les 2 sont valides). **C'est LA decision
-      d'architecture** : elle change l'implementation des 9 outils en entier,
-      pas un detail. Ce qui ne bouge pas dans les deux cas : le serveur MCP
-      reste un processus distinct du sandbox, et le client reste dedans
-      (cf. P1.1, « Qui contient qui »)
-  - **(a) sandbox + serveur MCP DANS le conteneur** — les outils manipulent des
-    chemins locaux, implementation simple. Prix a payer : installer nos
-    dependances (`mcp`, `pydantic`...) dans l'image, **dans l'environnement
-    conda `testbed`** (l'image SWE-bench en a un, cf. l'`eval_script`)
-  - **(b) sandbox sur l'hote, serveur MCP faisant le pont par `docker exec`** —
-    l'image reste intacte, mais chacun des 9 outils devient un aller-retour
-    vers le conteneur
-- [ ] Pull / run de l'image (`docker_image` de la tache)
-- [ ] Montage de `${TESTBED_PATH}` si necessaire
+- [ ] **LA decision d'architecture** — elle change l'implementation des 9 outils
+      en entier. Ce qui ne bouge pas dans les deux cas : le serveur MCP reste un
+      processus distinct, le client reste dans le sandbox
+  - **(a) sandbox + serveur MCP DANS le conteneur** : chemins locaux,
+    implementation simple. Prix : installer `mcp`, `pydantic`... dans l'image,
+    **dans l'environnement conda `testbed`**
+  - **(b) sandbox sur l'hote, serveur MCP faisant le pont par `docker exec`** :
+    l'image reste intacte, mais chaque outil devient un aller-retour
+- [ ] Pull / run de l'image, montage de `${TESTBED_PATH}` si necessaire
 - [ ] `git -c core.fileMode=false diff` pour `get_patch()`
-- [ ] **Cleanup des containers** apres execution (a notre charge, exige)
+- [ ] **Cleanup des containers** apres execution (exige)
 
 ### P1.7 — Tests de securite
 
-`exam_sandbox.sh` : **tout** doit passer.
+`exam_sandbox.sh` : **tout** doit passer. Ecrire nos propres tests **avant**
+l'eval.
 
-- [ ] blocage d'import
-- [ ] blocage de builtin
-- [ ] blocage reseau
-- [ ] restriction de chemin
-- [ ] timeout
-- [ ] limite memoire
-- [ ] protocole MCP
-- [ ] **Masquage d'un wrapper MCP** : le code du LLM qui fait
-      `def run_tests(): ...` ou `def get_patch(): ...` ecrase l'entree du dict
-      `ns` et contourne l'outil. Vu pour de vrai dans un exemple de prompt, ou
-      le modele redefinissait `get_patch()` pour rendre un diff invente.
-      Decider : on laisse (c'est le namespace du modele, il se sabote seul),
-      on detecte, ou on refuse. Dans tous les cas, savoir le dire (cf. P1.4)
-- [ ] `KeyboardInterrupt` / `SystemExit` **ne doivent pas** etre avales par le
-      sandbox : le sujet l'exige explicitement pour l'arret propre de la boucle.
-      Deja tenu par `executor.py` (`except (KeyboardInterrupt, SystemExit):
-      raise`) — a garder sous test pour que ca ne regresse pas
-
-→ Ecrire nos propres tests pour chacun **avant** l'eval.
+- [ ] import, builtin, reseau, chemin, timeout, memoire, protocole MCP
+- [ ] **Masquage d'un wrapper MCP** (`def run_tests(): ...` ecrase l'entree du
+      dict `ns`). Decider : on laisse (le modele se sabote seul), on detecte, ou
+      on refuse. Dans tous les cas, savoir le dire
+- [ ] `KeyboardInterrupt` / `SystemExit` non avales — sous test pour ne pas
+      regresser
 
 ---
 
 ## Personne 2 — tchemin : Agent & Intelligence
 
-Domaine : tout ce qui parle au LLM et pilote le raisonnement.
-Livrables : la boucle agent, la couche providers, les prompts, les 2 CLI,
-le rapport de benchmark.
+### P2.1 — Boucle agentique *(faite)*
 
-### P2.1 — Boucle agentique
+Boucle Thought → Code → Observation complete, verifiee sur 15 taches MBPP
+reelles et 2 modeles. `max_iterations` parametrable via `constants.Bench`.
+Arret sur `final_answer()` (detecte par `is_final`/`answer` rendus par
+`execute()` — un **fait d'execution**, jamais une relecture du source), sur
+limite atteinte, ou sur erreur fatale (`Transient` → retry, `Permanent` →
+abandon propre ; rien ne sort des deux familles, 16 cas parametres).
+`max_tokens` de chaque requete derive du budget restant.
 
-*100% maison, frameworks interdits.*
+**Deux corrections issues de la mesure (2026-08-16), a savoir redire :**
 
-- [x] Boucle Thought → Code → Observation → complete et verifiee sur taches
-      reelles (15 taches MBPP, 2 modeles)
-- [x] `max_iterations` parametrable → via `constants.Bench.iterations`,
-      injecte dans `Loop` (MBPP 10 / SWE 30)
-- [x] Arret sur `final_answer()` / limite atteinte / erreur fatale
-  - [x] limites tokens + timeout testees en tete de `run()`
-  - [x] `final_answer()` detecte via `is_final` / `answer` rendus par
-        `execute()` — un fait d'execution, pas une relecture du source
-  - [x] la reponse finale doit etre une `str`, sinon observation au modele
-  - [x] erreur fatale : `Transient` → retry, `Permanent` → abandon propre.
-        Rien ne sort des deux familles (16 cas parametres en test)
-- [x] Construction de l'historique → assistant apres chaque `thought()`,
-      observation apres chaque execution
-- [x] Gestion de la taille du contexte → `max_tokens` de chaque requete
-      derive du budget restant, arret propre a l'epuisement
-- [x] Aucun crash possible : 183 tests (78 client, 52 boucle, 20 extraction,
-      19 provider, 10 samples, 4 stop sequences), dont 16 sur l'etancheite de
-      la hierarchie d'exceptions
+- **Message d'observation.** Le rappel "aucun `final_answer` capture" n'existait
+  que dans la branche "sortie vide" : un code qui affichait quelque chose
+  recevait sa propre sortie sans un mot sur `final_answer`, et le modele
+  concluait qu'il avait fini. Constate sur MBPP 453, **3 tours perdus**. Les deux
+  faits se composent maintenant dans un seul message.
+- **Comptabilite des etapes.** Une sortie par garde posterieure a une requete
+  aboutie n'enregistrait pas son `StepMetrics`. Invariants tenus desormais : une
+  etape par iteration, numerotation depuis 1 sans trou, totaux egaux a la somme
+  des etapes, aucune etape avant la premiere requete.
 
-**Corrige le 2026-08-16 — message d'observation.** Le rappel "aucun
-`final_answer` capture" n'existait que dans la branche "sortie vide" : un code
-qui affichait quelque chose recevait sa propre sortie sans un mot sur
-`final_answer`, et le modele concluait qu'il avait fini. Constate sur la tache
-MBPP 453 (3 tours perdus a renvoyer le meme bloc). Les deux faits — la sortie
-du programme et le rappel — se composent maintenant dans un seul message.
+- [x] **Consigne d'`assert` rendue dependante du bench** (2026-09-02). Le message
+      *"Make SURE to make AND print the asserts"* etait en dur dans
+      `observation()` et partait pour **les deux** benchmarks — cote SWE il
+      reclamait des asserts dont le prompt ne parle jamais. Il est desormais
+      ajoute seulement si `name_bench == BenchName.MBPP`
+- [ ] **Les `retries` d'un tour qui sort par une garde ne sont comptes nulle
+      part** : un rendu peut afficher `total_requests: 9` avec `steps: []`, sans
+      dire ce qui a echoue
 
-**Corrige le 2026-08-16 — comptabilite des etapes.** Une sortie par garde
-posterieure a une requete aboutie n'enregistrait pas son `StepMetrics` : les
-totaux ne valaient plus la somme des `steps`. Invariants tenus desormais sur
-les quatre familles de sortie : une etape par iteration, numerotation depuis 1
-sans trou ni doublon, totaux egaux a la somme des etapes, et **aucune** etape
-pour une sortie anterieure a la premiere requete.
+### P2.2 — Extraction de code *(faite)*
 
-→ **Reste :** les `retries` d'un tour qui sort par une garde ne sont comptes
-nulle part (un rendu peut afficher `total_requests: 9` avec `steps: []`, sans
-dire ce qui a echoue).
+Blocs ` ```python ... ``` ` + `<end_code>`. Retour a 3 cles : `code`, `found`,
+`format` (`"python"` si le bloc parse, `""` sinon, `None` si aucun bloc).
+Validation par `ast.parse` sans exception : une sortie tronquee ressort en
+`found=True` / `format=""`, le code invalide est conserve pour etre renvoye au
+modele en observation.
 
-### P2.2 — Extraction de code
+**Decision du 2026-08-12 : un seul format supporte.** XML `<invoke>`, JSON/Hermes
+et ReAct sont **abandonnes, pas reportes**. Quatre raisons :
 
-- [x] Blocs Python ` ```python ... ``` ` + `<end_code>` (format primaire)
-- [x] Retour a 3 cles : `code`, `found` (un bloc repere ?), `format`
-      (`"python"` si le bloc parse, `""` sinon, `None` si aucun bloc)
-- [x] Validation par `ast.parse` sans exception : une sortie tronquee ressort
-      en `found=True` / `format=""`, le code invalide est conserve pour etre
-      renvoye au modele en observation
+1. Le prompt systeme impose un format unique. Parser quatre formats quand on n'en
+   demande qu'un est une robustesse decorative.
+2. Deux des trois etaient **inatteignables par construction** : `</tool_call>` et
+   `<invoke>` sont dans `LLM_STOP_SEQUENCE`, la generation s'arrete avant.
+3. Le troisieme etait **nuisible** : `Action:` matchait n'importe ou dans la prose
+   et faisait tomber une reponse valide.
+4. La robustesse au format passe par la boucle : format non reconnu →
+   observation → nouvelle iteration.
 
-**Decision du 2026-08-12 : un seul format supporte.** Les trois autres sont
-abandonnes, pas reportes.
+→ Consequence traitee : `LLM_START_SEQUENCE` / `LLM_STOP_SEQUENCE` ne contiennent
+plus que ` ```python ` et `<end_code>`.
 
-- [-] ~~XML tool calls (style Anthropic `<invoke>`)~~
-- [-] ~~JSON / Hermes (`<tool_call>{...}</tool_call>`)~~
-- [-] ~~ReAct (`Action:` / `Action Input:`)~~
-- [-] ~~Conversion des formats non-Python → appels de fonction Python~~
-      (plus d'objet : sans format structure en entree, il n'y a rien a
-      convertir — la fonction `generate()` est devenue morte)
+### P2.3 — Couche LLM *(faite)*
 
-Raisons, a savoir redire en soutenance :
+`LLMClient` est le **seul** module qui importe `httpx`, injecte dans `Loop`, donc
+testable sans reseau. **`core/llm/provider.py`** : le client ne connait plus la
+*forme* des reponses — chaque champ (`choices`, `message`, `content`, `usage`,
+`reasoning`, `error`, `finish_reason`, en-tetes de delai) est designe par un nom
+lu dans `configs/models.json`. Brancher un second fournisseur devient une entree
+JSON, pas une branche `if`. Deux declares : `openrouter`, `groq`.
 
-1. Le prompt systeme impose un format unique (bloc + `<end_code>` +
-   `final_answer`). Parser quatre formats quand on n'en demande qu'un est une
-   robustesse decorative.
-2. Deux des trois etaient **inatteignables par construction** :
-   `</tool_call>` et `<invoke>` sont dans `LLM_STOP_SEQUENCE`, donc la
-   generation s'arrete avant que la balise soit emise.
-3. Le troisieme etait **nuisible** : le motif `Action:` matchait n'importe ou
-   dans la prose et faisait tomber une reponse par ailleurs valide.
-4. La robustesse au format passe desormais par la boucle : format non
-   reconnu → observation renvoyee au modele → nouvelle iteration.
+Multi-tokens + **rotation** : 429 fait tourner sans condamner, 402 marque la cle
+epuisee, vivier vide remonte en `Permanent`. Cles depuis env vars uniquement
+(`load_dotenv()` sans test de retour — le fichier est un confort local, la seule
+question posee est `os.getenv`). Erreurs API traduites en exceptions typees
+(champ `error` en HTTP 200, `choices` vide, `content` null des modeles de
+raisonnement, `usage` absent, corps non-JSON, timeout, erreur de transport).
 
-→ [x] Consequence traitee : `LLM_START_SEQUENCE` et `LLM_STOP_SEQUENCE`
-(`core/constants.py`) ne contiennent plus que ` ```python ` et `<end_code>`.
+**`core/api_key.py`.** Une cle est un objet, pas une chaine. Trois raisons : une
+`str` passee au lieu d'une liste etait indexee **caractere par caractere** (chaque
+requete partait avec `Bearer c` → 401, diagnostic impossible) ; marquer une cle
+epuisee plutot que la supprimer garde le vivier a taille stable, donc plus de
+rattrapage d'indice ; et `__repr__` ne divulgue rien.
 
-### P2.3 — Couche LLM
+**Echeance reelle sur les appels.** Le `timeout` de `httpx` est **par phase
+d'E/S, pas une duree totale** : mesure, un serveur qui envoie un octet par
+seconde traverse un `timeout=2` pendant 6 s. En reel, un appel a dure 98 s sous
+un plafond de 30 s et une tache MBPP a fini a 135,8 s → `Metrics valid: NO`.
+L'appel part maintenant dans un `threading.Thread(daemon=True)` + `join(timeout=)`.
+On n'interrompt pas le thread — impossible en Python — on l'**abandonne** ; le
+drapeau `daemon` empeche l'interpreteur de l'attendre a la sortie (8,65 s contre
+3,47 s sans). L'exception du thread est relevee **dans le meme `try`**, sinon les
+gestionnaires `httpx.*` ne voient plus rien passer. Le `timeout=` de `httpx` est
+conserve **en plus** : il coupe les serveurs muets, l'echeance borne les lents.
 
-- [x] Abstraction provider → `LLMClient` (`core/llm/client.py`) est le **seul**
-      module qui importe `httpx`. Injecte dans `Loop`, donc testable sans
-      reseau ni `monkeypatch` de `httpx`
-- [x] **`core/llm/provider.py` (2026-08-18)** — le client ne connait plus la
-      *forme* des reponses. Chaque champ (`choices`, `message`, `content`,
-      `usage`, `reasoning`, `error`, `finish_reason`, en-tetes de delai) est
-      designe par un nom lu dans `configs/models.json`. Brancher un second
-      fournisseur devient une entree JSON, pas une branche `if`. Deux
-      fournisseurs declares : `openrouter` et `groq`
-- [x] Multi-tokens par provider + **rotation** → 429 fait tourner sans
-      condamner, 402 marque la cle epuisee et saute les mortes, vivier vide
-      remonte en `Permanent`. Verifie sur 5 situations limites
-- [~] Fallback entre providers → la **configuration** est multi-provider, mais
-      le choix est fige au demarrage par `--provider-url`. Aucun basculement
-      automatique en cours de tache
-- [x] `stop_sequences` → `constants.LLM_STOP_SEQUENCE` envoye dans le payload
-- [x] Retry comptabilise dans `StepMetrics.retries` ; le **delai** vient
-      desormais de `Provider.get_retry_after()`, qui sait lire trois formes
-      d'en-tete — duree (`Retry-After`), date HTTP, et instant epoch
-      (`X-RateLimit-Reset`, en ms chez OpenRouter). Voir « recul entre deux
-      tentatives » ci-dessous
-- [x] Cles API depuis env vars uniquement → `load_dotenv()` sans test de
-      retour (le fichier est un confort local, pas une obligation), la seule
-      question posee est `os.getenv`. L'import ne leve plus jamais
-- [x] Liste de cles : `OPENROUTER_API_KEY=cle1,cle2,...`, entrees vides
-      filtrees, convention declaree dans `.env.example`
-- [x] Tracking complet : `usage_input` / `usage_output`, `request_time_ms`,
-      `total_requests`, `retries` par etape
-- [x] Erreurs API traduites en exceptions Python typees (champ `error` en
-      HTTP 200, `choices` vide, `content` null des modeles de raisonnement,
-      `usage` absent, corps non-JSON, timeout, erreur de transport)
-- [x] `reasoning` capture depuis `message.reasoning` et joint a `llm_output`
+**Recul entre deux tentatives (2026-08-22).** Trois pieces : `Provider.get_retry_after()`
+lit `X-RateLimit-Reset` — un **instant** epoch en millisecondes, pas une duree —
+et le convertit (format et echelle de chaque en-tete declares dans le JSON) ;
+`APIKey` porte un `next_retry_time` ; `get_next_api_key()` refuse toute clef dont
+le delai depasse le budget de la tache, la condamne, et recommence. Le piege
+etait dans l'ordre des tests : tant que le delai n'etait verifie que sur le
+candidat **immediat**, une clef atteinte en sautant une morte passait sans
+controle — avec 4 clefs, deux n'etaient jamais examinees.
 
-**`core/api_key.py` (2026-08-16).** Une cle est un objet `APIKey` avec son
-drapeau `usable`, pas une chaine. Trois raisons : une `str` passee au lieu
-d'une liste etait indexee **caractere par caractere** (chaque requete partait
-avec `Bearer c`, et le serveur repondait 401 — diagnostic impossible) ;
-marquer une cle epuisee plutot que la supprimer garde la taille du vivier
-stable, donc la rotation n'a plus de rattrapage d'indice ; et `__repr__` ne
-divulgue rien. Le constructeur de `LLMClient` refuse tout ce qui n'est pas une
-`list[APIKey]`.
+#### Repli de provider — ce que dit le sujet (releve du 2026-09-02)
 
-**Echeance reelle sur les appels (2026-08-16).** Le `timeout` de `httpx` est
-**par phase d'E/S, pas une duree totale** : mesure, un serveur qui envoie un
-octet par seconde traverse un `timeout=2` pendant 6 secondes. En conditions
-reelles, un appel a dure 98 s sous un plafond de 30 s, et une tache MBPP a
-fini a 135,8 s — au-dela de la limite de 120 s, donc `Metrics valid: NO`.
+§ V.6.1 : *"Ensure your implementation supports multiple API keys per provider
+**and consider implementing provider fallback**."* Le contraste des verbes est
+tout le message :
 
-L'appel bloquant part maintenant dans un `threading.Thread(daemon=True)` et
-`join(timeout=...)` fait office d'echeance. On n'interrompt pas le thread —
-c'est impossible en Python — on l'**abandonne** ; le drapeau `daemon` est ce
-qui empeche l'interpreteur de l'attendre a la sortie (mesure : 8,65 s contre
-3,47 s sans). L'exception du thread est stockee puis **relevee dans le meme
-`try`**, sinon les gestionnaires `httpx.*` ne voient plus rien passer.
-Le `timeout=` de `httpx` est conserve **en plus** : il coupe les serveurs
-muets, l'echeance borne les serveurs lents.
+| Mecanisme | Formulation | Statut |
+|---|---|---|
+| Plusieurs cles par provider | *"multi-token management is **mandatory**"*, *"token rotation **must** be implemented"* | obligatoire — **fait** |
+| Repli de provider | *"**consider** implementing"* | suggere — a defendre |
 
-**Recul entre deux tentatives (2026-08-22) — le defaut des 2069 requetes est
-corrige.** Trois pieces, dans trois fichiers differents :
+Trois contraintes tranchent a sa place :
 
-1. `Provider.get_retry_after()` lit `X-RateLimit-Reset` — un **instant** epoch
-   en millisecondes, pas une duree — et le convertit en delai. Le format de
-   chaque en-tete (`epoch` / `duration` / `date`) et son echelle sont declares
-   dans `configs/models.json`, donc lisibles pour un fournisseur qui n'a pas
-   les memes conventions.
-2. `APIKey` porte un `next_retry_time` : une clef sait quand son quota revient,
-   ce n'est plus une information perdue entre deux appels.
-3. `LLMClient.get_next_api_key()` refuse toute clef dont le delai depasse le
-   budget de la tache, la condamne, et recommence. Vivier entierement epuise →
-   `Permanent`, la tache s'arrete au lieu de bruler son budget en reessais.
+1. § IV.1 : *"All errors must be handled gracefully — crashes during evaluation
+   will result in failure."* Sortir en notifiant est acceptable, **une stack
+   trace ne l'est pas**.
+2. `SolutionOutput.error` existe precisement pour dire "j'ai echoue, voila
+   pourquoi". Le chemin d'echec attendu n'est ni un crash ni un silence : un
+   `solution.json` valide, `success=false`, `error` rempli, `steps` accumules.
+3. `StepMetrics` impose `api_url` et `model_name` **par step** : un repli est
+   legal a condition que chaque step porte l'endpoint reellement utilise.
 
-Le piege etait dans l'ordre des tests : tant que le delai n'etait verifie que
-sur le candidat **immediat** de la rotation, une clef atteinte en sautant une
-morte passait sans controle. Avec 4 clefs, deux d'entre elles n'etaient jamais
-examinees et la rafale ne s'arretait pas. Le test
-`test_an_entirely_exhausted_pool_stops_asking` etait `xfail` a ce titre ; il
-passe, la marque est retiree.
+→ **La politique retenue** (a defendre telle quelle) : ce n'est pas « sortir ou
+switcher » mais « switcher **puis** sortir ». Panne de **configuration** avant
+tout appel (URL inconnue, cle absente, modele vide) → il n'y a rien sur quoi se
+replier, sortie immediate avec message sur `stderr`. Se replier ici masquerait
+une erreur de config, et `--provider-url` est un **argument explicite de la
+moulinette** : y substituer autre chose serait desobeir. Panne d'**execution** en
+cours de tache (429, 503, timeout) → escalade : retry avec backoff, puis rotation
+de cles, puis repli de provider s'il est configure, puis **echec gracieux**.
 
-#### Modeles gratuits OpenRouter (releve du 2026-08-16)
+- [~] **Repli entre providers non implemente** : la configuration est
+      multi-provider mais le choix est fige au demarrage par `--provider-url`.
+      Deux pieges a traiter le jour ou on le branche — le budget de tokens est
+      **cumulatif par tache**, un repli au step 20 herite des tokens deja
+      consommes et ne les reinitialise pas ; et il change de modele, donc de
+      tokenizer et de verbosite (un repli vers un modele de raisonnement peut
+      faire exploser la limite de sortie a lui seul)
+- [ ] **Le fournisseur est retrouve par egalite stricte d'URL**
+      (`find_provider_by_url`) : un `/` final de trop dans `--provider-url` et
+      rien ne matche. Normaliser, ou chercher par nom
 
-**19 gratuits sur 413** (contre 17 sur 399 le 2026-08-10). Apparus depuis :
-`nvidia/nemotron-3.5-lightning:free`, `dots-studio/dots-3-note-preview:free`,
-`liquid/lfm-2.5-2.6b:free`, `nvidia/nemotron-nano-12b-v2-vl:free`.
-La note "liste volatile" se verifie en six jours.
+#### Modeles gratuits — releve du 2026-08-16, **perime**
 
-**Les 19 annoncent tous `reasoning` dans `supported_parameters`.** Ce champ
-dit "sait raisonner", pas "raisonne par defaut" : le catalogue ne permet donc
-**aucun** tri. Le seul critere fiable est la mesure de
-`usage.completion_tokens_details.reasoning_tokens` sur une requete de
-controle. Sonde du 2026-08-16, meme requete pour tous (bloc ```python
-demande) :
+**19 gratuits sur 413** (17 sur 399 le 2026-08-10) : la liste bouge en six jours,
+ne jamais figer un identifiant dans le code. Relister par
+`GET https://openrouter.ai/api/v1/models` (public, sans auth), garder
+`pricing.prompt` **et** `pricing.completion` a `"0"` — filtrer sur le prix, pas
+sur le suffixe `:free`. Verifier `usage.cost == 0` avant une campagne : le sujet
+impose les offres gratuites **exclusivement**.
+
+**Les 19 annoncent tous `reasoning` dans `supported_parameters`** — ce champ dit
+"sait raisonner", pas "raisonne par defaut" : le catalogue ne permet **aucun**
+tri. Le seul critere fiable est la mesure de
+`usage.completion_tokens_details.reasoning_tokens`. Sonde du 2026-08-16, meme
+requete pour tous :
 
 | Modele | tokens sortie | dont raisonnement | temps | bloc ? |
 |---|---|---|---|---|
@@ -821,240 +488,163 @@ demande) :
 | `google/gemma-4-31b-it:free` | — | — | — | 429 fournisseur |
 
 Trois sur cinq epuisent le plafond MBPP de 1500 tokens **des la premiere
-requete**, sur un exercice trivial, dont deux sans ecrire une seule ligne de
-code. `gpt-oss-20b` est le seul a s'arreter de deliberer pour repondre.
-`gpt-oss` expose en plus un `reasoning_effort` (`low`/`medium`/`high`), levier
-disponible avant d'avoir a changer de modele.
+requete**, sur un exercice trivial, dont deux sans ecrire une ligne de code.
+`gpt-oss-20b` est le seul a s'arreter de deliberer pour repondre, et il expose un
+`reasoning_effort` (`low`/`medium`/`high`) — levier disponible avant de changer de
+modele.
 
-**Quota : 50 requetes/jour et par compte** sur les modeles `:free`
-(`limit_source: openrouter_free_tier_daily`, reset a 02:00 locales). 4 cles en
-service, epuisees le meme jour par ~30 requetes de campagne chacune. La
-rotation multi-cles n'est donc pas un confort : c'est ce qui rend une campagne
-de benchmark realisable. A prevoir pour les 5 modeles x 3 taches SWE-bench.
+**Quota : 50 requetes/jour et par compte** sur les `:free`
+(`limit_source: openrouter_free_tier_daily`, reset a 02:00 locales). 4 cles
+epuisees le meme jour par ~30 requetes de campagne chacune. La rotation
+multi-cles n'est pas un confort : c'est ce qui rend une campagne realisable.
 
-→ Un 429 `free-models-per-day` n'est **pas** un rate limit passager (8 h
-d'attente). La boucle le traite comme transitoire, ce qui est correct tant
-qu'une cle survit ; quand toutes sont dans cet etat, la tache brule son budget
-en reessais. Le corps de la reponse porte pourtant `limit_source`, de quoi
-distinguer "ralentis" de "reviens demain".
-
-#### Releve precedent (2026-08-10) — conserve pour comparaison
-
-Le sujet impose les **offres gratuites exclusivement** : aucun plan payant,
-credit achete ou compte facture. Verifier `usage.cost == 0` sur une requete
-de controle avant de lancer une campagne de benchmark.
-
-Comment relister : `GET https://openrouter.ai/api/v1/models` (public, sans
-auth), garder les entrees ou `pricing.prompt` **et** `pricing.completion`
-valent `"0"`. Filtrer sur le prix, pas sur le suffixe `:free` : certaines
-entrees gratuites ne le portent pas.
-
-17 gratuits sur 399 au releve. Utilisables pour du code :
-
-| Identifiant | Contexte |
-|---|---|
-| `nvidia/nemotron-3-ultra-550b-a55b:free` | 1 000 000 |
-| `poolside/laguna-s-2.1:free` | 262 144 |
-| `poolside/laguna-xs-2.1:free` | 262 144 |
-| `google/gemma-4-31b-it:free` | 262 144 |
-| `google/gemma-4-26b-a4b-it:free` | 262 144 |
-| `nvidia/nemotron-3-super-120b-a12b:free` | 262 144 |
-| `inclusionai/ling-3.0-tiny:free` | 262 144 |
-| `cohere/north-mini-code:free` | 256 000 |
-| `nvidia/nemotron-3-nano-30b-a3b:free` | 256 000 |
-| `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` | 256 000 |
-| `openai/gpt-oss-20b:free` | 131 072 |
-| `nvidia/nemotron-nano-9b-v2:free` | 128 000 |
-
-A ecarter (gratuits mais hors sujet) : `google/lyria-3-pro-preview` et
-`google/lyria-3-clip-preview` (audio), `nvidia/nemotron-3.5-content-safety`
-(classifieur de moderation). `openrouter/free` est un routeur automatique,
-pas un modele identifiable — inutilisable pour un benchmark reproductible.
-
-Criteres de choix :
-
-- **Commencer par le plus capable** (`nemotron-3-ultra-550b`), sans limites.
-  Le sujet : si ca ne passe pas sans contraintes, les contraintes n'aideront pas.
-- **Eviter le modele `reasoning`** : ses tokens de raisonnement comptent dans
-  la limite de sortie, or MBPP n'en autorise que 1 500 au total.
-- **Ignorer la taille de contexte** comme critere : la vraie contrainte est
-  6 000 tokens d'entree cumules (MBPP), tres en dessous de tous ces modeles.
-- **Quotas journaliers** sur le tier gratuit → c'est la raison d'etre du
-  multi-cles + rotation ci-dessus. 5 modeles x 3 taches SWE-bench pour le
-  rapport, plus les iterations de dev, les atteindront.
-- **Liste volatile** : les modeles gratuits apparaissent et disparaissent chez
-  OpenRouter. Ne jamais figer un identifiant dans le code — `--model-name` est
-  deja un parametre impose par le sujet. Relister avant chaque campagne.
+- [ ] Un 429 `free-models-per-day` n'est **pas** un rate limit passager (8 h
+      d'attente). La boucle le traite comme transitoire, correct tant qu'une cle
+      survit ; quand toutes y sont, la tache brule son budget en reessais. Le
+      corps porte pourtant `limit_source`, de quoi distinguer "ralentis" de
+      "reviens demain"
 
 ### P2.4 — System prompts
 
-- [~] Injection du sandbox manual (fourni par P1) → le slot existe dans
-      `Prompt` (`tools` + `allowed_imports`), mais `agent_mbpp/cli.py:33`
-      passe toujours `tools=None` : le prompt affiche litteralement "None" au
-      modele. En attente du manual MCP de P1
-- [x] Slots structures Thought / Code / Observation avec exemples
-- [x] Message d'observation revu (2026-08-16) : `Observation:` en tete dans
-      **tous** les cas, sortie du programme transmise **verbatim** (pas de
-      `strip()` : un saut de ligne final est une donnee), et rappel
-      `final_answer` compose avec la sortie au lieu de l'exclure. Mesure de
-      l'effet : la tache 453 perdait 3 tours a renvoyer le meme bloc
-- [x] Exemples de boucles de raisonnement efficaces → l'exemple `smallest_abs`
+- [x] Slots Thought / Code / Observation avec exemples ; l'exemple `smallest_abs`
       montre un premier essai **faux**, l'observation, puis la correction
-- [x] Prompt MBPP (court, contrainte 6k tokens d'entree au total)
-- [x] **Prompt SWE-bench — ECRIT le 2026-09-01** (entame le 23-08, fini
-      aujourd'hui). Le message `system` porte desormais la methodologie
-      d'exploration, les 9 outils, les regles, et un exemple complet
-- [x] La conversation SWE a **deux tours** (`system` + `user`) comme MBPP :
-      l'enonce atteint enfin le modele. Sans ce tour, l'agent SWE serait parti
-      resoudre le probleme de l'exemple, seul enonce sous ses yeux
-- [x] Les 5 regles ajoutees, chacune adossee a un mode d'echec observe :
-  - envelopper les appels d'outils dans `print()` — `exec()` jette la valeur
-    d'une expression isolee, sans quoi **observation vide** et agent aveugle
-  - les prefixes `<n>: ` de `read_file` ne font pas partie du fichier — 1er
-    motif d'echec d'`edit_file`, qui compare a l'exact
-  - interdiction de modifier les tests — l'`eval_script` les restaure avant de
-    juger, donc l'edition ne sert a rien et pollue le patch
-  - pas de `git commit` (le patch deviendrait vide) ni de patch vide
-  - un seul bloc de code par tour — `extraction.py:20` ne garde que le premier
-- [ ] **Rien de tout ca n'est encore mesure.** Le prompt a ete verifie par
-      lecture et par `ast`, jamais par une execution reelle : il faut
-      `mcp_tools/` pour ca. `cache/swebench_task.json` (`sympy__sympy-14711`)
-      attend comme banc d'essai
-- [x] `allowed_imports` alimente depuis `SandboxConfig().authorized_imports`
+- [x] Message d'observation revu : `Observation:` en tete dans **tous** les cas,
+      sortie transmise **verbatim** (pas de `strip()` : un saut de ligne final est
+      une donnee)
+- [x] Prompt MBPP (court, 6k tokens d'entree au total)
+- [x] **Prompt SWE-bench fini** (2026-09-01) : methodologie d'exploration, les 9
+      outils, les regles, un exemple complet. La conversation a **deux tours**
+      (`system` + `user`) comme MBPP — sans le tour `user`, l'agent SWE serait
+      parti resoudre le probleme de l'exemple, seul enonce sous ses yeux
+- [x] Les **5 regles**, chacune adossee a un mode d'echec observe : envelopper
+      les appels d'outils dans `print()` (`exec()` jette la valeur d'une
+      expression isolee → observation vide) ; les prefixes `<n>: ` de `read_file`
+      ne font pas partie du fichier (1er motif d'echec d'`edit_file`, qui compare
+      a l'exact) ; ne pas modifier les tests (l'`eval_script` les restaure, donc
+      l'edition ne sert a rien et pollue le patch) ; pas de `git commit` ni de
+      patch vide ; un seul bloc par tour (`extraction.py:20` ne garde que le
+      premier)
+- [ ] **Rien de tout ca n'est mesure.** Le prompt SWE a ete verifie par lecture
+      et par `ast`, jamais par une execution reelle — il faut `mcp_tools/`.
+      `cache/swebench_task.json` (`sympy__sympy-14711`) attend comme banc d'essai
+- [~] **Injection du sandbox manual** : le slot existe (`Prompt(tools=)`) mais les
+      **deux** CLI passent `tools=None`, le prompt affiche litteralement "None".
+      Cote SWE c'est plus grave : le prompt decrit une methode entierement fondee
+      sur 9 outils dont il ne donne jamais la liste. Attend P1.4
+- [~] **Exemple MBPP** : coquilles corrigees (`Obvservation`, virgule du second
+      `assert` passee apres le saut de ligne, cloture ``` ``` ``` recollee,
+      indentation du corps). **Le piege principal tient toujours** : le
+      `final_answer("def smallest_abs(a):` reste coupe par un vrai retour a la
+      ligne, donc le modele lit une chaine non terminee et copie une forme qui ne
+      compile pas. Il faut une chaine sur une ligne, un `\n` litteral, ou des
+      triples quotes. **Et l'effet n'est pas mesure** — l'ablation a jeu egal
+      reste a faire
 
 → **Methode :** resoudre une tache a la main avec seulement les outils de
 l'agent, et transcrire ce raisonnement dans le prompt.
 
-### P2.5 — Les deux agents
+### P2.5 — Les deux agents *(faits)*
 
-- [x] `agent_mbpp` : les 4 options du sujet, `--output` corrige (plus
-      d'abreviation `argparse`), tache chargee + validee contre `MBPPTaskInput`
-- [x] `agent_swebench` : memes options, ecrit le 2026-09-01. Tache validee
-      contre `SWEBenchTaskInput`, `instance_id` (et non `task_id`) passe a
-      `Loop.run`. **Lancement reel verifie** : `solution.json` conforme produit.
-      Seul `docker.py` reste vide — c'est P1.6
-- [x] **Helpers CLI factorises** dans `core/agent_cli_helper.py` : les deux
-      `cli.py` tombent a 63 lignes chacun (MBPP en faisait 163). La frontiere
-      se defend : le helper lit l'environnement et les fichiers, les CLI
-      cablent les objets
-- [x] Ecriture du `solution.json` conforme → `model_dump_json(indent=4)`
-      (`json.dump` ne sait pas serialiser un `BaseModel`).
-      `validate_metrics` repond **YES** sur toutes les taches mesurees
-- [x] `final_answer(code)` pour MBPP
-- [x] `final_answer(get_patch())` pour SWE-bench — enseigne dans le prompt sous
-      la forme en trois temps : recuperer le patch, verifier qu'il n'est pas
-      vide, puis le rendre. **Non teste en execution** : `get_patch()` est un
-      outil MCP de P1.5, il n'existe pas encore
-- [x] Respect strict des limites → arret propre sur chacune des quatre
-      (iterations, tokens entree, tokens sortie, temps)
-- [x] Remplissage de **tous** les champs de `StepMetrics`
+Les 4 options du sujet dans chacun, taches validees contre `MBPPTaskInput` /
+`SWEBenchTaskInput`, `instance_id` (et non `task_id`) passe a `Loop.run` cote
+SWE, `solution.json` ecrit par `model_dump_json(indent=4)` (`json.dump` ne sait
+pas serialiser un `BaseModel`), **tous** les champs de `StepMetrics` remplis,
+arret propre sur chacune des quatre limites. `validate_metrics` repond **YES**
+sur toutes les taches mesurees.
 
-### P2.5 bis — `configs/models.json` (ECRIT, 2026-08-18)
+**Helpers factorises** dans `core/agent_cli_helper.py` — la frontiere se defend :
+le helper lit l'environnement et les fichiers, les CLI cablent les objets.
 
-Sujet chap. VIII p.38 : *"Configuration files for sandbox and models"*. Le
-sujet **n'impose aucun schema** pour le versant modeles — a nous de le definir
-et de le defendre.
+- [ ] `final_answer(get_patch())` est enseigne dans le prompt mais **non teste en
+      execution** : `get_patch()` est un outil MCP de P1.5, il n'existe pas encore
 
-Schema retenu : deux niveaux par fournisseur. `provider` decrit **comment
-parler** au fournisseur (URL, endpoint, en-tetes, variable d'environnement de
-la cle, et le nom de chaque champ de reponse) ; `models` decrit **ce que sait
-faire** chaque modele. Le fournisseur est retrouve par son URL, le modele par
+### P2.5 bis — `configs/models.json`
+
+Chap. VIII p.38 : *"Configuration files for sandbox and models"*. Le sujet
+**n'impose aucun schema** pour le versant modeles — a nous de le definir et de le
+defendre.
+
+**Schema retenu : deux niveaux par fournisseur.** `provider` decrit **comment
+parler** au fournisseur (URL, endpoint, en-tetes, `api_key_env_var`, le nom de
+chaque champ de reponse, la table `retry_after.names`) ; `models` decrit **ce que
+sait faire** chaque modele. Le fournisseur est retrouve par son URL, le modele par
 `--model-name`.
 
-- [x] Y mettre : URL/endpoint du fournisseur, en-tetes, `api_key_env_var`, la
-      table `retry_after.names` (nom d'en-tete → `scale` + `format`), et les
-      reglages propres au modele
-- [x] **Ne PAS y mettre** les limites du benchmark (1500 tokens, 10 iterations,
-      120 s) : ce sont des proprietes de MBPP, pas du modele. Elles vivent dans
-      `constants.MBPP`. Tenu
-- [x] **Ne PAS y mettre** les mesures (ratio de raisonnement, latences) :
-      ce sont des observations, leur place est dans `BENCHMARK_REPORT.md`. Tenu
-- [x] Cle = identifiant exact du fournisseur, prefixe et suffixe `:free` compris
-- [x] Validation par des models Pydantic (`ProviderConfig`, `ModelConfig`,
-      dans `core/config_models.py`), par symetrie avec `SandboxConfig`.
-      `RootModelConfig`, jamais importe ni instancie, a ete **supprime** le
-      2026-09-01 au soir
-- [x] Lecture dans `cli.py` (`get_provider_and_model_config`, meme frontiere
-      que `get_api_keys()`), **jamais** dans `LLMClient` : le client recoit une
-      config, il ne va pas la chercher. Tenu
-- [x] Aucune cle dedans. Le JSON dit *quels* modeles et *comment* les appeler,
-      le `.env` fournit *avec quoi* — c'est `api_key_env_var` qui fait le lien
+Ce qu'on n'y met **pas**, et pourquoi : les limites du benchmark (1500 tokens,
+10 iterations, 120 s) sont des proprietes de MBPP, pas du modele — elles vivent
+dans `constants.MBPP` ; les mesures (ratio de raisonnement, latences) sont des
+observations, leur place est dans `BENCHMARK_REPORT.md` ; et **aucune cle** — le
+JSON dit *quels* modeles et *comment* les appeler, le `.env` fournit *avec quoi*,
+`api_key_env_var` fait le lien. Lecture dans les CLI
+(`get_provider_and_model_config`, meme frontiere que `get_api_keys`), **jamais**
+dans `LLMClient` : le client recoit une config, il ne va pas la chercher.
 
-**Points restes ouverts, a trancher :**
+#### `ModelConfig` supprime (2026-09-02) — fin d'un chantier de trois semaines
 
-- [~] **Repli sur modele inconnu — fait le 2026-08-22 (`b9a43ad`), casse le
-      2026-09-01 au soir.** Quand `--model-name` est absent du JSON, un profil
-      par defaut conservateur est construit au lieu du `ValueError` : le
-      mecanisme tient toujours, mais `agent_cli_helper.py:34` construit encore
-      `{"reasoning": False}` alors que le champ s'appelle desormais
-      `is_reasoning`. La cle est ignoree en silence et le profil « conservateur »
-      vaut `is_reasoning=True`. **Un mot a changer**, et l'`xfail` de
-      `tests/test_agent_cli.py` tombe. *(A defendre en soutenance : le repli
-      est silencieux — aucun avertissement n'est affiche. Assumer, ou logger.)*
-- [ ] **Le fournisseur est retrouve par egalite stricte d'URL**
-      (`find_provider_by_url`, `cli.py:140`) : un `/` final de trop dans
-      `--provider-url` et rien ne matche. Normaliser, ou chercher par nom.
-      *Toujours ouvert au 2026-09-01*
-- [~] **`ModelConfig` n'a qu'un champ `is_reasoning`, et il n'est lu nulle part**
-      — `LLMClient` le stocke (`client.py:41`) sans jamais s'en servir. Il
-      n'est pas seulement mort, il est **cable** de bout en bout : construit
-      par `agent_cli_helper.py:34-36`, recupere par les deux CLI, passe au
-      constructeur, stocke. Un champ mort dans un JSON est inerte ; un champ
-      mort qui a son parametre de constructeur ressemble a un champ vivant.
-      *Toujours ouvert au 2026-09-01.* Attention au faux ami : le `reasoning`
-      de `LLMResponse` (lu par `Loop`, via `Provider.get_reasoning`) est un
-      **autre** champ, bien vivant celui-la — c'est le `reasoning` **bool** de
-      `ModelConfig` (`config_models.py:68`) qui est mort.
-      **Avance le 2026-09-01 au soir :** le champ est renomme `is_reasoning`
-      (fin de la collision avec le `reasoning` de `provider`) et recoit un
-      defaut (`= True`), donc une entree du JSON n'a plus a le porter.
-      **Position tenable** — garder la case vide pour de futurs reglages par
-      modele se defend, le conteneur `"models": {...}` est au bon endroit.
-      **Trois choses a finir** pour que l'argument tienne vraiment :
-  - **le rendre vivant** : le corps de requete est construit en dur
-    (`client.py:56-61` — `model`, `messages`, `stop`, `max_tokens`), rien n'y
-    consulte `self.model_config`. OpenRouter et Groq acceptent tous deux un
-    parametre de raisonnement dans ce corps, et `gpt-oss` expose un
-    `reasoning_effort` (`low`/`medium`/`high`) : c'est exactement le trou que
-    la cle est censee remplir
-  - **choisir la politique sur les cles inconnues** : Pydantic est en
-    `extra="ignore"` par defaut, donc un `"temperature": 0.2` ajoute au JSON
-    est **silencieusement jete**. `extra="forbid"` attrape la faute de frappe ;
-    `extra="ignore"` la laisse passer sans bruit. Aujourd'hui c'est le second,
-    par defaut et non par choix — donc la structure n'est extensible qu'en
-    apparence
-  - **reparer le repli**, devenu urgent : `agent_cli_helper.py:34` construit
-    `{"reasoning": False}` avec l'ancien nom. Ignoree en silence, la cle laisse
-    le defaut `True` s'appliquer — modele present sans la cle et modele absent
-    du JSON donnent maintenant le **meme** profil, et c'est le moins
-    conservateur des deux. Sous `xfail(strict=True)` dans
-    `tests/test_agent_cli.py`
-- [ ] Regle de precedence CLI > fichier : sans objet tant qu'aucun reglage
-      n'est expose en double. A rouvrir des qu'un l'est
+Le champ `reasoning: bool` cote `models` a vecu trois etats et c'est le troisieme
+qui est le bon :
 
-### P2.6 — `BENCHMARK_REPORT.md`
+1. **2026-08-18** — cree, valide par un model Pydantic `ModelConfig`, avec un
+   repli conservateur `{"reasoning": False}` pour un modele absent du JSON
+   (2026-08-22). **Mais jamais lu** : `LLMClient` le stockait sans s'en servir,
+   le corps de requete est construit en dur. Un champ mort dans un JSON est
+   inerte ; un champ mort qui a son parametre de constructeur **ressemble a un
+   champ vivant**.
+2. **2026-09-01 soir** — renomme `is_reasoning` pour lever une vraie collision :
+   dans le meme fichier, `reasoning` cote `provider` designe le **nom du champ** a
+   lire dans la reponse (`provider.py:99`), cote `models` c'etait un **booleen**.
+   Le renommage a laisse `agent_cli_helper.py:34` derriere lui, qui validait
+   encore `{"reasoning": False}` : Pydantic etant en `extra="ignore"` par defaut,
+   la cle etait **silencieusement jetee** et le repli rendait `True` — l'inverse
+   du profil conservateur. **Attrape par `tests/test_agent_cli.py` une heure
+   apres son ecriture.**
+3. **2026-09-02 — supprime.** `ModelConfig`, `is_reasoning`, et les 3 valeurs du
+   JSON. `get_provider_and_model_config` rend maintenant
+   `tuple[ProviderConfig, dict]` : le `.get(model_name, {})` de la ligne 30 fait
+   le repli tout seul, il n'y a plus de branche a ecrire ni de defaut a accorder.
+   Les entrees `"models"` sont des dicts vides — elles ne servent plus qu'a lister
+   les modeles connus par fournisseur, et de point d'accroche pour de futurs
+   reglages.
 
-*Racine du repo — fichier cree, vide.*
+**Ce qu'on defend :** une abstraction a un seul champ jamais lu ne portait rien,
+et sa suppression supprime avec elle la classe de bug qui venait de mordre.
+
+- [ ] **Le typage a perdu en precision** : `model_config: dict` cote helper et
+      cote `LLMClient`, plus rien ne valide ce qui sort du JSON pour un modele.
+      Prix assume tant que le dict est vide — **le jour ou une cle y revient, la
+      validation doit revenir avec**, sinon une faute de frappe deviendra un
+      `KeyError` en pleine tache au lieu d'une erreur au demarrage. Et choisir
+      `extra=` explicitement a ce moment-la : `extra="forbid"` attrape la
+      coquille, `extra="ignore"` (le defaut) la laisse passer sans bruit — c'est
+      exactement ce qui a produit la regression de l'etape 2
+- [ ] **Le repli sur modele inconnu est silencieux** : aucun avertissement n'est
+      affiche quand `--model-name` est absent du JSON. Assumer, ou logger. A
+      savoir dire : absent de `models.json` **n'est pas** invalide chez le
+      fournisseur — ce fichier est notre base de connaissances, pas le catalogue
+      d'OpenRouter. Le nom part dans la requete quel que soit le contenu du JSON,
+      et un nom faux revient en 400/404, donc en `Permanent` (pas de rotation de
+      cles : elles seraient toutes brulees pour rien)
+- [ ] Regle de precedence CLI > fichier : sans objet tant qu'aucun reglage n'est
+      expose en double. A rouvrir des qu'un l'est
+
+### P2.6 — `BENCHMARK_REPORT.md` *(vide)*
+
 **≥ 5 modeles × ≥ 3 taches SWE-bench communes.**
-Candidats : voir la table des modeles gratuits en P2.3 (12 utilisables).
 
-- [ ] Setup : modeles/providers, taches choisies + justification
+- [ ] Setup (modeles/providers, taches + justification)
 - [ ] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
 - [ ] Fiabilite provider : temps de reponse moyen, retries, disponibilite
-- [ ] ≥ 2 metriques intermediaires parmi :
-  - etape du 1er acces au fichier du patch final (exploration)
-  - etape ou les echecs de tests commencent a baisser (progres partiel)
-  - iterations entre "tests au vert" et `final_answer` (discipline, 0 ideal)
-- [ ] Etude d'ablation : avant/apres un changement (prompt, outils, params)
-      sur les memes taches et le meme modele
-- [ ] Conclusions : modeles retenus / ecartes, justifies par les donnees
-- [ ] Les `solution.json` de backing presents dans le repo
+- [ ] ≥ 2 metriques intermediaires : etape du 1er acces au fichier du patch final
+      (exploration) / etape ou les echecs de tests baissent (progres partiel) /
+      iterations entre "tests au vert" et `final_answer` (discipline, 0 ideal)
+- [ ] **Etude d'ablation** avant/apres un changement, memes taches, meme modele
+- [ ] Conclusions justifiees par les donnees + les `solution.json` de backing
+      **presents dans le repo**
 
 → Mesure manuelle acceptee, c'est l'analyse qui compte.
 
 #### Campagnes MBPP deja faites (matiere pour le rapport)
 
-Taches figees dans `cache/run2/task_*.json`, solutions dans `cache/run{2,3,4}/`.
 Reussites **verifiees en executant les `test_list`**, pas d'apres le rapport de
 l'agent — les deux verdicts ont toujours concorde.
 
@@ -1064,284 +654,156 @@ l'agent — les deux verdicts ont toujours concorde.
 | `run3` | `gpt-oss-20b` | **8/10** | 226 | 624 | 473 s |
 | `run4` | `gpt-oss-20b` (apres correctifs) | **8/10** | 221 | 624 | 461 s |
 
-Barre du sujet : 4/5, soit 80 %. Sur 25 executions distinctes (5 + 10 + 10),
-21 reussites, soit 84 % — on passe, sans marge.
+Barre du sujet : 4/5 (80 %). Sur 25 executions distinctes, 21 reussites — **84 %,
+on passe sans marge.**
 
 Les trois echecs, et ce qu'ils ont appris :
 
-1. **MBPP 453** (nemotron) — la bonne fonction etait ecrite des le tour 1, mais
-   un appel de 98,3 s a mange 82 % du budget ; le `final_answer` correct du
-   tour 4 est arrive avec 0,08 s de budget sandbox restant. Deux causes :
-   le message d'observation muet sur `final_answer` (3 tours perdus) et
-   l'absence d'echeance reelle. **Les deux corrigees.**
-2. **MBPP 87** (nemotron) — 1500 tokens de sortie **entierement en
-   raisonnement**, aucun bloc de code emis, alors que la reponse figurait a la
-   fin de la deliberation. `finish_reason: length`, garde declenchee. Cause
-   irreductible cote modele. `gpt-oss` passe cette tache du premier coup.
+1. **MBPP 453** (nemotron) — la bonne fonction ecrite des le tour 1, mais un appel
+   de 98,3 s a mange 82 % du budget ; le `final_answer` correct du tour 4 est
+   arrive avec 0,08 s restantes. Deux causes, **les deux corrigees** : message
+   d'observation muet sur `final_answer`, et absence d'echeance reelle.
+2. **MBPP 87** (nemotron) — 1500 tokens de sortie **entierement en raisonnement**,
+   aucun bloc emis, alors que la reponse figurait a la fin de la deliberation.
+   `finish_reason: length`. Cause irreductible cote modele ; `gpt-oss` passe la
+   tache du premier coup.
 3. **MBPP 59 et 413** (gpt-oss) — rafales de 429 *"temporarily rate-limited
-   upstream"* du fournisseur, reproduites a l'identique. 0 iteration, 5 et 9
-   requetes, toutes rejetees. La 413 a fini a **135,8 s** → `Metrics valid: NO`.
-   Le depassement etait imputable a la boucle, **corrige** ; l'instabilite du
-   fournisseur ne l'est pas.
+   upstream"*, reproduites a l'identique. La 413 a fini a 135,8 s →
+   `Metrics valid: NO`. Le depassement etait imputable a la boucle, **corrige** ;
+   l'instabilite du fournisseur ne l'est pas.
 
-→ Les deux modeles echouent pour des raisons **independantes** : verbosite
-d'un cote, instabilite du fournisseur de l'autre. Sur 20 executions la boucle
-n'a commis qu'une seule faute qui lui soit imputable. Avec des taux si
-proches, le choix ne se tranchera pas sur 10 taches — d'ou l'interet d'un
-basculement de modele sur echec repete, a etudier (chantier, pas correctif).
+→ Les deux modeles echouent pour des raisons **independantes** : verbosite d'un
+cote, instabilite du fournisseur de l'autre. Sur 20 executions la boucle n'a
+commis qu'**une seule faute** qui lui soit imputable. Avec des taux si proches,
+le choix ne se tranchera pas sur 10 taches.
 
-→ Statistiques d'appel sur les 15 premieres taches (28 appels) : duree mediane
-6,3 s, **moyenne 14,8 s, max 98,3 s** ; 5 appels sur 28 depassent les 30 s du
-plafond nominal. C'est cette distribution qui a motive l'echeance par thread.
+→ Statistiques d'appel (28 appels) : mediane 6,3 s, **moyenne 14,8 s, max 98,3 s**
+— 5 sur 28 depassent les 30 s du plafond nominal. C'est cette distribution qui a
+motive l'echeance par thread.
 
-#### `run4` — les memes 10 taches apres les correctifs (2026-08-16)
-
-> **Traces perdues (constat du 2026-09-01).** `cache/run4/` n'existe plus :
-> `cache/` est dans le `.gitignore`, rien n'a jamais ete commite. Les chiffres
-> ci-dessous sont tout ce qu'il reste de `run1`..`run4`. Ils suffisent au
-> recit du rapport, pas a une verification. **Pour la prochaine campagne :
-> sortir les `solution.json` de `cache/` et les versionner** — le sujet exige
-> les fichiers de backing dans le repo (P2.6, dernier item).
-
-Meme modele, memes taches, meme ordre que `run3`. Resultat reel **8/10**, avec
-les **memes deux echecs** (59 et 413). Ce que le rejeu a change :
-
-- **`Metrics valid: YES` sur les 10** (`run3` : 9/10). Les deux echecs
-  s'arretent a **115,0 s exactement** au lieu de 118,6 s et 135,8 s.
-  L'echeance par thread tient la limite des 120 s : c'est la seule faute
-  imputable a la boucle sur 20 executions, et elle a disparu.
-- **Le plafond de 30 s mord maintenant** : 87, 17 et 244 ont demande un appel
-  de plus qu'en `run3` (1 → 3, 1 → 2, 1 → 2). Un appel abandonne a 30 s puis
-  rejoue coute une requete de plus ; il evite l'appel de 98 s qui avait tue la
-  tache 453. Compromis accepte, et documente pour le rapport.
-- Les deux echecs **ne sont plus les memes 429** : `run3` recevait des rafales
-  *"temporarily rate-limited upstream"* (limite du fournisseur du modele),
-  `run4` a bute sur le **quota journalier OpenRouter** — `limit_source:
-  openrouter_free_tier_daily`, `X-RateLimit-Limit: 50`, `Remaining: 0`, les
-  4 clefs epuisees. Ce n'est pas un echec de l'agent : **8/8 hors quota.**
+**`run4` — memes 10 taches apres les correctifs.** Meme resultat (8/10, memes deux
+echecs), mais **`Metrics valid: YES` sur les 10** (`run3` : 9/10) : les deux
+echecs s'arretent a 115,0 s exactement au lieu de 118,6 et 135,8 s. Le plafond de
+30 s mord maintenant — 3 taches ont demande un appel de plus. Compromis accepte :
+un appel abandonne puis rejoue coute une requete, il evite l'appel de 98 s qui
+avait tue la 453. Et les deux echecs ne sont plus les memes 429 : `run4` a bute
+sur le **quota journalier** (4 clefs epuisees), pas sur l'agent — **8/8 hors
+quota**.
 
 **Defaut mis au jour le 2026-08-16, corrige le 2026-08-22 : aucun recul entre
-deux tentatives.** La 413 a emis **2069 requetes en 115 s** (18/s), la 59 en a
-emis 188. Cause : OpenRouter renvoie son 429 en 0,07 s et **sans en-tete
-`Retry-After`** ; la boucle faisait donc `time.sleep(0)` et repartait aussitot.
-Le seul signal utilisable etait ailleurs — `X-RateLimit-Reset` (epoch **en
-millisecondes**). Les deux manques sont traites : `Provider` lit cet en-tete,
-et une clef dont le reset depasse le budget de la tache est condamnee au lieu
-d'etre reservie (detail en P2.3).
+tentatives.** La 413 a emis **2069 requetes en 115 s** (18/s). Cause : OpenRouter
+renvoie son 429 en 0,07 s et **sans `Retry-After`**, la boucle faisait donc
+`time.sleep(0)`. Le seul signal utilisable etait `X-RateLimit-Reset` (epoch **en
+millisecondes**). Traite en P2.3.
 
-→ **A mesurer** : rejouer 59 et 413 en quota epuise pour verifier le nombre de
-requetes emises. Le correctif est teste unitairement, pas encore en campagne.
+> **Traces perdues.** `cache/run1..4` n'existent plus : `cache/` est gitignore,
+> rien n'a jamais ete commite. Les chiffres ci-dessus sont tout ce qu'il reste —
+> suffisant au recit, pas a une verification. **Prochaine campagne : sortir les
+> `solution.json` de `cache/` et les versionner**, le sujet exige les fichiers de
+> backing dans le repo.
 
-- [x] Rejouer les 10 taches **apres** l'echeance et le message d'observation,
-      pour mesurer l'effet des deux correctifs a jeu egal → `cache/run4/`
-- [ ] Etendre a plus de taches : 10 ne separent pas deux modeles a 87 %
+- [ ] Rejouer 59 et 413 en quota epuise pour verifier le nombre de requetes
+      emises : le correctif est teste unitairement, pas en campagne
+- [ ] Etendre a plus de taches — 10 ne separent pas deux modeles a 87 %
 
 ---
 
 ## A faire ensemble (fin de projet)
 
-- [ ] **`README.md` en anglais**, a la racine :
-  - [ ] 1ere ligne en italique : *"This project has been created as part of the
-        42 curriculum by tchemin, ndi-tull."*
-  - [ ] Description / Instructions / Resources (+ usage de l'IA detaille)
-  - [ ] System architecture
-  - [ ] Agent loop explanation
-  - [ ] Sandbox design
-  - [ ] Tool implementation details
-  - [ ] Benchmark results and analysis
+- [ ] **`README.md` en anglais** (encore vide) : 1ere ligne en italique *"This
+      project has been created as part of the 42 curriculum by tchemin,
+      ndi-tull."*, puis Description / Instructions / Resources (+ **usage reel de
+      l'IA detaille — exige par le sujet**), architecture, boucle agent, design du
+      sandbox, implementation des outils, resultats de benchmark
 - [ ] Verifier le repo : configs sandbox + modeles, `mcp_tools_*.py` a la racine,
       `BENCHMARK_REPORT.md`, `solution.json`
 - [ ] **Ne pas inclure :** images Docker, poids de modeles, outputs generes
-- [ ] Relire le code de l'autre : en soutenance, on doit savoir modifier l'agent
-      en 2-5 min sur une tache MBPP. Prevoir 2 sessions de passation.
+- [ ] **Relire le code de l'autre** : en soutenance on doit savoir modifier
+      l'agent en 2-5 min sur une tache MBPP. Prevoir 2 sessions de passation
 
 ---
 
-## Ordre de travail recommande
+## Ordre de travail
 
-1. [x] **Phase 0 ensemble** — setup, structure, flat layout, models **faits**.
-   `.env` charge dans `agent_mbpp/cli.py` (plus dans `loop.py`), config JSON
-   des modeles lue au meme endroit (cf. P2.5 bis).
-2. [x] **En parallele** — sandbox qui execute du code + `final_answer`
-   (ndi-tull) et boucle agent avec provider injecte (tchemin) : les deux
-   moities se parlent, l'interface `execute()` est stabilisee.
-3. [x] **Premier jalon : MBPP end-to-end.** Fait, et au-dela — 15 taches
-   reelles mesurees avec les limites branchees, pas seulement sans contraintes.
-4. [~] Mesurer et optimiser le prompt → 4 correctifs issus des mesures
-   (observation, echeance, comptabilite, recul entre tentatives). Rejeu a jeu
-   egal fait (`run4`). **Reste : une campagne apres la couche `Provider`.**
-5. [ ] Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.
-5 bis. [x] **Cote P2, SWE-bench est pret a etre branche** (2026-09-01) : prompt
-   fini avec ses 2 tours (P2.4), `agent_swebench/` ecrit et lance pour de vrai
-   (P2.5). **Le chemin critique est passe cote P1** — sans `mcp_tools/`, sans
-   client MCP et sans Docker, rien de tout ca ne peut resoudre une tache.
-6. [ ] SWE-bench sur les 3 taches conseillees :
-   `sympy__sympy-14711` / `sympy__sympy-13480` / `pydata__xarray-4629`
+1. [x] Phase 0 ensemble
+2. [x] En parallele — sandbox qui execute + boucle avec provider injecte
+3. [x] **MBPP end-to-end**, et au-dela : 15 taches reelles avec les limites
+       branchees
+4. [~] Mesurer et optimiser le prompt → 4 correctifs issus des mesures, rejeu a
+       jeu egal fait (`run4`). **Reste : une campagne apres la couche `Provider`**
+5. [ ] **Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.** Cote P2,
+       SWE-bench est pret a etre branche — le chemin critique est cote P1
+6. [ ] SWE-bench sur les 3 taches conseillees : `sympy__sympy-14711` /
+       `sympy__sympy-13480` / `pydata__xarray-4629`
 7. [ ] `BENCHMARK_REPORT.md` une fois les 2 benchmarks fonctionnels
-   (la matiere MBPP existe deja, cf. P2.6).
-8. [ ] `README.md` + relecture croisee.
+8. [ ] `README.md` + relecture croisee
 
-### Prochaines actions concretes (cote tchemin)
+### Prochaines actions (cote tchemin), par rentabilite
 
-- [x] Rejouer les 10 taches a jeu egal → `cache/run4/`, 8/10, metriques
-      valides sur les 10 (cf. P2.6)
-- [x] **Recul entre deux tentatives** : `X-RateLimit-Reset` lu, delai porte par
-      `APIKey`, clef hors budget condamnee, vivier mort → `Permanent` (P2.3)
-- [x] `configs/models.json` — livrable exige, ecrit (P2.5 bis)
-- [x] **Repli sur modele inconnu** — fait le 2026-08-22 (`b9a43ad`), profil
-      par defaut conservateur au lieu du plantage (P2.5 bis)
+1. [ ] **Campagne de controle MBPP** — le chantier le plus rentable et il ne
+       depend de personne. Prealable : **refaire le releve des modeles gratuits**
+2. [ ] **Rapatrier `origin/ndi-tull`** (`eedbf20`) avant toute mesure
+3. [ ] **Commiter la session du 2026-09-02** (`ModelConfig` supprime, consigne
+       d'`assert` par bench) : 5 fichiers modifies, 295 tests verts, ruff a 0
+4. [ ] **Corriger le piege de l'exemple MBPP** (chaine coupee par un vrai retour
+       a la ligne, cf. P2.4) — et **mesurer** l'effet : c'est une ablation toute
+       trouvee pour le rapport
+5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
+       restera cote P2 :
+   - passer la liste des outils a `Prompt` au lieu de `tools=None`
+   - decrire `run_tests` dans le prompt MBPP et **remplacer ou composer avec** la
+     consigne actuelle ("use the assert to VALIDATE your code") : aujourd'hui le
+     modele valide par `assert` et fait 8/10, il ne sait pas que l'outil existe
+   - rejouer les 10 taches a jeu egal → **etude d'ablation** (assert seul vs
+     `run_tests`), meme modele, memes taches
+   - surveiller le cout : MBPP plafonne a 6000 tokens d'entree **cumules**, chaque
+     description d'outil est rejouee a chaque tour. D'ou la prudence sur le *"any
+     additional tools"* — l'invitation du sujet n'est pas gratuite
+   - **ne pas rendre le prompt dependant de `run_tests`** : le sujet teste avec un
+     serveur MCP inconnu ou l'outil n'existe pas. Les `assert` doivent rester un
+     repli utilisable, pas un vestige a supprimer
+   - les descriptions ne sont **pas a rediger a la main** : elles viennent des
+     schemas du serveur via le manuel de P1.4. Ce que P2 controle, c'est la mise
+     en forme et les consignes autour (quand appeler, dans quel ordre, avant
+     `final_answer`)
 
-- [x] **Prompt SWE-bench fini** le 2026-09-01 (P2.4), tour `user` compris
-- [x] **`agent_swebench/` ecrit** le 2026-09-01 (P2.5), `docker.py` excepte
-- [x] **Dette ruff soldee** le 2026-09-01 : 13 → 0 (**repassee a 4** le soir
-      meme, cf. ci-dessous)
+### Le banc d'essai `tests/`
 
-**Le point de reprise, au soir du 2026-09-01.** Tout ce qui pouvait etre fait
-sans `mcp_tools/` cote SWE l'a ete. Le prompt et les deux CLI tiennent, mais
-**rien n'est mesure** : le prompt SWE n'a jamais tourne contre un vrai depot,
-et les chiffres MBPP datent d'avant la couche `Provider`.
-Priorite : **remesurer MBPP**, qui est debloque et nourrit le rapport.
+**295 tests**, gitignore, hors rendu — c'est un outil de travail, pas un livrable.
 
-La session du soir n'a rien mesure non plus — elle a ferme les deux dettes qui
-auraient pollue la mesure : le trou de tests (une regression de construction
-passait inapercue) et l'exemple MBPP, dont les coquilles auraient fausse toute
-ablation de prompt. **Rien n'est commite** : les modifications de
-`core/config_models.py` (renomme, `RootModelConfig` retire, champ renomme),
-`core/constants.py`, `configs/models.json`, `.gitignore`, la suppression de
-`core/llm/keyring.py` et les 6 imports vivent dans l'arbre de travail.
-`tests/` est gitignore, donc `tests/test_agent_cli.py` ne sera jamais commite
-— c'est voulu.
+`tests/test_agent_cli.py` (75 tests) comble le trou par lequel le `TypeError` de
+`get_task_from_file` est passe dans **les deux** CLI a la fois, 220 tests au vert.
+Il construit les deux agents sur **chaque** tache de `cache/`, verifie le cablage
+obtenu, les sept echecs nommes, la forme d'appel de `get_task_from_file`, et
+`run()` avec une fausse boucle. **Aucun reseau, aucune cle valide requise** :
+construire un agent ne fait pas d'appel, seul `run()` en ferait.
 
-**A faire avant de commiter** : le mot de `agent_cli_helper.py:34` et
-`make format`. Deux minutes, et les deux seules regressions ouvertes tombent.
+Deux details qui le rendent robuste : les taches de `cache/` sont triees par
+**validation Pydantic** et non par nom (`cache/` contient aussi des
+`solution.json`, qui portent eux aussi un `task_id`), et une tache minimale ecrite
+dans `tmp_path` est **toujours** ajoutee au jeu de parametres — le garde-fou
+survit a un `make clean-all`. Une fixture remplace `constants.MODELS_CONFIG_FILE`
+(chemin relatif) par un absolu et pose les cles factices de **chaque**
+`api_key_env_var` du JSON : ajouter un fournisseur le fait couvrir sans toucher
+aux tests.
 
-- [ ] **Campagne de controle MBPP** — le chantier le plus rentable, et il ne
-      depend de personne. Prealable : **refaire le releve des modeles gratuits**
-      (celui du 2026-08-16 est perime, `openai/gpt-oss-20b:free` a disparu)
-- [ ] **Rapatrier `origin/ndi-tull`** (`eedbf20`) dans `thomas` avant toute
-      nouvelle mesure
-- [x] **Aucun test ne construisait `AgentMBPP` ni `AgentSWEBENCH`** — comble
-      le 2026-09-01 au soir par `tests/test_agent_cli.py` (73 tests, total
-      **293** : 291 verts, 2 `xfail`), hors reseau. Detection verifiee sur deux
-      mutants : 57 et 64 echecs la ou 220 tests passaient. Le fichier a
-      immediatement servi : c'est lui qui a attrape la regression du repli sur
-      modele inconnu, une heure apres avoir ete ecrit. Detail dans
-      « Session du soir »
-- [~] **Corriger l'exemple MBPP.** Fait le 2026-09-01 au soir pour les
-      coquilles : `Obvservation`, la virgule du second `assert` passee apres le
-      saut de ligne, la cloture ``` ``` ``` recollee, l'indentation du corps.
-      **Le piege principal tient toujours** : le `final_answer("def
-      smallest_abs(a):` reste coupe par un vrai retour a la ligne, donc le
-      modele lit une chaine non terminee et copie une forme qui ne compile pas.
-      Il faut une chaine sur une ligne, un `\n` litteral, ou des triples
-      quotes. **Et l'effet n'est pas mesure** : l'ablation a jeu egal pour
-      `BENCHMARK_REPORT.md` reste entierement a faire
-- [ ] **Consigne de prompt qui a fuit dans la boucle** : `loop.py`, methode
-      `observation()`, contient en dur *"Make SURE to make AND print the
-      asserts like assert cond, '...'"*. Ce message part pour **les deux**
-      benchmarks — cote SWE il reclame des asserts dont le prompt ne parle
-      jamais. A rendre dependant du bench, ou a remonter dans le prompt
-- [ ] **URGENT — `agent_cli_helper.py:34` valide `{"reasoning": False}` avec
-      un nom de champ qui n'existe plus.** Le renommage en `is_reasoning` a
-      laisse cet appel derriere lui ; la cle est ignoree en silence et le repli
-      sur modele inconnu rend `is_reasoning=True`. Un mot a changer, l'`xfail`
-      de `tests/test_agent_cli.py` sert de temoin (P2.5 bis)
-- [ ] **`make format` : la dette ruff est repassee de 0 a 4** apres le
-      renommage — `F401` (`RootModel` importe et plus utilise,
-      `config_models.py:3`) et 3 `I001` d'ordre d'imports (`agent/loop.py`,
-      `agent_cli_helper.py`, `llm/client.py`)
-- [~] **`ModelConfig.is_reasoning` est mort** : stocke par `LLMClient`
-      (`client.py:41`), lu par personne. Le champ a ete renomme et a recu un
-      defaut le 2026-09-01 au soir, ce qui leve la collision de noms et rend la
-      cle facultative dans le JSON, mais ne le branche pas. Reste : le lire
-      dans le corps de requete (`client.py:56-61`) et choisir `extra=` sur
-      `ModelConfig` (P2.5 bis)
-- [ ] **Campagne de controle** apres les correctifs provider + backoff : les
-      chiffres de `run4` datent d'avant la couche `Provider`.
-      **Attention : `cache/run4/` n'existe plus sur le disque** (`cache/` est
-      gitignore) — les traces brutes citees en P2.6 ont disparu, seuls les
-      chiffres recopies dans ce TODO subsistent. Raison de plus pour rejouer
-- [x] **Dette `ruff` : 0** (2026-09-01, etait a 14). Les 11 `B904` tranches un
-      par un plutot qu'au `sed` — 9 `from None` sur les erreurs de fichier et
-      dans le sandbox (la cause encombrerait l'appelant ou couterait des tokens
-      au modele), 5 `from e` sur les schemas et les `except Exception`.
-      Plus `SIM102`, `SIM110`, `I001`, `F841`. `E501` exempte sur
-      `core/constants.py` : les retours a la ligne des exemples de prompt font
-      partie du message envoye au LLM, les recouper le changerait
-- [ ] **`tools=None` dans les DEUX CLI** (`agent_mbpp/cli.py`,
-      `agent_swebench/cli.py`) → le prompt affiche litteralement "None".
-      Cote SWE c'est plus grave : le prompt systeme decrit une methode
-      entierement fondee sur 9 outils dont il ne donne jamais la liste.
-      Attend le manual MCP de P1.4
-- [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (depend de
-      P1.5). Sujet § V.3, point 2 : *"Implement MBPP MCP tools — the
-      `run_tests` tool ; you may implement any additional tools you consider
-      useful"*. C'est un **livrable exige**, pas une option, et il vit dans
-      `mcp_tools_mbpp.py` a la racine (emplacement impose).
-      Ce qu'il restera a faire **cote P2** une fois l'outil livre :
-  - passer la liste des outils a `Prompt` au lieu de `tools=None`, pour que
-    `tools_str` cesse d'afficher "None"
-  - decrire `run_tests` dans le prompt systeme MBPP et **remplacer la consigne
-    actuelle** ("Make SURE to use the assert to VALIDATE your code") ou la
-    composer avec : aujourd'hui le modele valide par `assert` et fait 8/10,
-    mais il ne sait meme pas que l'outil existe
-  - rejouer les 10 taches a jeu egal : c'est une **etude d'ablation** toute
-    trouvee pour `BENCHMARK_REPORT.md` (assert seul vs `run_tests`), sur le
-    meme modele et les memes taches
-  - surveiller le cout : MBPP plafonne a 6000 tokens d'entree **cumules**,
-    chaque description d'outil est rejouee a chaque tour. D'ou la prudence sur
-    le *"any additional tools"* — l'invitation du sujet n'est pas gratuite
-  - **ne pas rendre le prompt dependant de `run_tests`** : le sujet teste avec
-    un serveur MCP inconnu, ou l'outil n'existe pas (*"Your mandatory tools are
-    only present when your own MCP server is connected"*). Les `assert` doivent
-    rester un repli utilisable, pas un vestige a supprimer
-  - les descriptions ne sont **pas a rediger a la main** : elles viennent des
-    schemas du serveur, via le manuel de P1.4. Ce que P2 controle, c'est la
-    mise en forme et les consignes autour (quand appeler, dans quel ordre,
-    avant `final_answer`)
-
-  **A trancher avec ndi-tull** : le sujet ne donne pour MBPP **ni signature ni
-  format de sortie** (contrairement aux 9 outils SWE du § V.5, entierement
-  normes et testes hors boucle). Le `run_tests()` du § V.5.3 lance
-  l'`eval_script` du conteneur ; cote MBPP il n'y a pas d'`eval_script`, la
-  specification ce sont les `test_list` de la tache. **Meme nom, deux sources
-  de verite.** Un seul outil parametre ou deux implementations ? La reponse se
-  defend en soutenance, il faut l'avoir choisie et pas subie.
-- [x] Deux fichiers de models Pydantic → frontiere **nommee** le 2026-09-01 au
-      soir : `core/validators.py` devient `core/config_models.py`, et le
-      critere est « qui possede le schema » (contrat moulinette vs config
-      maison). Voir la table dans « Qui a du code »
-- [ ] **`SandboxConfig` est a cheval sur cette frontiere** : forme imposee par
-      `models_public.py`, valeurs par defaut a nous. Trois sorties, par ordre
-      de preference — sous-classer comme le fait la moulinette elle-meme
-      (`moulinette/moulinette/models.py:23`), externaliser les valeurs dans
-      `sandbox_template.json` (**vide aujourd'hui**, alors que le `Makefile` le
-      propose en `CONFIG=`), ou assumer la divergence en la commentant
-- [x] **`RootModelConfig` retire** le 2026-09-01 au soir : il n'etait ni
-      importe, ni instancie, ni teste. Reste l'import `RootModel` devenu
-      inutile en tete de `config_models.py` (voir la dette ruff ci-dessus)
-- [x] **`reasoning` ne designe plus deux choses dans `configs/models.json`** :
-      cote `provider` c'est toujours le **nom du champ** a lire dans la reponse
-      (`provider.py:99`), cote `models` c'est desormais `is_reasoning`, un
-      **booleen**. Renomme dans le model **et** dans les 3 entrees du JSON
-- [ ] `README.md` (usage reel de l'IA sur le projet, exige par le sujet)
+**Pouvoir de detection verifie par deux mutants** (plugins pytest hors depot,
+aucun fichier de production touche) : `get_task_from_file` rendant le model au
+lieu du dict → **57 echecs** ; signature a un seul argument → **64 echecs**. Sans
+ce fichier, les deux passaient inapercus.
 
 ---
 
 ## Points de synchro
 
-- Format `sandbox_input` / `sandbox_output` : a caler tot, c'est l'interface entre
-  les deux moities du projet.
-- Le **sandbox manual** est produit par P1 et consomme par P2 : definir sa forme
-  des que la decouverte MCP marche. **Le format rendu est l'interface** — P2 se
-  contente de l'inserer dans `Prompt(tools=)`, il ne le compose pas (cf. P1.4).
-- **Aucune consigne du prompt ne doit supposer qu'un outil precis existe** :
-  le sujet teste avec un serveur MCP inconnu, ou `run_tests` n'est pas la.
-  D'ou l'interet de garder la validation par `assert` comme repli cote MBPP,
-  plutot que de dependre entierement de `run_tests` (cf. « Prochaines actions »).
-- **`run_tests` MBPP** (P1.5) : livrable exige par le § V.3 mais non specifie.
-  P1 choisit la signature, P2 la decrit dans le prompt et mesure l'effet.
-  A caler ensemble, sinon le prompt decrira un outil qui n'a pas cette forme.
+- Format `sandbox_input` / `sandbox_output` : c'est l'interface entre les deux
+  moities du projet.
+- Le **sandbox manual** est produit par P1 et consomme par P2 : **le format rendu
+  est l'interface**, P2 insere dans `Prompt(tools=)`, il ne compose pas.
+- **Aucune consigne du prompt ne doit supposer qu'un outil precis existe** : le
+  sujet teste avec un serveur MCP inconnu. D'ou l'`assert` garde comme repli MBPP.
+- **`run_tests` MBPP** : exige par le § V.3 mais non specifie. P1 choisit la
+  signature, P2 la decrit et mesure l'effet. A caler ensemble, sinon le prompt
+  decrira un outil qui n'a pas cette forme.
 - MBPP end-to-end **avant** de toucher a Docker.
-- Ne pas optimiser (tokens, choix de modele) avant que l'approche soit prouvee sur
-  une tache.
+- Ne pas optimiser (tokens, choix de modele) avant que l'approche soit prouvee.

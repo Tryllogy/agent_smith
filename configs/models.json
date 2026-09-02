@@ -37,10 +37,8 @@
         },
         "models": {
             "nvidia/nemotron-3-ultra-550b-a55b:free": {
-                "is_reasoning": true
             },
             "openai/gpt-oss-20b:free": {
-                "is_reasoning": true
             }
         }
     },
@@ -88,7 +86,6 @@
         },
         "models": {
             "openai/gpt-oss-120b": {
-                "is_reasoning": true
             }
         }
     }

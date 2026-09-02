@@ -107,9 +107,12 @@ class Loop:
                 content: str = (
                     "The code has been executed without any error"
                     " or exception but did not produce any output."
-                    " Make SURE to make AND print the asserts like"
-                    " assert cond, '...'."
                 )
+                if self.name_bench == constants.BenchName.MBPP.value:
+                    content += (
+                        " Make SURE to make AND print the asserts like"
+                        " assert cond, '...'."
+                    )
             else:
                 content: str = (
                     "The code has been"

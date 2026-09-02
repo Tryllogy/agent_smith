@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from core import constants
 from core.api_key import APIKey
-from core.config_models import ModelConfig, ProviderConfig
+from core.config_models import ProviderConfig
 from core.models import MBPPTaskInput, SWEBenchTaskInput
 
 
@@ -16,7 +16,7 @@ def check_args(args):
 
 def get_provider_and_model_config(
     model_name: str, provider_url: str
-) -> tuple[ProviderConfig, ModelConfig]:
+) -> tuple[ProviderConfig, dict]:
     try:
         with open(constants.MODELS_CONFIG_FILE) as f:
             models_config = json.load(f)
@@ -30,11 +30,7 @@ def get_provider_and_model_config(
             model_config: dict = provider_config.get("models", {}).get(
                 model_name, {}
             )
-            if model_config == {} or model_config is None:
-                model = ModelConfig.model_validate({"is_reasoning": False})
-            else:
-                model = ModelConfig.model_validate(model_config)
-            return provider, model
+            return provider, model_config
     except FileNotFoundError:
         raise FileNotFoundError(
             f"The models configuration file '{constants.MODELS_CONFIG_FILE}'"

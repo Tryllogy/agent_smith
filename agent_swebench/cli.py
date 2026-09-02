@@ -26,13 +26,14 @@ class AgentSWEBENCH:
         self.task: dict = get_task_from_file(task_file, SWEBenchTaskInput)
         self.output_file: str = output_file
 
+        sandbox: SandboxConfig = SandboxConfig()
         tools = None
 
         prompt: Prompt = Prompt(
             bench=SWE,
             task=self.task,
             tools=tools,
-            allowed_imports=SandboxConfig().authorized_imports,
+            allowed_imports=sandbox.authorized_imports,
         )
 
         self.provider_config, self.model_config = (
@@ -53,7 +54,7 @@ class AgentSWEBENCH:
             client=self.llm_client,
             prompt=prompt,
             bench=SWE,
-            config_sandbox=SandboxConfig(),
+            config_sandbox=sandbox,
         )
 
     def run(self) -> SolutionOutput:

@@ -57,12 +57,3 @@ class ProviderConfig(BaseModel):
     finish_reason: str
     message: str
     retry_after: RetryAfterConfig
-
-
-# ===== ModelConfig ======
-
-
-class ModelConfig(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    is_reasoning: bool = True

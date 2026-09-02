@@ -9,7 +9,6 @@ from core import errors
 from core.api_key import APIKey
 from core.config_models import (
     LLMResponse,
-    ModelConfig,
 )
 from core.llm.provider import Provider
 
@@ -21,7 +20,7 @@ class LLMClient:
         endpoint: str,
         model_name: str,
         provider: Provider,
-        model_config: ModelConfig,
+        model_config: dict,
         api_keys: list[APIKey],
         stop_sequence: list[str] | None = None,
     ) -> None:
@@ -38,7 +37,7 @@ class LLMClient:
         self.stop_sequence = stop_sequence
         self.index_api_key: int = 0
         self.provider = provider
-        self.model_config = model_config
+        self.model_config: dict = model_config
         self.last_api_key_index: int = 0
 
     def get_reponses(
