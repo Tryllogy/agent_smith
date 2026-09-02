@@ -1,3 +1,4 @@
+import ast
 import time
 
 from core import constants, errors
@@ -24,7 +25,7 @@ class Loop:
         self.usage_input: int = 0
         self.usage_output: int = 0
         self.prompt: Prompt = prompt
-        self.name_bench: str = bench.name
+        self.bench: constants.Bench = bench
         self.max_tokens_input: int = bench.input_max_token
         self.max_tokens_output: int = bench.output_max_token
         self.timeout_limit: int = bench.timeout
@@ -90,25 +91,27 @@ class Loop:
             stdout + stderr + error if error else stdout + stderr
         )
         if error is None and is_final:
-            if not isinstance(answer, str):
+            try:
+                ast.parse(answer)
+                self.solution = answer
+                self.success = True
+                return True
+            except Exception:
                 self.prompt.add_message(
                     {
                         "role": "user",
-                        "content": "Observation: The final answer"
-                        " returned by the code is not a string.",
+                        "content": "Observation: The final answer returned by"
+                        " the code is NOT a valid Python expression.",
                     }
                 )
                 return False
-            self.solution = answer
-            self.success = True
-            return True
         elif error is None and not is_final:
             if stdout.strip() == "":
                 content: str = (
                     "The code has been executed without any error"
                     " or exception but did not produce any output."
                 )
-                if self.name_bench == constants.BenchName.MBPP.value:
+                if self.bench == constants.MBPP:
                     content += (
                         " Make SURE to make AND print the asserts like"
                         " assert cond, '...'."
@@ -152,6 +155,12 @@ class Loop:
             self.sandbox_output = ""
             self.last_usage_input = 0
             self.last_usage_output = 0
+            if self.retries > constants.LLM_MAX_RETRIES:
+                self.step_metrics.append(self.make_step_metrics())
+                return self.make_solution_output(
+                    error="LLM max retries exceeded"
+                    f" ({constants.LLM_MAX_RETRIES})"
+                )
             try:
                 if (
                     time.time()
@@ -179,7 +188,10 @@ class Loop:
                 )
             except errors.TransientLLMResponseError as e:
                 self.retries += 1
-                self.retry_after = e.retry_after if e.retry_after else 0.0
+                if e.retry_after is None:
+                    self.retry_after = self.bench.retry_after
+                else:
+                    self.retry_after = e.retry_after
                 time.sleep(self.retry_after)
                 continue
             except errors.PermanentLLMResponseError as e:
@@ -224,14 +236,11 @@ class Loop:
         return self.make_solution_output(error="Iteration limit exceeded")
 
     def make_solution_output(self, error: str | None = None) -> SolutionOutput:
-        if self.name_bench == constants.BenchName.MBPP.value:
-            self.task_id = str(self.task_id)
-        else:
-            self.task_id = str(self.task_id)
+        self.task_id = str(self.task_id)
 
         solution: dict = {
             "task_id": self.task_id,
-            "benchmark": self.name_bench,
+            "benchmark": self.bench.name,
             "success": self.success,
             "solution": self.solution,
             "iterations": self.iteration,

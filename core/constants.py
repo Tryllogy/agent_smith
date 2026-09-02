@@ -3,6 +3,7 @@ from enum import Enum
 
 MARGIN_EXECUTION_TIME = 5
 LLM_TIMEOUT_SECONDS = 30
+LLM_MAX_RETRIES = 4
 LLM_STOP_SEQUENCE = [
     "<end_code>",
 ]
@@ -25,6 +26,7 @@ class Bench:
     output_max_token: int
     iterations: int
     timeout: int
+    retry_after: int
 
 
 SWE = Bench(
@@ -33,6 +35,7 @@ SWE = Bench(
     output_max_token=10000,
     iterations=30,
     timeout=900,
+    retry_after=10,
 )
 
 MBPP = Bench(
@@ -41,6 +44,7 @@ MBPP = Bench(
     output_max_token=1500,
     iterations=10,
     timeout=120,
+    retry_after=5,
 )
 
 SWE_PROMPT_EXEMPLE = r"""Task: Fix the issue described in the problem statement.
