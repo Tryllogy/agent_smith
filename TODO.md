@@ -13,9 +13,14 @@
 
 ## Etat actuel
 
-*(maj : 2026-09-01, fin de journee — reprise apres une semaine d'arret, puis
-grosse session. 4 commits : prompt SWE **fini**, `agent_swebench/` ecrit,
-helpers CLI factorises, dette ruff **soldee**.)*
+*(maj : 2026-09-01, soir — reprise apres une semaine d'arret, puis grosse
+session. 4 commits : prompt SWE **fini**, `agent_swebench/` ecrit, helpers CLI
+factorises, dette ruff **soldee**. Puis une session du soir, **non commitee** :
+trou de tests comble (220 → **293 tests**), `core/validators.py` renomme
+`core/config_models.py`, `ModelConfig.reasoning` renomme `is_reasoning`,
+`RootModelConfig` et `core/llm/keyring.py` supprimes, exemple MBPP nettoye,
+`evaluations/` gitignore. **Deux regressions introduites par le renommage**,
+voir plus bas.)*
 
 ### Ce qui a ete fait le 2026-09-01 (cote tchemin)
 
@@ -71,6 +76,76 @@ helpers CLI factorises, dette ruff **soldee**.)*
    sans mettre a jour les appelants → `TypeError` a la construction. Invisible
    des tests : **aucun test ne construit `AgentMBPP` ni `AgentSWEBENCH`**
 
+#### Session du soir (2026-09-01) — dans l'arbre de travail, pas encore commitee
+
+- [x] **Le trou de tests est comble : `tests/test_agent_cli.py`, 73 tests.**
+      Total **293** (291 verts + **2 `xfail`**, voir regression 1). Ce que le
+      fichier tient, en cinq groupes :
+      construction des deux agents sur **chaque** tache de `cache/` ; cablage
+      obtenu (bench de la boucle contre `constants.MBPP`/`SWE`, tache presente
+      dans `prompt.user_prompt`, `loop.client is llm_client`, URL/modele/
+      `stop_sequence` du client, cles converties en `APIKey`) ; les sept
+      echecs nommes (fichier absent, JSON casse, tache du mauvais bench dans
+      chaque agent, URL provider inconnue, config absente, cle d'API absente) ;
+      la forme d'appel de `get_task_from_file` (la **classe** du model, pas une
+      instance) ; et `run()` avec une fausse boucle — identifiant transmis
+      (`task_id` cote MBPP, `instance_id` cote SWE) et `solution.json` relu en
+      `SolutionOutput`. **Aucun reseau, aucune cle valide requise** : construire
+      un agent ne fait pas d'appel, seul `run()` en ferait
+- [x] **Pouvoir de detection verifie par deux mutants** (plugins pytest hors
+      depot, aucun fichier de production touche) : `get_task_from_file` rendant
+      le model au lieu du dict → **57 echecs** ; signature a un seul argument,
+      le `TypeError` du matin → **64 echecs**. Sans ce fichier, les deux
+      passaient inapercus
+- [x] **Les taches viennent de `cache/`, triees par validation Pydantic** et
+      non par nom — `cache/` contient aussi des `solution.json`, qui portent
+      eux aussi un `task_id`. Une tache minimale ecrite dans `tmp_path` est
+      **toujours** ajoutee au jeu de parametres : le garde-fou survit a un
+      `make clean-all`, qui efface `cache/`
+- [x] **`constants.MODELS_CONFIG_FILE` neutralise en test** : c'est un chemin
+      relatif, donc les tests ne passeraient que lances depuis la racine. Une
+      fixture le remplace par un absolu et pose les cles factices de **chaque**
+      `api_key_env_var` declare dans `configs/models.json` — ajouter un
+      fournisseur au JSON le fait couvrir sans toucher aux tests
+- [x] **`core/validators.py` → `core/config_models.py`** (+ les 6 imports :
+      `agent_cli_helper`, `agent/loop`, `llm/client`, `llm/provider`, et 3
+      fichiers de `tests/`). La frontiere entre les deux fichiers de models
+      porte enfin son critere : **qui possede le schema** (voir « Qui a du
+      code » ci-dessous)
+- [x] **`ModelConfig.reasoning` → `is_reasoning`, avec un defaut** (`= True`)
+      au lieu d'etre requis. Le nom leve la collision : dans le meme
+      `configs/models.json`, `reasoning` cote `provider` designe le **nom du
+      champ** a lire dans la reponse, `is_reasoning` cote `models` est un
+      **booleen**. Les 3 entrees du JSON sont renommees avec
+- [x] **`RootModelConfig` supprime** (jamais importe, jamais instancie) et
+      **`core/llm/keyring.py` supprime** (sans emploi depuis qu'`APIKey` porte
+      l'etat du vivier). Deux items de « Prochaines actions » fermes
+- [ ] **Regression 1 — le repli sur modele inconnu ne replie plus.**
+      `agent_cli_helper.py:34` valide toujours `{"reasoning": False}` : la cle
+      n'existe plus, Pydantic est en `extra="ignore"`, donc elle est
+      **silencieusement jetee** et le repli rend le defaut du champ, `True` —
+      exactement l'inverse du profil conservateur decide le 2026-08-22.
+      Constate par `tests/test_agent_cli.py`, ou le test est passe en
+      `xfail(strict=True)` : il repassera au vert le jour de la correction, et
+      il faudra retirer la marque
+- [ ] **Regression 2 — dette ruff : 0 → 4.** `F401` sur
+      `core/config_models.py:3` (`RootModel` importe mais plus utilise depuis
+      la suppression de `RootModelConfig`) et **3 `I001`** : `core.config_models`
+      se trie avant `core.llm.*` et `core.models`, l'ordre des imports de
+      `core/agent/loop.py`, `core/agent_cli_helper.py` et `core/llm/client.py`
+      n'a pas suivi le renommage. `make format` les regle
+- [x] **Une cle inconnue reste silencieusement jetee** (`extra="ignore"` par
+      defaut chez Pydantic) : la structure n'est extensible qu'en apparence
+      tant que `extra=` n'est pas choisi explicitement — c'est d'ailleurs cette
+      politique par defaut qui produit la regression 1
+- [x] **Exemple MBPP de `core/constants.py` nettoye** : coquille
+      `Obvservation`, `assert ... == 2` dont le message passait apres un saut
+      de ligne, ``` ``` ``` recolle, et indentation du corps dans le
+      `final_answer`. **Le piege principal reste** (voir « Prochaines actions »)
+- [x] **`.gitignore` : `evaluations/` ajoute** — le dernier manque de Phase 0
+- [x] `tests/README.md` mis a jour : ligne du tableau et un paragraphe sur ce
+      qu'un test qui ne fait que *construire* attrape
+
 - [x] `en.subject.pdf` + `RESUME.md` → RESUME complete (section MCP ajoutee :
       definition, "les outils MCP sont les mains de l'agent", qui ecrit quoi)
 - [x] `core/models.py` → les 5 models Pydantic sont ecrits
@@ -80,28 +155,51 @@ helpers CLI factorises, dette ruff **soldee**.)*
 - [x] Python 3.10 → `.venv` en 3.10.20, `requires-python` OK
 - [x] Arborescence flat layout → creee
 - [ ] `README.md` → toujours VIDE
-- [~] `.gitignore` → `.env`, `__pycache__`, `cache`, `moulinette`, `tests` OK ;
-      il manque toujours `evaluations/`
+- [x] `.gitignore` → `.env`, `__pycache__`, `cache`, `moulinette`, `tests`,
+      et `evaluations/` ajoute le 2026-09-01 au soir
 
 ### Qui a du code, au 2026-09-01
 
 | Ecrit | Encore vide |
 |---|---|
-| `core/models.py`, `core/constants.py`, `core/errors.py` | `core/llm/keyring.py` |
-| `core/validators.py` (nouveau), `core/api_key.py` | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
-| `core/llm/client.py`, `core/llm/provider.py` (nouveau) | tout `sandbox/mcp_client/` |
-| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `mcp_tools/`, les 2 `mcp_tools_*.py` racine |
-| `core/agent_cli_helper.py` (nouveau, 2026-09-01) | `agent_swebench/docker.py` (seul reste vide) |
-| `agent_mbpp/` : `cli.py`, `__main__.py` | `sandbox_template.json` |
+| `core/models.py`, `core/constants.py`, `core/errors.py` | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
+| `core/config_models.py` (ex-`validators.py`), `core/api_key.py` | tout `sandbox/mcp_client/` |
+| `core/llm/client.py`, `core/llm/provider.py` (nouveau) | tout `mcp_tools/`, les 2 `mcp_tools_*.py` racine |
+| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | `agent_swebench/docker.py` |
+| `core/agent_cli_helper.py` (nouveau, 2026-09-01) | `sandbox_template.json` |
+| `agent_mbpp/` : `cli.py`, `__main__.py` | `BENCHMARK_REPORT.md`, `README.md` |
 | `agent_swebench/` : `cli.py`, `__main__.py`, `__init__.py` (2026-09-01) | |
 | `sandbox/executor.py`, `configs/models.json` (nouveau) | |
-| `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | `BENCHMARK_REPORT.md`, `README.md` |
+| `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | |
+
+**`core/llm/keyring.py` supprime** (2026-09-01, soir) : vide et sans emploi
+depuis qu'`APIKey` porte l'etat du vivier. `core/llm/` ne contient plus que
+`client.py` et `provider.py`.
 
 **`core/llm/response.py` supprime** : `LLMResponse` a demenage dans
-`core/validators.py`, aux cotes de `ProviderConfig` et `ModelConfig`.
-→ Il y a desormais **deux** fichiers de models Pydantic, `core/models.py`
-(contrats du sujet) et `core/validators.py` (configuration interne). La
-frontiere se defend, mais il faut savoir la dire en soutenance — ou fusionner.
+`core/config_models.py` (ex-`core/validators.py`, renomme le 2026-09-01 au
+soir), aux cotes de `ProviderConfig` et `ModelConfig`.
+
+→ Il y a **deux** fichiers de models Pydantic, et le critere qui les separe se
+dit en une phrase : **qui possede le schema.**
+
+| Fichier | Schema possede par | Ce qu'on a le droit d'y ecrire |
+|---|---|---|
+| `core/models.py` | la moulinette (`moulinette/models_public.py`) | rien de neuf : c'est une copie, un `diff` doit le prouver |
+| `core/config_models.py` | nous (`LLMResponse`, `ProviderConfig`, `ModelConfig`) | ce qu'on veut, ca bouge a chaque fournisseur ajoute |
+
+Le premier ne bouge jamais et un champ ajoute casse l'evaluation en silence ;
+le second vit. C'est ce critere qu'on defend en soutenance, pas « les models
+d'un cote, les validateurs de l'autre » — qui ne dit rien de ce qu'on peut
+ecrire ou non dans chaque fichier.
+
+**Reste une classe a cheval : `SandboxConfig`.** Elle est dans
+`models_public.py` (forme imposee, defauts vides) mais notre copie porte nos
+valeurs — la liste d'imports, `/testbed`, 30 s, 512 Mo. C'est le seul des cinq
+models a n'etre **jamais echange** avec la moulinette. La moulinette elle-meme
+resout ce cas par heritage (`moulinette/moulinette/models.py:23` sous-classe
+son propre modele public pour y mettre ses defauts) : c'est le precedent a
+citer si on garde la classe dans le fichier contrat.
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent ; le sandbox execute du code et remonte `final_answer`, ce qui a
@@ -121,11 +219,11 @@ separe aurait duplique l'etat sans proprietaire clair.
 ```
 racine         . mcp_tools_mbpp.py  . mcp_tools_swebench.py
                . sandbox_template.json  . BENCHMARK_REPORT.md  . README.md
-core/          + models.py  + validators.py  + errors.py  + constants.py
+core/          + models.py  + config_models.py  + errors.py  + constants.py
                + api_key.py  + agent_cli_helper.py
   agent/       + loop.py  + extraction.py  + prompt.py
-  llm/         + client.py  + provider.py  . keyring.py
-               (usage.py et response.py supprimes)
+  llm/         + client.py  + provider.py
+               (usage.py, response.py et keyring.py supprimes)
 sandbox/       . cli.py  + executor.py  . manual.py
   security/    + imports.py  + filesystem.py  + builtins.py  + network.py
                + ast_guard.py  . limits.py
@@ -134,7 +232,7 @@ mcp_tools/     . tools_fs.py  . tools_search.py  . tools_exec.py
 agent_mbpp/    + __main__.py  + cli.py
 agent_swebench/+ __main__.py  + cli.py  . docker.py
 configs/       + models.json
-tests/         + banc d'essai local, gitignore, hors rendu (220 tests)
+tests/         + banc d'essai local, gitignore, hors rendu (293 tests)
 ```
 
 **`core/constants.py` heberge desormais les deux exemples de prompt**
@@ -275,8 +373,8 @@ Tant que ce n'est pas fige, chacun code contre du vide.
 
 - [x] Setup uv + `pyproject.toml` + Python 3.10 + structure de dossiers
 - [x] Makefile (install / run / lint / clean)
-- [~] `.gitignore` (`.env`, `__pycache__`, `cache`, `tests` OK) → ajouter
-      `evaluations/`
+- [x] `.gitignore` (`.env`, `__pycache__`, `cache`, `tests`, `moulinette`,
+      `evaluations/`)
 - [x] **FIGER TOUS les models Pydantic** (`core/models.py`) :
   - [x] `SandboxConfig` — `authorized_imports`, `allowed_directories`,
         `max_execution_time_seconds`, `max_memory_mb`
@@ -873,8 +971,9 @@ faire** chaque modele. Le fournisseur est retrouve par son URL, le modele par
       ce sont des observations, leur place est dans `BENCHMARK_REPORT.md`. Tenu
 - [x] Cle = identifiant exact du fournisseur, prefixe et suffixe `:free` compris
 - [x] Validation par des models Pydantic (`ProviderConfig`, `ModelConfig`,
-      `RootModelConfig` dans `core/validators.py`), par symetrie avec
-      `SandboxConfig`
+      dans `core/config_models.py`), par symetrie avec `SandboxConfig`.
+      `RootModelConfig`, jamais importe ni instancie, a ete **supprime** le
+      2026-09-01 au soir
 - [x] Lecture dans `cli.py` (`get_provider_and_model_config`, meme frontiere
       que `get_api_keys()`), **jamais** dans `LLMClient` : le client recoit une
       config, il ne va pas la chercher. Tenu
@@ -883,25 +982,53 @@ faire** chaque modele. Le fournisseur est retrouve par son URL, le modele par
 
 **Points restes ouverts, a trancher :**
 
-- [x] **Repli sur modele inconnu — FAIT** (`b9a43ad`, 2026-08-22).
-      `cli.py:105-108` : quand `--model-name` est absent du JSON, un profil
-      par defaut conservateur est construit (`ModelConfig(reasoning=False)`)
-      au lieu du `ValueError`. La decision du 2026-08-16 est donc tenue, et
-      un identifiant OpenRouter qui disparait du catalogue ne bloque plus
-      l'agent. *(A defendre en soutenance : le repli est silencieux — aucun
-      avertissement n'est affiche. Assumer, ou logger.)*
+- [~] **Repli sur modele inconnu — fait le 2026-08-22 (`b9a43ad`), casse le
+      2026-09-01 au soir.** Quand `--model-name` est absent du JSON, un profil
+      par defaut conservateur est construit au lieu du `ValueError` : le
+      mecanisme tient toujours, mais `agent_cli_helper.py:34` construit encore
+      `{"reasoning": False}` alors que le champ s'appelle desormais
+      `is_reasoning`. La cle est ignoree en silence et le profil « conservateur »
+      vaut `is_reasoning=True`. **Un mot a changer**, et l'`xfail` de
+      `tests/test_agent_cli.py` tombe. *(A defendre en soutenance : le repli
+      est silencieux — aucun avertissement n'est affiche. Assumer, ou logger.)*
 - [ ] **Le fournisseur est retrouve par egalite stricte d'URL**
       (`find_provider_by_url`, `cli.py:140`) : un `/` final de trop dans
       `--provider-url` et rien ne matche. Normaliser, ou chercher par nom.
       *Toujours ouvert au 2026-09-01*
-- [ ] **`ModelConfig` n'a qu'un champ `reasoning`, et il n'est lu nulle part**
-      — `LLMClient` le stocke (`client.py:41`) sans jamais s'en servir. Soit
-      il pilote quelque chose (`reasoning_effort`, budget de sortie), soit il
-      degage : un champ de config mort est indefendable en soutenance.
+- [~] **`ModelConfig` n'a qu'un champ `is_reasoning`, et il n'est lu nulle part**
+      — `LLMClient` le stocke (`client.py:41`) sans jamais s'en servir. Il
+      n'est pas seulement mort, il est **cable** de bout en bout : construit
+      par `agent_cli_helper.py:34-36`, recupere par les deux CLI, passe au
+      constructeur, stocke. Un champ mort dans un JSON est inerte ; un champ
+      mort qui a son parametre de constructeur ressemble a un champ vivant.
       *Toujours ouvert au 2026-09-01.* Attention au faux ami : le `reasoning`
       de `LLMResponse` (lu par `Loop`, via `Provider.get_reasoning`) est un
       **autre** champ, bien vivant celui-la — c'est le `reasoning` **bool** de
-      `ModelConfig` (`validators.py:68`) qui est mort
+      `ModelConfig` (`config_models.py:68`) qui est mort.
+      **Avance le 2026-09-01 au soir :** le champ est renomme `is_reasoning`
+      (fin de la collision avec le `reasoning` de `provider`) et recoit un
+      defaut (`= True`), donc une entree du JSON n'a plus a le porter.
+      **Position tenable** — garder la case vide pour de futurs reglages par
+      modele se defend, le conteneur `"models": {...}` est au bon endroit.
+      **Trois choses a finir** pour que l'argument tienne vraiment :
+  - **le rendre vivant** : le corps de requete est construit en dur
+    (`client.py:56-61` — `model`, `messages`, `stop`, `max_tokens`), rien n'y
+    consulte `self.model_config`. OpenRouter et Groq acceptent tous deux un
+    parametre de raisonnement dans ce corps, et `gpt-oss` expose un
+    `reasoning_effort` (`low`/`medium`/`high`) : c'est exactement le trou que
+    la cle est censee remplir
+  - **choisir la politique sur les cles inconnues** : Pydantic est en
+    `extra="ignore"` par defaut, donc un `"temperature": 0.2` ajoute au JSON
+    est **silencieusement jete**. `extra="forbid"` attrape la faute de frappe ;
+    `extra="ignore"` la laisse passer sans bruit. Aujourd'hui c'est le second,
+    par defaut et non par choix — donc la structure n'est extensible qu'en
+    apparence
+  - **reparer le repli**, devenu urgent : `agent_cli_helper.py:34` construit
+    `{"reasoning": False}` avec l'ancien nom. Ignoree en silence, la cle laisse
+    le defaut `True` s'appliquer — modele present sans la cle et modele absent
+    du JSON donnent maintenant le **meme** profil, et c'est le moins
+    conservateur des deux. Sous `xfail(strict=True)` dans
+    `tests/test_agent_cli.py`
 - [ ] Regle de precedence CLI > fichier : sans objet tant qu'aucun reglage
       n'est expose en double. A rouvrir des qu'un l'est
 
@@ -1066,7 +1193,8 @@ requetes emises. Le correctif est teste unitairement, pas encore en campagne.
 
 - [x] **Prompt SWE-bench fini** le 2026-09-01 (P2.4), tour `user` compris
 - [x] **`agent_swebench/` ecrit** le 2026-09-01 (P2.5), `docker.py` excepte
-- [x] **Dette ruff soldee** le 2026-09-01 : 13 → 0
+- [x] **Dette ruff soldee** le 2026-09-01 : 13 → 0 (**repassee a 4** le soir
+      meme, cf. ci-dessous)
 
 **Le point de reprise, au soir du 2026-09-01.** Tout ce qui pouvait etre fait
 sans `mcp_tools/` cote SWE l'a ete. Le prompt et les deux CLI tiennent, mais
@@ -1074,29 +1202,60 @@ sans `mcp_tools/` cote SWE l'a ete. Le prompt et les deux CLI tiennent, mais
 et les chiffres MBPP datent d'avant la couche `Provider`.
 Priorite : **remesurer MBPP**, qui est debloque et nourrit le rapport.
 
+La session du soir n'a rien mesure non plus — elle a ferme les deux dettes qui
+auraient pollue la mesure : le trou de tests (une regression de construction
+passait inapercue) et l'exemple MBPP, dont les coquilles auraient fausse toute
+ablation de prompt. **Rien n'est commite** : les modifications de
+`core/config_models.py` (renomme, `RootModelConfig` retire, champ renomme),
+`core/constants.py`, `configs/models.json`, `.gitignore`, la suppression de
+`core/llm/keyring.py` et les 6 imports vivent dans l'arbre de travail.
+`tests/` est gitignore, donc `tests/test_agent_cli.py` ne sera jamais commite
+— c'est voulu.
+
+**A faire avant de commiter** : le mot de `agent_cli_helper.py:34` et
+`make format`. Deux minutes, et les deux seules regressions ouvertes tombent.
+
 - [ ] **Campagne de controle MBPP** — le chantier le plus rentable, et il ne
       depend de personne. Prealable : **refaire le releve des modeles gratuits**
       (celui du 2026-08-16 est perime, `openai/gpt-oss-20b:free` a disparu)
 - [ ] **Rapatrier `origin/ndi-tull`** (`eedbf20`) dans `thomas` avant toute
       nouvelle mesure
-- [ ] **Aucun test ne construit `AgentMBPP` ni `AgentSWEBENCH`.** C'est ce trou
-      qui a laisse passer la signature de `get_task_from_file` dans les deux
-      CLI a la fois — `TypeError` a la construction, 220 tests au vert. Un test
-      qui instancie les deux classes sur les taches de `cache/` attraperait
-      cette classe de regression sans toucher au reseau
-- [ ] **Corriger l'exemple MBPP**, qui porte le meme piege que celui corrige
-      cote SWE : son `final_answer("def smallest_abs(a):` est coupe par un vrai
-      retour a la ligne, donc le modele voit une chaine non terminee. Plus deux
-      coquilles, `Obvservation` et un `assert ... == 2\n,` dont la virgule
-      passe apres le saut de ligne. **Mesurer l'effet a jeu egal** : c'est une
-      seconde etude d'ablation pour `BENCHMARK_REPORT.md`
+- [x] **Aucun test ne construisait `AgentMBPP` ni `AgentSWEBENCH`** — comble
+      le 2026-09-01 au soir par `tests/test_agent_cli.py` (73 tests, total
+      **293** : 291 verts, 2 `xfail`), hors reseau. Detection verifiee sur deux
+      mutants : 57 et 64 echecs la ou 220 tests passaient. Le fichier a
+      immediatement servi : c'est lui qui a attrape la regression du repli sur
+      modele inconnu, une heure apres avoir ete ecrit. Detail dans
+      « Session du soir »
+- [~] **Corriger l'exemple MBPP.** Fait le 2026-09-01 au soir pour les
+      coquilles : `Obvservation`, la virgule du second `assert` passee apres le
+      saut de ligne, la cloture ``` ``` ``` recollee, l'indentation du corps.
+      **Le piege principal tient toujours** : le `final_answer("def
+      smallest_abs(a):` reste coupe par un vrai retour a la ligne, donc le
+      modele lit une chaine non terminee et copie une forme qui ne compile pas.
+      Il faut une chaine sur une ligne, un `\n` litteral, ou des triples
+      quotes. **Et l'effet n'est pas mesure** : l'ablation a jeu egal pour
+      `BENCHMARK_REPORT.md` reste entierement a faire
 - [ ] **Consigne de prompt qui a fuit dans la boucle** : `loop.py`, methode
       `observation()`, contient en dur *"Make SURE to make AND print the
       asserts like assert cond, '...'"*. Ce message part pour **les deux**
       benchmarks — cote SWE il reclame des asserts dont le prompt ne parle
       jamais. A rendre dependant du bench, ou a remonter dans le prompt
-- [ ] **`ModelConfig.reasoning` est mort** : stocke par `LLMClient`, lu par
-      personne. Le brancher ou le retirer (P2.5 bis)
+- [ ] **URGENT — `agent_cli_helper.py:34` valide `{"reasoning": False}` avec
+      un nom de champ qui n'existe plus.** Le renommage en `is_reasoning` a
+      laisse cet appel derriere lui ; la cle est ignoree en silence et le repli
+      sur modele inconnu rend `is_reasoning=True`. Un mot a changer, l'`xfail`
+      de `tests/test_agent_cli.py` sert de temoin (P2.5 bis)
+- [ ] **`make format` : la dette ruff est repassee de 0 a 4** apres le
+      renommage — `F401` (`RootModel` importe et plus utilise,
+      `config_models.py:3`) et 3 `I001` d'ordre d'imports (`agent/loop.py`,
+      `agent_cli_helper.py`, `llm/client.py`)
+- [~] **`ModelConfig.is_reasoning` est mort** : stocke par `LLMClient`
+      (`client.py:41`), lu par personne. Le champ a ete renomme et a recu un
+      defaut le 2026-09-01 au soir, ce qui leve la collision de noms et rend la
+      cle facultative dans le JSON, mais ne le branche pas. Reste : le lire
+      dans le corps de requete (`client.py:56-61`) et choisir `extra=` sur
+      `ModelConfig` (P2.5 bis)
 - [ ] **Campagne de controle** apres les correctifs provider + backoff : les
       chiffres de `run4` datent d'avant la couche `Provider`.
       **Attention : `cache/run4/` n'existe plus sur le disque** (`cache/` est
@@ -1148,11 +1307,23 @@ Priorite : **remesurer MBPP**, qui est debloque et nourrit le rapport.
   specification ce sont les `test_list` de la tache. **Meme nom, deux sources
   de verite.** Un seul outil parametre ou deux implementations ? La reponse se
   defend en soutenance, il faut l'avoir choisie et pas subie.
-- [ ] `core/llm/keyring.py` : vide et sans emploi depuis que `APIKey` porte
-      l'etat du vivier → a supprimer ou a justifier
-- [ ] Deux fichiers de models Pydantic (`core/models.py` / `core/validators.py`)
-      → justifier la frontiere ou fusionner
-- [ ] `.gitignore` : ajouter `evaluations/`
+- [x] Deux fichiers de models Pydantic → frontiere **nommee** le 2026-09-01 au
+      soir : `core/validators.py` devient `core/config_models.py`, et le
+      critere est « qui possede le schema » (contrat moulinette vs config
+      maison). Voir la table dans « Qui a du code »
+- [ ] **`SandboxConfig` est a cheval sur cette frontiere** : forme imposee par
+      `models_public.py`, valeurs par defaut a nous. Trois sorties, par ordre
+      de preference — sous-classer comme le fait la moulinette elle-meme
+      (`moulinette/moulinette/models.py:23`), externaliser les valeurs dans
+      `sandbox_template.json` (**vide aujourd'hui**, alors que le `Makefile` le
+      propose en `CONFIG=`), ou assumer la divergence en la commentant
+- [x] **`RootModelConfig` retire** le 2026-09-01 au soir : il n'etait ni
+      importe, ni instancie, ni teste. Reste l'import `RootModel` devenu
+      inutile en tete de `config_models.py` (voir la dette ruff ci-dessus)
+- [x] **`reasoning` ne designe plus deux choses dans `configs/models.json`** :
+      cote `provider` c'est toujours le **nom du champ** a lire dans la reponse
+      (`provider.py:99`), cote `models` c'est desormais `is_reasoning`, un
+      **booleen**. Renomme dans le model **et** dans les 3 entrees du JSON
 - [ ] `README.md` (usage reel de l'IA sur le projet, exige par le sujet)
 
 ---

@@ -5,8 +5,8 @@ from pydantic import ValidationError
 
 from core import constants
 from core.api_key import APIKey
+from core.config_models import ModelConfig, ProviderConfig
 from core.models import MBPPTaskInput, SWEBenchTaskInput
-from core.validators import ModelConfig, ProviderConfig
 
 
 def check_args(args):
@@ -31,7 +31,7 @@ def get_provider_and_model_config(
                 model_name, {}
             )
             if model_config == {} or model_config is None:
-                model = ModelConfig.model_validate({"reasoning": False})
+                model = ModelConfig.model_validate({"is_reasoning": False})
             else:
                 model = ModelConfig.model_validate(model_config)
             return provider, model

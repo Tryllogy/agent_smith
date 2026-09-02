@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, RootModel
+from pydantic import BaseModel, ConfigDict
 
 # ===== LLMResponse ======
 
@@ -65,11 +65,4 @@ class ProviderConfig(BaseModel):
 class ModelConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    reasoning: bool
-
-
-class RootModelConfig(RootModel[dict[str, ModelConfig]]):
-    model_config = ConfigDict(frozen=True)
-
-    def __getitem__(self, key: str) -> ModelConfig:
-        return self.root[key]
+    is_reasoning: bool = True

@@ -7,11 +7,11 @@ from pydantic import ValidationError
 
 from core import errors
 from core.api_key import APIKey
-from core.llm.provider import Provider
-from core.validators import (
+from core.config_models import (
     LLMResponse,
     ModelConfig,
 )
+from core.llm.provider import Provider
 
 
 class LLMClient:

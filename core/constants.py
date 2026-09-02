@@ -190,12 +190,12 @@ Code:
 def smallest_abs(a):
     return min(map(abs,a))
 assert smallest_abs([3, -1, 5]) == 1, 'smallest_abs([3, -1, 5]) == 1'
-assert smallest_abs([-5, 2]) == 2
-, 'smallest_abs([-5, 2]) == 2'```<end_code>
-Obvservation: TrueThought: I have solved the task, now I will return the final answer.
+assert smallest_abs([-5, 2]) == 2, 'smallest_abs([-5, 2]) == 2'
+```<end_code>
+Observation: True
+Thought: I have solved the task, now I will return the final answer.
 Code:
 ```python
-final_answer("def smallest_abs(a):
-return min(map(abs,a))")
+final_answer("def smallest_abs(a): return min(map(abs,a))")
 ```<end_code>
 """

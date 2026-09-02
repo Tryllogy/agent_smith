@@ -4,7 +4,7 @@ from datetime import datetime
 
 from httpx import Headers
 
-from core.validators import ProviderConfig
+from core.config_models import ProviderConfig
 
 
 class Provider:
