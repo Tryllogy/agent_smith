@@ -159,7 +159,7 @@ class Loop:
                 self.step_metrics.append(self.make_step_metrics())
                 return self.make_solution_output(
                     error="LLM max retries exceeded"
-                    f" ({constants.LLM_MAX_RETRIES})"
+                    f" ({self.retries})"
                 )
             try:
                 if (

@@ -29,9 +29,11 @@ debloque la boucle. Restent le CLI/REPL, le manual, **et tout MCP**.
 
 1. **`origin/ndi-tull` (`eedbf20`) n'est pas mergee** dans `thomas` — a
    rapatrier avant toute nouvelle mesure, sinon les deux moities divergent.
-2. **Le releve des modeles gratuits est perime** (2026-08-16) :
-   `openai/gpt-oss-20b:free` n'existe plus chez OpenRouter, le slug est
-   `openai/gpt-oss-20b` et il n'est plus gratuit. A refaire avant toute campagne.
+2. **Le modele declare en premier dans `configs/models.json` est inutilisable.**
+   `nvidia/nemotron-3-ultra-550b-a55b:free` met 27 a 40 s par reponse, contre
+   30 s d'echeance par appel : le run pilote de `run5` a fini a 0 iteration.
+   Releve des deux fournisseurs refait le 2026-09-02, voir P2.3 — **Groq est un
+   ordre de grandeur plus rapide** (0,1-4,7 s) et deja declare dans le JSON.
 
 ### Journal condense
 
@@ -464,45 +466,98 @@ de cles, puis repli de provider s'il est configure, puis **echec gracieux**.
       (`find_provider_by_url`) : un `/` final de trop dans `--provider-url` et
       rien ne matche. Normaliser, ou chercher par nom
 
-#### Modeles gratuits — releve du 2026-08-16, **perime**
+#### Modeles gratuits — releve du 2026-09-02 (les deux fournisseurs)
 
-**19 gratuits sur 413** (17 sur 399 le 2026-08-10) : la liste bouge en six jours,
-ne jamais figer un identifiant dans le code. Relister par
+Sonde : meme requete pour tous (une fonction triviale, bloc `python` demande),
+`max_tokens=1500`. Methode pour relister OpenRouter :
 `GET https://openrouter.ai/api/v1/models` (public, sans auth), garder
 `pricing.prompt` **et** `pricing.completion` a `"0"` — filtrer sur le prix, pas
-sur le suffixe `:free`. Verifier `usage.cost == 0` avant une campagne : le sujet
-impose les offres gratuites **exclusivement**.
+sur le suffixe `:free`. Cote Groq : `GET /openai/v1/models` avec la cle (et un
+`User-Agent`, sinon 403).
 
-**Les 19 annoncent tous `reasoning` dans `supported_parameters`** — ce champ dit
-"sait raisonner", pas "raisonne par defaut" : le catalogue ne permet **aucun**
-tri. Le seul critere fiable est la mesure de
-`usage.completion_tokens_details.reasoning_tokens`. Sonde du 2026-08-16, meme
-requete pour tous :
+**OpenRouter : 21 gratuits sur 423, dont 17 testables** (retires : 2 modeles
+audio `lyria`, le classifieur `content-safety`, et `openrouter/free` qui est un
+routeur — inutilisable pour un benchmark reproductible).
 
-| Modele | tokens sortie | dont raisonnement | temps | bloc ? |
+| Modele | out | raisonnement | temps | bloc |
 |---|---|---|---|---|
-| `openai/gpt-oss-20b:free` | **371** | 218 | 38,4 s | oui |
-| `nvidia/nemotron-3.5-lightning:free` | 1500 | 1088 | 9,8 s | oui |
-| `cohere/north-mini-code:free` | 1499 | 1246 | 52,8 s | non |
-| `poolside/laguna-s-2.1:free` | 1500 | 1500 | 34,2 s | non |
-| `google/gemma-4-31b-it:free` | — | — | — | 429 fournisseur |
+| `liquid/lfm-2.5-2.6b:free` | 166 | 147 | 1,9 s | oui |
+| `inclusionai/ling-3.0-flash-fin:free` | 45 | 33 | 2,0 s | oui |
+| `poolside/laguna-xs-2.1:free` | 414 | 394 | 2,9 s | oui |
+| `nvidia/nemotron-3-super-120b-a12b:free` | 61 | 47 | 4,4 s | oui |
+| `dots-studio/dots-3-note-preview:free` | 382 | 403 | 5,1 s | oui |
+| `minimax/minimax-m2.7:free` | 191 | 195 | 6,5 s | oui |
+| `minimax/minimax-m3:free` | 18 | 0 | 8,6 s | oui |
+| `nvidia/nemotron-3.5-lightning:free` | 358 | 353 | 10,7 s | oui |
+| `cohere/north-mini-code:free` | 294 | 312 | 13,1 s | oui |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | 227 | 240 | **27,2 s** | oui |
 
-Trois sur cinq epuisent le plafond MBPP de 1500 tokens **des la premiere
-requete**, sur un exercice trivial, dont deux sans ecrire une ligne de code.
-`gpt-oss-20b` est le seul a s'arreter de deliberer pour repondre, et il expose un
-`reasoning_effort` (`low`/`medium`/`high`) — levier disponible avant de changer de
-modele.
+**7 injoignables** le meme jour : `google/gemma-4-31b-it:free` et
+`gemma-4-26b-a4b-it:free`, `z-ai/glm-5.2:free`, `poolside/laguna-s-2.1:free`
+(« Provider returned error »), `nvidia/nemotron-3-nano-omni-...-reasoning:free`
+(`ResourceExhausted`), et les deux `thinkingmachines/inkling*:free`
+(« only available on agentic harnesses »). **Etre au catalogue ne veut pas dire
+etre joignable** : un releve par le prix ne suffit pas, il faut sonder.
 
-**Quota : 50 requetes/jour et par compte** sur les `:free`
-(`limit_source: openrouter_free_tier_daily`, reset a 02:00 locales). 4 cles
-epuisees le meme jour par ~30 requetes de campagne chacune. La rotation
-multi-cles n'est pas un confort : c'est ce qui rend une campagne realisable.
+**Groq : 14 au catalogue, 8 testables** (retires : 2 `whisper`, 2 `orpheus`
+audio, 2 `prompt-guard` classifieurs).
 
-- [ ] Un 429 `free-models-per-day` n'est **pas** un rate limit passager (8 h
-      d'attente). La boucle le traite comme transitoire, correct tant qu'une cle
-      survit ; quand toutes y sont, la tache brule son budget en reessais. Le
-      corps porte pourtant `limit_source`, de quoi distinguer "ralentis" de
-      "reviens demain"
+| Modele | out | raisonnement | temps | bloc |
+|---|---|---|---|---|
+| `qwen/qwen3.8-27b` | 20 | 0 | **0,1 s** | oui |
+| `openai/gpt-oss-20b` | 111 | 83 | 0,3 s | oui |
+| `openai/gpt-oss-120b` | 80 | 44 | 0,4 s | oui |
+| `openai/gpt-oss-safeguard-20b` | 58 | 32 | 0,4 s | oui |
+| `qwen/qwen3.6-27b` | 231 | 0 | 0,6 s | oui |
+| `groq/compound-mini` | 79 | 0 | 0,7 s | oui |
+| `groq/compound` | 814 | 0 | 4,7 s | oui |
+| `allam-2-7b` | 18 | 0 | 0,1 s | **NON** |
+
+**Groq est un ordre de grandeur plus rapide** — 0,1 a 4,7 s contre 1,9 a 27,2 s.
+Sur MBPP, ou 120 s couvrent 10 iterations, c'est decisif : `LLM_TIMEOUT_SECONDS`
+vaut 30 s, donc un modele a 27 s comme `nemotron-3-ultra` est hors-jeu en
+pratique (mesure a **39,8 s** le meme jour sur une autre requete : c'est lui qui
+a fait echouer le run pilote de `run5` a 0 iteration).
+
+**Nuance a savoir dire en soutenance :** chez OpenRouter la gratuite est une
+propriete du **modele** (`pricing` a 0, `usage.cost` verifiable a chaque
+reponse) ; chez Groq c'est une propriete du **compte** — le free tier, avec ses
+quotas. Groq ne renvoie aucun champ `cost`, donc `usage.cost == 0` n'est pas
+verifiable cote reponse. La preuve de gratuite y est l'absence de facturation
+activee sur le compte.
+
+**Quotas mesures (2026-09-02) :**
+
+| | OpenRouter | Groq |
+|---|---|---|
+| Requetes | 50 / jour / compte (`:free`) | 1000 / jour |
+| Tokens | — | **8000 / minute** |
+| Reset | 02:00 locales | `x-ratelimit-reset-*`, en duree |
+| Cles dans `.env` | 2 | **1** |
+
+Chez Groq la contrainte mordante n'est pas le nombre de requetes mais les
+**8000 tokens par minute** : une tache MBPP consomme ~750 en entree et ~500 en
+sortie par tour, soit 5 a 6 requetes par minute au plus. Et il n'y a **qu'une
+seule cle Groq** : la rotation multi-cles, obligatoire au sujet, n'a rien a
+faire tourner de ce cote.
+
+- [ ] **`get_retry_after` ne sait pas lire les en-tetes de Groq.**
+      `provider.py:32-39` teste `retry_after_value.isdigit()`, or Groq renvoie
+      `x-ratelimit-reset-tokens: 30.795s` et
+      `x-ratelimit-reset-requests: 5m45.6s`. Verifie : les deux rendent `None`.
+      Un `Retry-After: 1.5` (decimal simple) est rejete de la meme facon —
+      `isdigit()` n'accepte que des entiers. Les trois entrees declarees pour
+      Groq dans `configs/models.json` sont donc **decoratives** : le delai
+      retombe toujours sur le plancher du bench. Il faut un format de duree qui
+      accepte le decimal et le suffixe (`s`, `m`), sinon la rotation de cles
+      Groq travaille a l'aveugle
+- [ ] Un 429 `free-models-per-day` (OpenRouter) n'est **pas** un rate limit
+      passager : 8 h d'attente. La boucle le traite comme transitoire, correct
+      tant qu'une cle survit ; quand toutes y sont, la tache brule son budget.
+      Le corps porte `limit_source`, de quoi distinguer « ralentis » de
+      « reviens demain »
+- [ ] **Ajouter des cles Groq** : une seule aujourd'hui, contre deux chez
+      OpenRouter. Le sujet exige le multi-token *par fournisseur*
 
 ### P2.4 — System prompts
 
@@ -648,14 +703,32 @@ et sa suppression supprime avec elle la classe de bug qui venait de mordre.
 Reussites **verifiees en executant les `test_list`**, pas d'apres le rapport de
 l'agent — les deux verdicts ont toujours concorde.
 
-| Serie | Modele | reel | sortie mediane | max | duree des 10 |
-|---|---|---|---|---|---|
-| `run2` | `nemotron-3-ultra-550b` | **9/10** | 446 | 730 | 229 s |
-| `run3` | `gpt-oss-20b` | **8/10** | 226 | 624 | 473 s |
-| `run4` | `gpt-oss-20b` (apres correctifs) | **8/10** | 221 | 624 | 461 s |
+| Serie | Fournisseur / modele | reel | requetes | duree des 10 |
+|---|---|---|---|---|
+| `run2` | OpenRouter `nemotron-3-ultra-550b` | 9/10 | — | 229 s |
+| `run3` | OpenRouter `gpt-oss-20b` | 8/10 | — | 473 s |
+| `run4` | OpenRouter `gpt-oss-20b` (apres correctifs) | 8/10 | — | 461 s |
+| `run5` | OpenRouter `nemotron-3-super-120b` | 4/10 | 29 | 480 s |
+| `run6` | **Groq `gpt-oss-120b`** | **10/10** | 16 | **48 s** |
+| `run7` | **Groq `gpt-oss-120b`**, 10 taches neuves | **9/10** | 18 | **53 s** |
 
-Barre du sujet : 4/5 (80 %). Sur 25 executions distinctes, 21 reussites — **84 %,
-on passe sans marge.**
+**19/20 sur deux jeux de taches independants** (seeds 1..10 et 11..20, aucun
+recouvrement) : le meilleur resultat du projet, et le seul sans aucun faux
+positif. Rapports complets dans `cache/run5..7/RAPPORT.md`.
+
+Le basculement vers Groq explique l'essentiel : `run5` et `run6` portent sur
+**les memes 10 taches** avec le meme agent, 4/10 contre 10/10. Les quatre
+echecs `run5` par plafond de sortie crevé passent tous en un seul tour chez
+Groq. Matiere directe pour le `BENCHMARK_REPORT.md`.
+
+Le seul echec restant (`run7`, MBPP 462) est un **echec de quota, pas de
+raisonnement** : l'enonce porte un `test_list` de ~1000 tokens, la tache
+consomme 2961 tokens d'un coup, le seau Groq (8000/min) tombe a 2438 et les
+cinq tentatives suivantes partent en 429. Les deux gardes ont joue leur role —
+le plafond a coupe la rafale, les metriques restent valides sur les 10.
+
+Barre du sujet : 4/5 (80 %). Sur les campagnes OpenRouter, 84 % ; sur Groq,
+**95 % (19/20)**.
 
 Les trois echecs, et ce qu'ils ont appris :
 
