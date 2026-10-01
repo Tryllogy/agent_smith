@@ -62,6 +62,10 @@ class AgentMBPP:
             prompt=prompt,
             bench=MBPP,
             config_sandbox=sandbox,
+            answer_tests=[
+                *self.task.get("test_imports", []),
+                *self.task.get("test_list", []),
+            ],
         )
 
     def run(self) -> SolutionOutput:
