@@ -1,10 +1,13 @@
 PYTHON_VERSION := 3.10
 UV             := uv
 CACHE_DIR      := cache
+URL := https://openrouter.ai/api/v1
+MODEL := nvidia/nemotron-3-ultra-550b-a55b:free
 .DEFAULT_GOAL := help
 
 .PHONY: help setup install dev sandbox sandbox-mbpp sandbox-swebench \
-        mbpp swebench lint format clean clean-docker clean-all
+        mbpp swebench lint format test test-samples test-update \
+        clean clean-docker clean-all
 
 help:
 	@echo "Agent Smith - cibles disponibles"
@@ -26,6 +29,9 @@ help:
 	@echo "  Qualite"
 	@echo "    lint               Analyse statique (ruff)"
 	@echo "    format             Formate le code (ruff)"
+	@echo "    test               Tests (extraction + reponses API)"
+	@echo "    test-samples       Affiche l'extraction de chaque sample"
+	@echo "    test-update        Regenere les snapshots des samples"
 	@echo ""
 	@echo "  Nettoyage"
 	@echo "    clean              Caches Python et artefacts de build"
@@ -72,6 +78,15 @@ lint:
 format:
 	$(UV) run ruff format .
 	$(UV) run ruff check --fix .
+
+test:
+	$(UV) run pytest
+
+test-samples:
+	$(UV) run pytest tests/test_samples.py -s -k dump
+
+test-update:
+	$(UV) run pytest --update-snapshots
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

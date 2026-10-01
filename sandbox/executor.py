@@ -1,13 +1,14 @@
-import multiprocessing as mp
 import io
-from contextlib import redirect_stdout, redirect_stderr
-from sandbox.security.builtins import safe_builtins
-from sandbox.security.ast_guard import check_code
-from core.models import SandboxConfig
-from sandbox.security.imports import make_guarded_import
-from sandbox.security.filesystem import make_guarded_directory
-from sandbox.security.network import block_network
+import multiprocessing as mp
 import resource
+from contextlib import redirect_stderr, redirect_stdout
+
+from core.models import SandboxConfig
+from sandbox.security.ast_guard import check_code
+from sandbox.security.builtins import safe_builtins
+from sandbox.security.filesystem import make_guarded_directory
+from sandbox.security.imports import make_guarded_import
+from sandbox.security.network import block_network
 
 
 class FinalAnswer(Exception):
@@ -25,7 +26,8 @@ def run_in_child(code, out_queue, config: SandboxConfig):
     block_network()
     builtins_dict = safe_builtins()
     builtins_dict["__import__"] = make_guarded_import(
-        config.authorized_imports)
+        config.authorized_imports
+    )
     builtins_dict["open"] = make_guarded_directory(config.allowed_directories)
     ns = {"__builtins__": builtins_dict, "final_answer": final_answer}
     error, is_final, answer = None, False, None
@@ -53,8 +55,7 @@ def execute(code, config=None):
         config = SandboxConfig()
     timeout = config.max_execution_time_seconds
     q = mp.Queue()
-    p = mp.Process(target=run_in_child, args=(
-        code, q, config))
+    p = mp.Process(target=run_in_child, args=(code, q, config))
     p.start()
     p.join(timeout)
     if p.is_alive():
@@ -64,5 +65,8 @@ def execute(code, config=None):
             p.kill()
             p.join()
         return ("", "", f"Timeout after {timeout}s", False, None)
-    return q.get() if not q.empty() else (
-        "", "", "No result (process died)", False, None)
+    return (
+        q.get()
+        if not q.empty()
+        else ("", "", "No result (process died)", False, None)
+    )

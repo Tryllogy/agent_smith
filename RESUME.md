@@ -60,8 +60,8 @@ simples, algorithmique de base. Chaque tâche tient en une fonction.
 # task_definition : "Write a function to find the shared elements from the given two lists."
 # function_definition : def similar_elements(test_tup1, test_tup2):
 # test_list :
-assert similar_elements((3,4,5,6), (5,7,4,10)) == (4, 5)
-assert similar_elements((1,2,3,4), (5,4,3,7)) == (3, 4)
+assert similar_elements((3, 4, 5, 6), (5, 7, 4, 10)) == (4, 5)
+assert similar_elements((1, 2, 3, 4), (5, 4, 3, 7)) == (3, 4)
 ```
 
 L'évaluation est binaire : les 3 assertions passent ou non.
@@ -257,9 +257,11 @@ la récupération des résultats.
 
 ```python
 class SandboxConfig(BaseModel):
-    authorized_imports: List[str] = [...]   # math, collections, itertools, re, json, typing,
-                                            # functools, operator, heapq, bisect, copy, string,
-                                            # random, datetime, array, cmath (+ .*)
+    authorized_imports: List[str] = [
+        ...
+    ]  # math, collections, itertools, re, json, typing,
+    # functools, operator, heapq, bisect, copy, string,
+    # random, datetime, array, cmath (+ .*)
     allowed_directories: List[str] = ["/testbed", "/tmp/agent"]
     max_execution_time_seconds: int = 30
     max_memory_mb: int = 512

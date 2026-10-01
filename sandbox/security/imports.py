@@ -15,10 +15,7 @@ def make_guarded_import(authorized_imports: list):
     def is_allowed(name: str) -> bool:
         if name in exact:
             return True
-        for p in prefixes:
-            if name == p or name.startswith(p + "."):
-                return True
-        return False
+        return any(name == p or name.startswith(p + ".") for p in prefixes)
 
     def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
         if is_allowed(name):

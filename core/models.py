@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -9,20 +9,33 @@ class SandboxConfig(BaseModel):
     Everything else is blocked by default.
     """
 
-    authorized_imports: List[str] = Field(default_factory=lambda: [
-        "math", "math.*",
-        "collections", "collections.*",
-        "itertools", "re", "json",
-        "typing", "typing.*",
-        "functools", "operator",
-        "heapq", "bisect", "copy",
-        "string", "random",
-        "datetime", "datetime.*",
-        "array", "cmath",
-    ])
-    allowed_directories: List[str] = Field(default_factory=lambda: [
-        "/testbed", "/tmp/agent"
-    ])
+    authorized_imports: list[str] = Field(
+        default_factory=lambda: [
+            "math",
+            "math.*",
+            "collections",
+            "collections.*",
+            "itertools",
+            "re",
+            "json",
+            "typing",
+            "typing.*",
+            "functools",
+            "operator",
+            "heapq",
+            "bisect",
+            "copy",
+            "string",
+            "random",
+            "datetime",
+            "datetime.*",
+            "array",
+            "cmath",
+        ]
+    )
+    allowed_directories: list[str] = Field(
+        default_factory=lambda: ["/testbed", "/tmp/agent"]
+    )
     max_execution_time_seconds: int = 30
     max_memory_mb: int = 512
 
@@ -33,8 +46,8 @@ class MBPPTaskInput(BaseModel):
     task_id: int
     task_definition: str
     function_definition: str
-    test_imports: List[str] = Field(default_factory=list)
-    test_list: List[str] = Field(default_factory=list)
+    test_imports: list[str] = Field(default_factory=list)
+    test_list: list[str] = Field(default_factory=list)
 
 
 class SWEBenchTaskInput(BaseModel):
@@ -47,7 +60,7 @@ class SWEBenchTaskInput(BaseModel):
     instance_id: str = Field(
         ...,
         description="SWE-bench instance identifier "
-                    "(e.g., 'sympy__sympy-23534')",
+        "(e.g., 'sympy__sympy-23534')",
     )
     problem_statement: str = Field(
         ...,
@@ -56,13 +69,13 @@ class SWEBenchTaskInput(BaseModel):
     docker_image: str = Field(
         ...,
         description="Full Docker image name to pull (e.g., "
-                    "'swebench/sweb.eval.x86_64.sympy_1776_sympy-23534:"
-                    "latest')",
+        "'swebench/sweb.eval.x86_64.sympy_1776_sympy-23534:"
+        "latest')",
     )
     eval_script: str = Field(
         ...,
         description="Bash script to run inside the container to evaluate "
-                    "the patch",
+        "the patch",
     )
     hints_text: str = Field(
         default="",
@@ -102,12 +115,12 @@ class StepMetrics(BaseModel):
     api_url: str = Field(
         default="",
         description="Base URL of the LLM API endpoint "
-                    "(e.g., 'https://openrouter.ai/api/v1')",
+        "(e.g., 'https://openrouter.ai/api/v1')",
     )
     model_name: str = Field(
         default="",
         description="Model identifier used for this step "
-                    "(e.g., 'qwen/qwen3-235b-a22b-2507')",
+        "(e.g., 'qwen/qwen3-235b-a22b-2507')",
     )
     llm_output: str = Field(
         default="",
@@ -124,7 +137,7 @@ class StepMetrics(BaseModel):
     retries: int = Field(
         default=0,
         description="Number of LLM API retries before getting a successful "
-                    "response (0 = first attempt succeeded)",
+        "response (0 = first attempt succeeded)",
     )
 
 
@@ -140,7 +153,7 @@ class SolutionOutput(BaseModel):
     task_id: str = Field(
         ...,
         description="Task identifier (MBPP task_id as string, or "
-                    "SWE-bench instance_id)",
+        "SWE-bench instance_id)",
     )
     benchmark: str = Field(
         ...,
@@ -153,7 +166,7 @@ class SolutionOutput(BaseModel):
     solution: str = Field(
         ...,
         description="For MBPP: the Python function code. For SWE-bench: "
-                    "the git patch (diff)",
+        "the git patch (diff)",
     )
     iterations: int = Field(
         ...,
@@ -162,7 +175,7 @@ class SolutionOutput(BaseModel):
     total_requests: int = Field(
         ...,
         description="Total number of LLM API requests made (including "
-                    "retries)",
+        "retries)",
     )
     total_input_tokens: int = Field(
         ...,
@@ -176,19 +189,18 @@ class SolutionOutput(BaseModel):
         ...,
         description="Wall-clock time from agent start to finish",
     )
-    steps: List[StepMetrics] = Field(
+    steps: list[StepMetrics] = Field(
         default_factory=list,
         description="Per-step metrics, one entry per agent iteration",
     )
     system_prompt: str = Field(
         default="",
         description="Full system prompt sent to the LLM (for provenance "
-                    "checking)",
+        "checking)",
     )
-    error: Optional[str] = Field(
+    error: str | None = Field(
         default=None,
-        description="Error message if the agent failed (None if "
-                    "successful)",
+        description="Error message if the agent failed (None if successful)",
     )
     timestamp: str = Field(
         default_factory=lambda: datetime.now().isoformat(),

@@ -1,0 +1,92 @@
+{
+    "openrouter": {
+        "provider": {
+            "url": "https://openrouter.ai/api/v1",
+            "endpoint": "/chat/completions",
+            "header": {
+                "Authorization": "Bearer {api_key}"
+            },
+            "api_key_env_var": "OPENROUTER_API_KEY",
+            "choice": "choices",
+            "reasoning": "reasoning",
+            "usage": "usage",
+            "model": "model",
+            "error": "error",
+            "content": "content",
+            "input_tokens": "prompt_tokens",
+            "output_tokens": "completion_tokens",
+            "finish_reason": "finish_reason",
+            "message": "message",
+            "retry_after": {
+                "names": {
+                    "retry-after": {
+                        "scale": 1,
+                        "format": [
+                            "duration",
+                            "date"
+                        ]
+                    },
+                    "x-ratelimit-reset": {
+                        "scale": 1000,
+                        "format": [
+                            "epoch"
+                        ]
+                    }
+                }
+            }
+        },
+        "models": {
+            "nvidia/nemotron-3-ultra-550b-a55b:free": {
+            },
+            "openai/gpt-oss-20b:free": {
+            }
+        }
+    },
+    "groq": {
+        "provider": {
+            "url": "https://api.groq.com/openai/v1",
+            "endpoint": "/chat/completions",
+            "header": {
+                "Authorization": "Bearer {api_key}"
+            },
+            "api_key_env_var": "GROQ_API_KEY",
+            "choice": "choices",
+            "reasoning": "reasoning",
+            "usage": "usage",
+            "model": "model",
+            "error": "error",
+            "content": "content",
+            "input_tokens": "prompt_tokens",
+            "output_tokens": "completion_tokens",
+            "finish_reason": "finish_reason",
+            "message": "message",
+            "retry_after": {
+                "names": {
+                    "retry-after": {
+                        "scale": 1,
+                        "format": [
+                            "duration",
+                            "date"
+                        ]
+                    },
+                    "x-ratelimit-reset-requests": {
+                        "scale": 1,
+                        "format": [
+                            "duration"
+                        ]
+                    },
+                    "x-ratelimit-reset-tokens": {
+                        "scale": 1,
+                        "format": [
+                            "duration"
+                        ]
+                    }
+                }
+            }
+        },
+        "models": {
+            "openai/gpt-oss-120b": {
+            }
+        }
+    }
+}
