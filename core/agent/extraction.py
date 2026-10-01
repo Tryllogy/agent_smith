@@ -26,6 +26,7 @@ def extract_code_from_text(text: str) -> dict:
 
 
 def decode_python(text: str) -> tuple[str, str]:
+    """Return the code with "None" if it parses, else with the error."""
     try:
         ast.parse(text)
         return text, "None"

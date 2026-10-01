@@ -12,6 +12,7 @@ from core.models import MBPPTaskInput, SolutionOutput, SWEBenchTaskInput
 
 
 def check_args(args):
+    """Raise ValueError if --model-name is missing or blank."""
     if not args.model_name or args.model_name.strip() == "":
         raise ValueError("Model name is required.")
 
@@ -19,6 +20,11 @@ def check_args(args):
 def get_provider_and_model_config(
     model_name: str, provider_url: str
 ) -> tuple[ProviderConfig, dict]:
+    """Return the provider matching provider_url and the model's entry.
+
+    The entry is {} for a model absent from models.json. Raises
+    FileNotFoundError, ValueError or RuntimeError on a bad config.
+    """
     try:
         with open(constants.MODELS_CONFIG_FILE) as f:
             models_config = json.load(f)
@@ -53,6 +59,10 @@ def get_provider_and_model_config(
 
 
 def find_provider_by_url(models_config: dict, url: str) -> str:
+    """Return the name of the provider whose url is exactly url.
+
+    Raises KeyError on a malformed entry, ValueError if none matches.
+    """
     for provider_name, config in models_config.items():
         provider = config.get("provider", None)
         if provider is None:
@@ -71,6 +81,10 @@ def find_provider_by_url(models_config: dict, url: str) -> str:
 
 
 def get_api_keys(provider_config: ProviderConfig) -> list[APIKey]:
+    """Read the comma-separated API keys from the provider's env var.
+
+    Raises ValueError if the variable is unset or holds no key.
+    """
     key_name: str = provider_config.api_key_env_var
     api_keys_env = os.getenv(key_name)
     if not api_keys_env:
@@ -92,6 +106,10 @@ def get_api_keys(provider_config: ProviderConfig) -> list[APIKey]:
 def get_task_from_file(
     file_path: str, bench_input: MBPPTaskInput | SWEBenchTaskInput
 ) -> dict:
+    """Load the task file, validate it against bench_input, return it.
+
+    The task is returned as the raw dict, not as the model.
+    """
     try:
         with open(file_path) as file:
             task: dict = json.load(file)

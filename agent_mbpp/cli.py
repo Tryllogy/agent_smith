@@ -16,6 +16,8 @@ load_dotenv()
 
 
 class AgentMBPP:
+    """MBPP agent: wires a task file to the agent loop."""
+
     def __init__(
         self,
         task_file: str,
@@ -23,6 +25,11 @@ class AgentMBPP:
         model_name: str,
         provider_url: str,
     ) -> None:
+        """Load the task, then build the prompt, LLM client and loop.
+
+        Raises on any configuration error (task file, models.json,
+        API keys): no request is made here.
+        """
         self.task: dict = get_task_from_file(task_file, MBPPTaskInput)
         self.output_file: str = output_file
 
@@ -58,6 +65,11 @@ class AgentMBPP:
         )
 
     def run(self) -> SolutionOutput:
+        """Run the loop and write its SolutionOutput to the output file.
+
+        An unexpected exception inside the loop is reported in the
+        output, with the steps already recorded, instead of propagating.
+        """
         try:
             solution: SolutionOutput = self.loop.run(self.task["task_id"])
         except Exception as e:

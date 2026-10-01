@@ -17,12 +17,16 @@ PATCH_MARKERS = ("diff --git", "--- a/", "+++ b/", "@@")
 
 
 class BenchName(Enum):
+    """Benchmark names, as written in SolutionOutput."""
+
     SWE = "swebench"
     MBPP = "mbpp"
 
 
 @dataclass(frozen=True)
 class Bench:
+    """Hard limits of a benchmark and its default retry delay (s)."""
+
     name: str
     input_max_token: int
     output_max_token: int

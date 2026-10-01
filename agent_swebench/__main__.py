@@ -12,6 +12,11 @@ from core.constants import SWE
 
 
 def main() -> int:
+    """Parse the arguments, run the SWE-bench agent, return the exit code.
+
+    Any error still leaves a solution.json (success=false) at
+    --output, and the exit code is then 1.
+    """
     parser = argparse.ArgumentParser(description="Run the SWEbench agent.")
     parser.add_argument(
         "--task-file", required=True, help="Path to the task file."

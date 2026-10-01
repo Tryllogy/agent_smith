@@ -19,6 +19,7 @@ class LLMResponseError(Exception):
     """
 
     def __init__(self, message: str, status_code: int | None = None) -> None:
+        """Keep the HTTP status code, if any."""
         super().__init__(message)
         self.status_code = status_code
 
@@ -36,6 +37,7 @@ class TransientLLMResponseError(LLMResponseError):
         status_code: int | None = None,
         retry_after: float | None = None,
     ) -> None:
+        """Keep the status code and the provider's retry delay (s)."""
         super().__init__(message, status_code)
         self.retry_after: float | None = retry_after
 

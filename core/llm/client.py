@@ -14,6 +14,12 @@ from core.llm.provider import Provider
 
 
 class LLMClient:
+    """Chat completion client with API key rotation.
+
+    The only module that makes HTTP calls. Every failure is raised
+    as a TransientLLMResponseError or a PermanentLLMResponseError.
+    """
+
     def __init__(
         self,
         url: str,
@@ -24,6 +30,10 @@ class LLMClient:
         api_keys: list[APIKey],
         stop_sequence: list[str] | None = None,
     ) -> None:
+        """Target model_name at url + endpoint, with the given keys.
+
+        Raises ValueError unless api_keys is a list of APIKey.
+        """
         if not isinstance(api_keys, list) or not all(
             isinstance(key, APIKey) for key in api_keys
         ):
@@ -47,6 +57,11 @@ class LLMClient:
         messages: list,
         max_tokens: int,
     ) -> None:
+        """Thread target: POST the request into thread_result.
+
+        Stores the response under 'request' or the exception under
+        'error'.
+        """
         try:
             header = self.replace_header_api_key(self.provider.config.header)
             request: httpx.Response = httpx.post(
@@ -72,6 +87,11 @@ class LLMClient:
         messages: list,
         max_tokens: int,
     ) -> tuple[dict, float]:
+        """Run the request in a daemon thread bounded by timeout_max.
+
+        httpx timeouts apply per I/O phase, the join bounds the total.
+        Returns the response and its duration in milliseconds.
+        """
         start_time = time.time()
         thread_result: dict = {
             "error": None,
@@ -100,6 +120,10 @@ class LLMClient:
         messages: list,
         max_tokens: int,
     ) -> LLMResponse:
+        """Send messages to the LLM and return the parsed LLMResponse.
+
+        Raises TransientLLMResponseError or PermanentLLMResponseError.
+        """
         if not self.api_keys:
             raise errors.PermanentLLMResponseError(
                 "No API key provided for LLM client.",
@@ -176,6 +200,10 @@ class LLMClient:
         error: Exception,
         timeout_max: float,
     ) -> Exception | None:
+        """Raise the typed LLM error matching a request exception.
+
+        Returns the exception unchanged if it is not a request error.
+        """
         match error:
             case json.JSONDecodeError():
                 raise errors.TransientLLMResponseError(
@@ -221,6 +249,12 @@ class LLMClient:
         error: Exception | str | None = None,
         timeout_max: float = 0.0,
     ) -> None:
+        """Raise the typed LLM error matching an HTTP status code.
+
+        429 rotates to the next key and 402 retires the current one.
+        Permanent when no usable key is left or the wait exceeds
+        timeout_max.
+        """
         if retry_after is not None and retry_after < 0:
             retry_after = 0.0
         if status_code in errors.ERRORS_TRANSIENT:
@@ -284,6 +318,11 @@ class LLMClient:
         status_code: int | None = None,
         retry_after: float = 0.0,
     ) -> str | None:
+        """Move to the next usable key and return it, or None if none.
+
+        Records retry_after on the current key and retires it on 402.
+        A key whose wait exceeds timeout_max is retired and skipped.
+        """
         if (
             all(not key.get_usable() for key in self.api_keys)
             or not self.api_keys
@@ -310,6 +349,7 @@ class LLMClient:
         return self.api_keys[self.index_api_key]
 
     def replace_header_api_key(self, headers: dict) -> dict:
+        """Return a copy of headers with {api_key} set to the current key."""
         header = headers.copy()
         for key, value in header.items():
             if "{api_key}" in value:

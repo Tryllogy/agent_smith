@@ -8,15 +8,20 @@ from core.config_models import ProviderConfig
 
 
 class Provider:
+    """Reads a provider's response through its ProviderConfig names."""
+
     def __init__(self, provider_config: ProviderConfig) -> None:
+        """Keep the provider configuration."""
         self.config: ProviderConfig = provider_config
 
     def convert_from_epoch_to_delay(
         self, retry_after_value: str | float, scale: int = 1
     ) -> float:
+        """Convert an epoch (divided by scale) to seconds from now."""
         return float(retry_after_value) / scale - time.time()
 
     def check_if_date_format(self, date_str: str) -> bool:
+        """Return True if date_str is an HTTP date (IMF-fixdate)."""
         try:
             datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S GMT")
             return True
@@ -24,6 +29,10 @@ class Provider:
             return False
 
     def get_retry_after(self, headers: Headers) -> float | None:
+        """Return the wait in seconds from the rate-limit headers.
+
+        Uses the first configured header that parses; None otherwise.
+        """
         retry_after_value: str | float | None = None
         provider_retry_after = self.config.retry_after
         for name, config in provider_retry_after.names.items():
@@ -50,30 +59,35 @@ class Provider:
         return None
 
     def get_choice(self, data: dict) -> dict | None:
+        """Return the first choice, or None."""
         choice_key = self.config.choice
         if choice_key not in data:
             return None
         return data[choice_key][0] if data[choice_key] else None
 
     def get_message(self, data: dict) -> dict | None:
+        """Return the message of the first choice, or None."""
         choice = self.get_choice(data)
         if choice is None:
             return None
         return choice.get(self.config.message, None)
 
     def get_finish_reason(self, data: dict) -> str | None:
+        """Return the finish reason of the first choice, or None."""
         choice = self.get_choice(data)
         if choice is None:
             return None
         return choice.get(self.config.finish_reason, "")
 
     def get_usage(self, data: dict) -> dict | None:
+        """Return the usage block, or None."""
         usage_key = self.config.usage
         if usage_key not in data:
             return None
         return data[usage_key]
 
     def get_content(self, data: dict) -> str:
+        """Return the message content, or "" without a message."""
         message = self.get_message(data)
         if message is None:
             return ""
@@ -81,18 +95,21 @@ class Provider:
         return content
 
     def get_model(self, data: dict) -> str:
+        """Return the model reported, or ""."""
         model_key = self.config.model
         if model_key not in data:
             return ""
         return data[model_key]
 
     def get_error(self, data: dict) -> dict:
+        """Return the provider's error block, or {}."""
         error_key = self.config.error
         if error_key not in data:
             return {}
         return data[error_key]
 
     def get_reasoning(self, data: dict) -> str:
+        """Return the reasoning text, or ""."""
         choice = self.get_message(data)
         if choice is None:
             return ""
@@ -102,6 +119,7 @@ class Provider:
         return reasoning_data
 
     def get_input_tokens(self, data: dict) -> int:
+        """Return the prompt token count, or 0 if absent."""
         usage = self.get_usage(data)
         if usage is None:
             return 0
@@ -111,6 +129,7 @@ class Provider:
         return usage.get(input_tokens_key, 0)
 
     def get_output_tokens(self, data: dict) -> int:
+        """Return the completion token count, or 0 if absent."""
         usage = self.get_usage(data)
         if usage is None:
             return 0

@@ -11,6 +11,14 @@ from sandbox.executor import execute
 
 
 class Loop:
+    """Thought -> Code -> Observation loop for a single task.
+
+    Calls the LLM, extracts the code block, runs it in the sandbox
+    and feeds the observation back, until final_answer() or a
+    benchmark limit (iterations, tokens, time). Usage is tracked
+    per step for the SolutionOutput.
+    """
+
     def __init__(
         self,
         client: LLMClient,
@@ -18,6 +26,10 @@ class Loop:
         bench: constants.Bench,
         config_sandbox: SandboxConfig | None = None,
     ) -> None:
+        """Bind the client, prompt and benchmark limits.
+
+        config_sandbox defaults to SandboxConfig().
+        """
         self.client: LLMClient = client
         self.thoughts: list = []
         self.reasoning: list = []
@@ -47,6 +59,11 @@ class Loop:
         self.turn_requests: int = 0
 
     def thought(self, timeout_max: float, max_tokens: int):
+        """Send the conversation to the LLM and append its answer.
+
+        Updates usage, request time and llm_output. LLM errors
+        propagate to run().
+        """
         self.requests += 1
         self.turn_requests += 1
         llm_response: LLMResponse = self.client.get_llm_reponse(
@@ -69,10 +86,19 @@ class Loop:
         self.prompt.add_message(message)
 
     def extract(self, text: str) -> bool:
+        """Extract the first code block of text into self.code.
+
+        Returns True if a block was found and parses as Python.
+        """
         self.code: dict = extract_code_from_text(text)
         return self.code["found"] and self.code["error"] == "None"
 
     def observation(self, max_execution_time: int) -> bool:
+        """Run the extracted code and add the observation for the LLM.
+
+        Returns True only when final_answer() was called with a valid
+        answer. Every other outcome is reported as a user message.
+        """
         if not self.code["found"]:
             self.sandbox_input = ""
             self.sandbox_output = ""
@@ -169,6 +195,11 @@ class Loop:
         self,
         task_id: str,
     ) -> SolutionOutput:
+        """Run the loop on task_id and return the SolutionOutput.
+
+        Transient LLM errors are retried; permanent ones and exhausted
+        limits end the run with error set instead of raising.
+        """
         self.start_time: float = time.time()
         self.iteration: int = 0
         self.task_id: str = task_id
@@ -250,6 +281,7 @@ class Loop:
         return self.make_solution_output(error=error)
 
     def make_solution_output(self, error: str | None = None) -> SolutionOutput:
+        """Build the SolutionOutput from the current state of the run."""
         self.task_id = str(self.task_id)
 
         solution: dict = {
@@ -278,6 +310,7 @@ class Loop:
     def make_step_metrics(
         self,
     ) -> StepMetrics:
+        """Build the StepMetrics of the current turn."""
         step_metric: dict = {
             "step": self.iteration + 1,
             "input_tokens": self.last_usage_input,
