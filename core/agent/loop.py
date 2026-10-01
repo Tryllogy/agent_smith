@@ -1,4 +1,5 @@
 import ast
+import sys
 import time
 
 from core import constants, errors
@@ -57,6 +58,7 @@ class Loop:
             self.config_sandbox: SandboxConfig = config_sandbox
         self.requests: int = 0
         self.turn_requests: int = 0
+        self.last_llm_error: str = ""
 
     def thought(self, timeout_max: float, max_tokens: int):
         """Send the conversation to the LLM and append its answer.
@@ -200,6 +202,7 @@ class Loop:
         self.task_id: str = task_id
         self.retries: int = 0
         self.turn_requests = 0
+        self.last_llm_error = ""
         while self.iteration < self.iteration_limit:
             self.sandbox_input = ""
             self.sandbox_output = ""
@@ -207,10 +210,6 @@ class Loop:
             self.request_time_ms = 0.0
             self.last_usage_input = 0
             self.last_usage_output = 0
-            if self.retries > constants.LLM_MAX_RETRIES:
-                return self.exit_on_guard(
-                    f"LLM max retries exceeded ({self.retries})"
-                )
             try:
                 if (
                     time.time()
@@ -232,10 +231,29 @@ class Loop:
                 )
             except errors.TransientLLMResponseError as e:
                 self.retries += 1
+                self.last_llm_error = str(e)
+                if e.status_code is not None:
+                    self.last_llm_error += f" (HTTP {e.status_code})"
+                if self.retries > constants.LLM_MAX_RETRIES:
+                    return self.exit_on_guard(
+                        f"LLM max retries exceeded ({self.retries})"
+                    )
                 if e.retry_after is None:
                     self.retry_after = self.bench.retry_after
                 else:
                     self.retry_after = e.retry_after
+                if (
+                    time.time()
+                    - self.start_time
+                    + self.retry_after
+                    + constants.MARGIN_EXECUTION_TIME
+                ) > self.timeout_limit:
+                    return self.exit_on_guard("Timeout limit exceeded")
+                sys.stderr.write(
+                    f"LLM retry {self.retries} on step {self.iteration + 1}:"
+                    f" {self.last_llm_error};"
+                    f" waiting {self.retry_after:.1f}s\n"
+                )
                 time.sleep(self.retry_after)
                 continue
             except errors.PermanentLLMResponseError as e:
@@ -267,12 +285,18 @@ class Loop:
             self.iteration += 1
             self.retries = 0
             self.turn_requests = 0
+            self.last_llm_error = ""
         return self.make_solution_output(error="Iteration limit exceeded")
 
     def exit_on_guard(self, error: str) -> SolutionOutput:
-        """End the run, recording the turn only if it sent a request."""
+        """End the run with error, plus the last LLM error of the turn.
+
+        The turn is recorded as a step only if it sent a request.
+        """
         if self.turn_requests > 0:
             self.step_metrics.append(self.make_step_metrics())
+        if self.last_llm_error:
+            error += f"; last LLM error: {self.last_llm_error}"
         return self.make_solution_output(error=error)
 
     def make_solution_output(self, error: str | None = None) -> SolutionOutput:
