@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ===== LLMResponse ======
 
@@ -71,3 +71,31 @@ class ProviderConfig(BaseModel):
     finish_reason: str
     message: str
     retry_after: RetryAfterConfig
+
+
+# ===== ModelConfig ======
+
+LOOP_OWNED_BODY_KEYS = frozenset({"model", "messages", "stop", "max_tokens"})
+
+
+class ModelConfig(BaseModel):
+    """Per-model settings declared under "models" in configs/models.json.
+
+    extra="forbid" turns a typo into a startup error instead of a
+    silently ignored key.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    extra_body: dict = Field(default_factory=dict)
+
+    @field_validator("extra_body")
+    @classmethod
+    def keep_loop_owned_keys(cls, value: dict) -> dict:
+        """Refuse keys the loop computes itself, like max_tokens."""
+        clash = sorted(LOOP_OWNED_BODY_KEYS & value.keys())
+        if clash:
+            raise ValueError(
+                f"extra_body cannot set {clash}: the loop sets them"
+            )
+        return value

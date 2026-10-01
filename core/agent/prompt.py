@@ -108,6 +108,12 @@ class Prompt:
                 "It is FORBIDDEN to modify test files: the evaluation script"
                 " restores them before judging, so editing them changes"
                 " nothing and only pollutes the patch.\n"
+                "Never edit code you have not read: every old_str must be"
+                " copied from a read_file() observation of an EARLIER step,"
+                " never written from memory, and never call edit_file() in"
+                " the same code block as the read_file() it relies on. Do"
+                " not apply a fix you remember for this repository: find"
+                " the cause in the code, then fix it.\n"
                 "Here is an example:\n"
                 f"{SWE_PROMPT_EXEMPLE}",
             },

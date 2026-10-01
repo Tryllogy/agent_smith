@@ -76,6 +76,7 @@ print(run_command(command="python /tmp/agent/repro.py", workdir="/testbed"))
 print(search_code(pattern="_default_cache", file_pattern="src/skema/*.py"))
 print(search_code(pattern="_defaults", file_pattern="src/skema/*.py"))
 print(read_file(filepath="/testbed/src/skema/fields.py", start_line=88, end_line=98))
+print(read_file(filepath="/testbed/src/skema/fields.py", start_line=298, end_line=311))
 ```<end_code>
 
 Observation:
@@ -105,6 +106,21 @@ exit_code: 0
 96:             self._default_cache = self.default_factory()
 97:         return self._default_cache
 
+298:
+299:     def __init__(self, schema, **kwargs):
+300:         super().__init__(**kwargs)
+301:         self.schema = schema
+302:         self._defaults = None
+303:
+304:     def deserialize(self, value, **kwargs):
+305:         if value is _UNSET:
+306:             value = {}
+307:         if self._defaults is None:
+308:             self._defaults = self.schema._collect_defaults()
+309:         data = dict(self._defaults)
+310:         data.update(self.schema.load(value, **kwargs))
+311:         return data
+
 Step 2
 
 Thought: Both cases leak, and the grep shows two independent caches, not one. In `Field`
@@ -130,8 +146,8 @@ print(run_command(command="python /tmp/agent/repro.py", workdir="/testbed"))
 ```<end_code>
 
 Observation:
-/testbed/src/skema/fields.py:91 edited (1 replacement)
-/testbed/src/skema/fields.py:301 edited (1 replacement)
+/testbed/src/skema/fields.py:92 edited (1 replacement)
+/testbed/src/skema/fields.py:300 edited (1 replacement)
 /testbed/src/skema/fields.py:305 edited (1 replacement)
 stdout:
 flat   b = [] | shared: False

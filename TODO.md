@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **355 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **357 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
@@ -104,15 +104,20 @@ revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
 
 **Risque de planning — les quotas gratuits face a SWE :**
 
-- [ ] Le prompt SWE fait **~2 700 tokens** avant toute observation. Groq
-      gratuit = 8 000 tokens/minute ; une requete plus grosse que le plafond
-      est probablement refusee d'office (**a verifier**, statut attendu 413).
-      Or 413 n'est ni dans `ERRORS_TRANSIENT` ni dans `ERRORS_PERMANENT` →
-      branche « Unexpected error », abandon. `gpt-oss-120b` chez Groq risque
-      de tomber apres quelques `read_file`
+- [x] **Groq gratuit est inutilisable pour SWE — verifie le 2026-10-01.**
+      Une requete unique de 9 096 tokens rend **HTTP 413** « Request too
+      large… on tokens per minute (TPM): Limit 8000, Requested 9096 » : toute
+      requete au-dela de 8 000 tokens est refusee d'office. Le prompt SWE en
+      fait deja ~2 700 a vide, quelques `read_file` suffiront. Le 413 tombe
+      dans la branche « Unexpected error » de `check_status_error` → abandon
+      `Permanent` : traitement juste (rejouer ne sert a rien), message
+      imprecis. Meme sous le plafond, a ~3 500 tokens par requete, le seau TPM
+      impose des 429 de ~20 s (vu sur le run SWE du meme jour, P2.4)
 - [ ] OpenRouter : 50 req/jour. **≥ 5 modeles × 3 taches SWE** ≈ 225 a 450
       requetes, soit 5 a 9 jours de quota. Chercher d'autres fournisseurs
-      gratuits **maintenant** : c'est le vrai chemin critique du rapport
+      gratuits **maintenant** : c'est le vrai chemin critique du rapport.
+      **Releve fait le 2026-10-01** (P2.3, « Fournisseurs pour SWE ») :
+      NVIDIA Build en tete, Mistral en second, en attente de cles
 
 **Rendu :**
 
@@ -153,7 +158,13 @@ et deux bugs de la boucle reveles par ces campagnes corriges dans la foulee
 (attente non plafonnee, cause des retries perdue — voir P2.1, `2f7b56b`).
 Puis, **non commite** : prompt MBPP (tests caches, `assert` + `final_answer`
 dans le meme bloc), campagne `run12`, et **verification du `final_answer`
-MBPP par la boucle** contre `test_list` (voir P2.1, P2.4, P2.6).
+MBPP par la boucle** contre `test_list` (voir P2.1, P2.4, P2.6) — commites
+dans `4c8d206`. Campagnes `run13`/`run14` avec la verification (16/20, 0
+soumission a l'aveugle, 2 refus justes). Premiere tache **SWE** lancee
+(`sympy__sympy-14711`, 5 iterations) : outils non branches, modele qui
+**recite le correctif** de memoire, Groq **413 confirme** au-dela de 8 000
+tokens. D'ou, **non commite** : regle anti-recitation dans le prompt SWE et
+exemple SWE mis en conformite (P2.4).
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -938,6 +949,58 @@ protocolaire (`gpt-oss-20b`) ou budget d'entree (`compound`, `allam`).
 - [ ] **Ajouter des cles Groq** (rappel) : une seule, et c'est desormais le
       seul avantage restant a OpenRouter
 
+#### Fournisseurs pour SWE — releve du 2026-10-01
+
+**Le besoin.** Une tache SWE, c'est ~30 requetes dont le contexte grossit
+jusqu'a plusieurs dizaines de milliers de tokens (300 000 cumules autorises),
+en 900 s. Il faut donc, **gratuitement** et sans carte : un contexte par
+requete ≥ ~60k, assez de requetes par minute et **par jour** (examen : 3
+taches ; rapport : ≥ 5 modeles × 3 taches), une API au format OpenAI (une
+entree dans `configs/models.json`, pas de code), et plusieurs cles possibles.
+
+**Releve par recherche web** — chiffres surtout tires de guides tiers, **a
+confirmer avec une cle** :
+
+| Fournisseur | Gratuit | Limites | Contexte | Verdict |
+|---|---|---|---|---|
+| **NVIDIA Build** (API NIM) | permanent, sans carte ni telephone, credits **supprimes** en 2026 | **40 RPM**, pas de plafond journalier | 128k a 1M selon modele | **candidat n°1** |
+| **Mistral** | depuis le **14/08/2026** : **10 $ de credits/mois** offerts, sans carte ; entrees/sorties utilisees pour l'entrainement sauf opt-out | au debit des credits (Mistral Small 4 a 0,15 $/M en entree → des dizaines de taches SWE/mois) | 128k-256k ; Devstral Small 2 annonce **68 % sur SWE-bench Verified** | **candidat n°2**, a faire valider |
+| OpenRouter `:free` | oui, cle deja dans le `.env` | **50 req/jour/compte**, ~20 req/min | 262k | trop peu de requetes : 1-2 taches SWE/jour ; 429 « upstream » frequents (encore le 2026-10-01 sur un test a ~30k tokens) |
+| Groq | oui | 8 000 tokens/min | — | **exclu** : 413 au-dela de 8 000 tokens par requete (verifie) |
+| Cerebras | **non** depuis le **01/09/2026** : moyen de paiement exige, 5 $ d'essai sur 30 jours | — | — | **exclu** (« billing-enabled accounts ») |
+| Gemini (AI Studio) | oui | ~**20 req/jour** sur 2.5 Flash depuis le 06/12/2025, Pro retire du gratuit | 1M | **exclu** pour SWE (une tache = ~30 requetes) |
+
+**NVIDIA Build, en detail.** Base URL `https://integrate.api.nvidia.com/v1`,
+cles `nvapi-...`. Modeles orientes code cites : DeepSeek V3.2, GLM-5.1
+(« optimized for agentic coding »), Qwen 3.5, Kimi K2.5 (1M), MiniMax M2.7.
+Hausse a 200 RPM « sur demande » selon un guide, mais NVIDIA repond sur son
+forum ne pas relever les limites des comptes personnels gratuits.
+
+**Mistral, le point a trancher.** Le sujet interdit les « purchased
+credits » et les « billing-enabled accounts ». Des credits **offerts** chaque
+mois ne sont ni l'un ni l'autre, mais c'est une lecture : **a faire
+confirmer par l'equipe pedagogique** avant d'en dependre.
+
+- [ ] **Creer une cle NVIDIA Build** (action humaine) et la poser dans le
+      `.env` (ex. `NVIDIA_API_KEY`)
+- [ ] Une fois la cle la : entree `nvidia` dans `configs/models.json` (meme
+      forme qu'OpenRouter, l'API est au format OpenAI), puis sonder 2-3
+      modeles avec une requete de 30 a 60k tokens — acceptee ou non, latence
+      (l'echeance par appel est de 30 s, l'infra est partagee), `stop` pris en
+      compte, champ `usage` present — et relancer `sympy__sympy-14711`
+- [ ] Faire valider les credits mensuels Mistral, puis meme protocole
+- [ ] Non verifie : GitHub Models (plafond d'entree par requete repute bas
+      sur le gratuit), Cohere (cle d'essai a ~1000 appels/mois), SambaNova
+
+Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-build/),
+[pasqualepillitteri.it — NVIDIA Build 2026](https://pasqualepillitteri.it/en/news/1621/nvidia-build-free-api-100-ai-models-2026),
+[forum NVIDIA — 40 RPM](https://forums.developer.nvidia.com/t/request-to-increase-nvidia-nim-api-rate-limit-from-40-rpm-to-250-300-rpm/372594),
+[agentdeals.dev — Mistral](https://agentdeals.dev/vendor/mistral-ai),
+[mistral.ai — Devstral 2](https://mistral.ai/news/devstral-2-vibe-cli/),
+[docs Cerebras — rate limits](https://inference-docs.cerebras.ai/support/rate-limits),
+[toolfreebie.com — Cerebras](https://toolfreebie.com/cerebras-free-api/),
+[aifreeapi.com — Gemini, decembre 2025](https://www.aifreeapi.com/en/posts/gemini-api-free-tier-rate-limits).
+
 ### P2.4 — System prompts
 
 - [x] Slots Thought / Code / Observation avec exemples ; l'exemple `smallest_abs`
@@ -958,9 +1021,35 @@ protocolaire (`gpt-oss-20b`) ou budget d'entree (`compound`, `allam`).
       l'edition ne sert a rien et pollue le patch) ; pas de `git commit` ni de
       patch vide ; un seul bloc par tour (`extraction.py:20` ne garde que le
       premier)
-- [ ] **Rien de tout ca n'est mesure.** Le prompt SWE a ete verifie par lecture
-      et par `ast`, jamais par une execution reelle — il faut `mcp_tools/`.
-      `cache/swebench_task.json` (`sympy__sympy-14711`) attend comme banc d'essai
+- [~] **Premier run SWE reel (2026-10-01)** : `sympy__sympy-14711`, Groq
+      `gpt-oss-120b`, plafonne a 5 iterations — 91 s, 11 requetes (dont 6
+      retries), 16 009 tokens en entree. La chaine tient de bout en bout
+      (`solution.json` conforme, causes des retries sur stderr, `retry-after`
+      de Groq respecte), mais **les 5 tours finissent en `NameError`** : le
+      namespace du sandbox ne contient toujours que `final_answer` (P1.4).
+      Ce que le modele a fait quand meme :
+  - **il recite le correctif** : au tour 5, « decommenter `#if other == 0:
+    return self` » — le correctif reel de l'issue — sans avoir jamais pu lire
+    `vector.py`, ancien code ecrit de memoire dans un `old_str`. Le § VI.4.1
+    sanctionne d'un **0** les « memorized patches without genuine
+    exploration »
+  - il explore et edite **dans le meme bloc** des le tour 1
+  - chemins relatifs au lieu de `/testbed/...`, `list_files()` sans
+    arguments (le manuel devrait y remedier)
+- [x] **Regle anti-recitation** (2026-10-01, non commite) : « Never edit code
+      you have not read: every old_str must be copied from a read_file()
+      observation of an EARLIER step, never written from memory, and never
+      call edit_file() in the same code block as the read_file() it relies
+      on. Do not apply a fix you remember for this repository: find the cause
+      in the code, then fix it. » (~240 tokens de plus par tour). **Notre
+      exemple SWE violait la regle** : deux `old_str` du tour 2 reprenaient
+      des lignes de `fields.py` jamais lues (`self.schema = schema`
+      n'apparaissait dans aucune observation). Le tour 1 lit desormais les
+      lignes 298-311 ; numeros des editions corriges au passage (92 et 300,
+      pas 91 et 301). Un test verifie que chaque ligne de chaque `old_str` de
+      l'exemple a ete vue dans un `read_file` d'un tour **anterieur**.
+      **Effet non mesure** : impossible tant que les outils ne sont pas
+      appelables
 - [~] **Injection du sandbox manual** : le slot existe (`Prompt(tools=)`) mais les
       **deux** CLI passent `tools=None`. Depuis le 2026-10-01, sans outils la
       section est **omise** (elle affichait litteralement "None"). Cote SWE le
@@ -1141,6 +1230,8 @@ l'agent — les deux verdicts ont toujours concorde.
 | `run10` | Groq `gpt-oss-120b`, taches de `run7`, **nouveau prompt** | **7/10** | 33 | 137 s |
 | `run11` | OpenRouter `qwen3.8-27b:free`, taches de `run6` | **7/10** | 34 | 520 s |
 | `run12` | Groq `gpt-oss-120b`, taches de `run7`, `assert` + `final_answer` dans le meme bloc | **6/10** | 25 | 123 s |
+| `run13` | Groq `gpt-oss-120b`, taches de `run7`, + verification par la boucle | **8/10** | 17 | 56 s |
+| `run14` | Groq `gpt-oss-120b`, taches de `run6`, + verification par la boucle | **8/10** | 19 | 59 s |
 
 `run9` a `run11` (2026-10-01) sont valides par la **vraie moulinette**
 (`moulinette_eval validate mbpp`, Docker), plus par execution locale des
@@ -1283,6 +1374,8 @@ sur l'**AST** du `sandbox_input` (des `assert` ecrits *dans la chaine* de
 | `run7` | ancien | 9/10 | 9 | 5 | **3** | 1,2 | 1071 | 18 |
 | `run10` | 2026-10-01 matin | 7/10 | 8 | 1 | **2** | 1,5 | 1477 | 33 |
 | `run12` | meme bloc | 6/10 | 8 | 8 | **0** | 0,8 | 850 | 25 |
+| `run13` | meme bloc + verification | 8/10 | 9 | 9 | **0** | 1,0 | 1032 | 17 |
+| `run14` | meme bloc + verification | 8/10 | 8 | 8 | **0** | 1,1 | 1105 | 19 |
 
 Les 4 echecs de `run12` : **451** (import oublie dans la chaine soumise —
 **nouveau**, cause par le bloc unique, rattrape depuis par la boucle), **400**
@@ -1295,9 +1388,39 @@ de `run12` sont tous `The LLM response does not contain the expected
 'content' field. (HTTP 200)` — `gpt-oss` met toute sa reponse dans
 `reasoning` et laisse `content` vide. Avant, ces retries etaient anonymes.
 
-- [ ] **Campagne apres la verification par la boucle** : le rejeu hors ligne
-      montre que la verification trie juste, pas que le modele se corrige bien
-      apres un refus
+#### `run13` / `run14` : avec la verification par la boucle (2026-10-01)
+
+Groq `gpt-oss-120b`, taches de `run7` puis de `run6`, code = `HEAD` +
+`code.diff` (le diff exact est dans chaque dossier, rien n'etait commite).
+**16/20, 0 soumission a l'aveugle sur 17**, metriques valides sur les 20.
+Contre 19/20 avec l'ancien prompt (`run6`+`run7`) et 17/20 avec celui du
+matin (`run9`+`run10`) — non significatif a un tirage par tache.
+
+**Les 2 refus de la boucle, rejoues contre la liste complete des tests du
+jeu de donnees, etaient tous les deux justes** :
+
+- `run13/451` : `import re` oublie → refuse, corrige au tour 2, **PASS** —
+  l'echec de `run12` est rattrape
+- `run14/252` : `import cmath` oublie → refuse ; au tour 2 le modele utilise
+  `math` sans l'importer, au tour 3 il creve le plafond cumule de 1500 tokens
+  de sortie → echec
+
+(Un premier comptage en annoncait 4 : les 2 autres etaient des blocs du
+modele qui plantaient avant d'atteindre `final_answer` — un `assert`, un
+`AttributeError` — pas des refus de la boucle.)
+
+Les 4 echecs : **462** (plafond de sortie des la 1re reponse, comme
+partout), **400** (test cache, comme partout), **80** (5 `content` vides de
+Groq), **252** (budget de sortie epuise apres le refus). **Le fournisseur
+pese plus que le prompt** : les 12 retries de ces deux campagnes sont tous
+`content` vide en HTTP 200, et ce defaut a coute 2 taches sur `run12` a
+`run14` (168, 80).
+
+- [ ] **Piste : `reasoning_effort: low` pour `gpt-oss` chez Groq** (parametre
+      a verifier). Moins de raisonnement → moins de `content` vides et moins
+      de plafonds de sortie (462, 252). C'est un reglage **du modele** : sa
+      place est dans les entrees `models` de `configs/models.json`, vides et
+      prevues pour ca — et la validation Pydantic doit revenir avec (P2.5 bis)
 - [ ] Recommencer l'ablation de facon plus large : 10 taches a un tirage ne
       separent pas des taux de 60 a 90 %
 - [ ] Les campagnes vivent dans `cache/`, gitignore : a sortir dans un dossier
@@ -1346,9 +1469,13 @@ de `run12` sont tous `The LLM response does not contain the expected
 3. [x] **Commiter la session du 2026-09-02** (`97091ce` → `3fb1d4f`)
 4. [x] **Piege de l'exemple MBPP corrige et mesure** — l'ablation est faite
        (`run6`/`run7` contre `run9`/`run10`, voir P2.6)
-4 bis. [ ] **Strategie fournisseurs pour SWE** (cf. la revue en tete) : Groq
-       risque de refuser les contextes > 8 000 tokens, OpenRouter tient
-       50 req/jour. C'est ce qui conditionne `BENCHMARK_REPORT.md`
+4 bis. [~] **Strategie fournisseurs pour SWE — devenue la priorite** : Groq
+       gratuit est **exclu** (413 au-dela de 8 000 tokens, verifie le
+       2026-10-01), OpenRouter tient 50 req/jour sur **une seule** cle. Sans
+       fournisseur gratuit a gros contexte, ni les 2/3 SWE de l'examen ni
+       `BENCHMARK_REPORT.md` ne sont atteignables, quoi que fasse ndi-tull.
+       **Releve fait** (P2.3, « Fournisseurs pour SWE ») : NVIDIA Build en
+       tete, Mistral en second. **Bloque sur la creation d'une cle NVIDIA**
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer la liste des outils a `Prompt` au lieu de `tools=None`
@@ -1370,7 +1497,7 @@ de `run12` sont tous `The LLM response does not contain the expected
 
 ### Le banc d'essai `tests/`
 
-**355 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
+**357 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable.
 
 `tests/test_agent_cli.py` (75 tests) comble le trou par lequel le `TypeError` de
