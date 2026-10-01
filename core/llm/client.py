@@ -9,6 +9,7 @@ from core import errors
 from core.api_key import APIKey
 from core.config_models import (
     LLMResponse,
+    ModelConfig,
 )
 from core.llm.provider import Provider
 
@@ -26,13 +27,14 @@ class LLMClient:
         endpoint: str,
         model_name: str,
         provider: Provider,
-        model_config: dict,
+        model_config: ModelConfig | dict,
         api_keys: list[APIKey],
         stop_sequence: list[str] | None = None,
     ) -> None:
         """Target model_name at url + endpoint, with the given keys.
 
-        Raises ValueError unless api_keys is a list of APIKey.
+        model_config may be a ModelConfig or its dict form. Raises
+        ValueError unless api_keys is a list of APIKey.
         """
         if not isinstance(api_keys, list) or not all(
             isinstance(key, APIKey) for key in api_keys
@@ -47,7 +49,9 @@ class LLMClient:
         self.stop_sequence = stop_sequence
         self.index_api_key: int = 0
         self.provider = provider
-        self.model_config: dict = model_config
+        self.model_config: ModelConfig = ModelConfig.model_validate(
+            model_config
+        )
         self.last_api_key_index: int = 0
 
     def get_reponses(
@@ -68,6 +72,7 @@ class LLMClient:
                 url=self.url,
                 headers={**header},
                 json={
+                    **self.model_config.extra_body,
                     "model": self.model_name,
                     "messages": messages,
                     "stop": self.stop_sequence,

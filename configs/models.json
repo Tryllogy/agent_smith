@@ -36,10 +36,8 @@
             }
         },
         "models": {
-            "nvidia/nemotron-3-ultra-550b-a55b:free": {
-            },
-            "openai/gpt-oss-20b:free": {
-            }
+            "nvidia/nemotron-3-ultra-550b-a55b:free": {},
+            "openai/gpt-oss-20b:free": {}
         }
     },
     "groq": {
@@ -85,7 +83,46 @@
             }
         },
         "models": {
-            "openai/gpt-oss-120b": {
+            "openai/gpt-oss-120b": {}
+        }
+    },
+    "nvidia": {
+        "provider": {
+            "url": "https://integrate.api.nvidia.com/v1",
+            "endpoint": "/chat/completions",
+            "header": {
+                "Authorization": "Bearer {api_key}"
+            },
+            "api_key_env_var": "NVIDIA_API_KEY",
+            "choice": "choices",
+            "reasoning": "reasoning_content",
+            "usage": "usage",
+            "model": "model",
+            "error": "error",
+            "content": "content",
+            "input_tokens": "prompt_tokens",
+            "output_tokens": "completion_tokens",
+            "finish_reason": "finish_reason",
+            "message": "message",
+            "retry_after": {
+                "names": {
+                    "retry-after": {
+                        "scale": 1,
+                        "format": [
+                            "duration",
+                            "date"
+                        ]
+                    }
+                }
+            }
+        },
+        "models": {
+            "nvidia/nemotron-3-super-120b-a12b": {
+                "extra_body": {
+                    "chat_template_kwargs": {
+                        "enable_thinking": false
+                    }
+                }
             }
         }
     }

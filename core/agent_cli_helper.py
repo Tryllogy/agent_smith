@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from core import constants
 from core.api_key import APIKey
-from core.config_models import ProviderConfig
+from core.config_models import ModelConfig, ProviderConfig
 from core.models import MBPPTaskInput, SolutionOutput, SWEBenchTaskInput
 
 
@@ -19,11 +19,11 @@ def check_args(args):
 
 def get_provider_and_model_config(
     model_name: str, provider_url: str
-) -> tuple[ProviderConfig, dict]:
+) -> tuple[ProviderConfig, ModelConfig]:
     """Return the provider matching provider_url and the model's entry.
 
-    The entry is {} for a model absent from models.json. Raises
-    FileNotFoundError, ValueError or RuntimeError on a bad config.
+    The entry is ModelConfig() for a model absent from models.json.
+    Raises FileNotFoundError, ValueError or RuntimeError on a bad config.
     """
     try:
         with open(constants.MODELS_CONFIG_FILE) as f:
@@ -35,8 +35,8 @@ def get_provider_and_model_config(
             provider = ProviderConfig.model_validate(
                 provider_config.get("provider", {})
             )
-            model_config: dict = provider_config.get("models", {}).get(
-                model_name, {}
+            model_config = ModelConfig.model_validate(
+                provider_config.get("models", {}).get(model_name, {})
             )
             return provider, model_config
     except FileNotFoundError:
