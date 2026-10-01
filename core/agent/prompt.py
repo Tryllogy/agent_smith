@@ -7,6 +7,10 @@ from core.constants import (
 
 
 class Prompt:
+    """Conversation sent to the LLM: system turn, task turn, then the
+    assistant and observation turns added by the loop.
+    """
+
     def __init__(
         self,
         bench: Bench,
@@ -14,6 +18,11 @@ class Prompt:
         tools: list = None,
         allowed_imports: list = None,
     ) -> None:
+        """Build the initial conversation for task on bench.
+
+        tools and allowed_imports are listed in the system turn.
+        Raises ValueError for an unsupported benchmark.
+        """
         self.tools: list = tools
         self.allowed_imports: list = allowed_imports
         self.allowed_imports_str: str = (
@@ -34,6 +43,7 @@ class Prompt:
             raise ValueError(f"Unsupported benchmark: {bench.name}")
 
     def add_message(self, message: dict) -> None:
+        """Append a message, a dict with 'role' and 'content' keys."""
         if not isinstance(message, dict):
             raise TypeError("Message must be a dictionary.")
         if "role" not in message or "content" not in message:
@@ -41,6 +51,7 @@ class Prompt:
         self.prompt.append(message)
 
     def make_prompt_swe(self, task: dict) -> list:
+        """Build the SWE-bench system and user turns from task."""
         instance_id: str = task.get("instance_id", "")
         problem_statement: str = task.get("problem_statement", "")
         hints_text: str = task.get("hints_text", "")
@@ -110,6 +121,7 @@ class Prompt:
         return self.prompt
 
     def make_prompt_mbpp(self, task: dict) -> list:
+        """Build the MBPP system and user turns from task."""
         task_definition: str = task.get("task_definition", "")
         function_definition: str = task.get("function_definition", "")
         test_imports: list = task.get("test_imports", [])

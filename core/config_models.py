@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 class LLMResponse(BaseModel):
+    """LLM answer normalized from any provider's response format."""
+
     model_config = ConfigDict(frozen=True)
 
     content: str
@@ -21,12 +23,16 @@ class LLMResponse(BaseModel):
 
 
 class NameRetryAfterEnum(str, Enum):
+    """How a rate-limit header encodes its delay."""
+
     EPOCH = "epoch"
     DATE = "date"
     DURATION = "duration"
 
 
 class NamesRetryAfterConfig(BaseModel):
+    """Formats of one rate-limit header, and the divisor to seconds."""
+
     model_config = ConfigDict(frozen=True)
 
     scale: int
@@ -34,12 +40,20 @@ class NamesRetryAfterConfig(BaseModel):
 
 
 class RetryAfterConfig(BaseModel):
+    """Rate-limit headers to read, by header name."""
+
     model_config = ConfigDict(frozen=True)
 
     names: dict[str, NamesRetryAfterConfig]
 
 
 class ProviderConfig(BaseModel):
+    """How to talk to a provider, as declared in configs/models.json.
+
+    url, endpoint, header and api_key_env_var shape the request; the
+    other string fields name the keys to read in the response.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     url: str

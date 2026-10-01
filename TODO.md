@@ -15,13 +15,14 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **323 tests verts, `ruff check` et `ruff format` a 0.**
+modeles. **323 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+`mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
-debloque la boucle. Les 9 outils existent **sur `origin/ndi-tull`, non
-mergee** (voir la revue ci-dessous). Restent le CLI/REPL, le manual, le client
-MCP et Docker.
+debloque la boucle. Les 9 outils sont **merges dans `thomas`** depuis le
+2026-10-01 (`70207ab`), mais leurs signatures ne suivent pas le § V.5 (voir la
+revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
 
 > **Le chemin critique est cote P1.** Sans client MCP et sans Docker, ni
 > SWE-bench ni le rapport de benchmark ne peuvent avancer. Le prompt SWE n'a
@@ -29,9 +30,10 @@ MCP et Docker.
 
 **Deux dettes qui bloquent la mesure :**
 
-1. **`origin/ndi-tull` a 4 commits d'avance non merges** (`9c8c4b2` →
-   `64f06cc`, les outils MCP). `eedbf20` est merge, lui. A rapatrier **apres**
-   avoir cale les signatures sur le sujet (voir la revue).
+1. **Les outils MCP sont merges mais non conformes** : `origin/ndi-tull`
+   (`9c8c4b2` → `64f06cc`) est rapatrie dans `thomas` le 2026-10-01
+   (`70207ab`). Les signatures restent a caler sur le § V.5 avant de brancher
+   quoi que ce soit dessus (voir la revue).
 2. **Le modele par defaut du `Makefile` (`MODEL :=`) est inutilisable.**
    `nvidia/nemotron-3-ultra-550b-a55b:free` met 27 a 40 s par reponse, contre
    30 s d'echeance par appel : le run pilote de `run5` a fini a 0 iteration.
@@ -87,7 +89,7 @@ MCP et Docker.
 - [ ] **Signatures des outils `ndi-tull` non conformes au § V.5** — critere
       eliminatoire (*"All mandatory tools pass independent tests"*) :
 
-| Outil | Sujet | `origin/ndi-tull` |
+| Outil | Sujet | `mcp_tools/` (merge `70207ab`) |
 |---|---|---|
 | `find_references` | `(name, filepath, line)` | `(name, file_pattern)` |
 | `search_function_or_class_definition_in_code` | `(name)` | `(name, file_pattern)` |
@@ -138,8 +140,13 @@ nettoye, `evaluations/` gitignore, et surtout **le trou de tests comble** —
 `retry_after` propre a chaque bench, `retries` affiches sans le +1. Detail en
 P2.5 bis et P2.1.
 
-**2026-10-01** : revue complete, bug `ast.parse` / SWE corrige (voir
-ci-dessus).
+**2026-10-01** : revue complete, bug `ast.parse` / SWE corrige, rendu d'echec
+ecrit meme sans boucle, etape fantome supprimee (`6a05df8`). Puis **merge de
+`origin/ndi-tull`** (`70207ab`) : un seul conflit, `sandbox/executor.py`, ou
+la logique etait identique des deux cotes — garde le `return` reformate par
+ruff (`thomas`) et la suppression du bloc de demo `__main__` (`ndi-tull`).
+Verifie apres merge : 323 tests verts, les deux serveurs se chargent sous
+`mcp` 2.0.0 (`list_tools()` : 9 outils cote SWE, 0 cote MBPP).
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -161,7 +168,8 @@ ci-dessus).
 |---|---|
 | `core/` : `models.py`, `config_models.py`, `errors.py`, `constants.py`, `api_key.py`, `agent_cli_helper.py` | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
 | `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `sandbox/mcp_client/` |
-| `core/llm/` : `client.py`, `provider.py` | `mcp_tools/` + les 2 `mcp_tools_*.py` racine : **ecrits sur `origin/ndi-tull`, non merges** |
+| `core/llm/` : `client.py`, `provider.py` | |
+| `mcp_tools/` + les 2 `mcp_tools_*.py` racine (merges le 2026-10-01, **signatures non conformes**) | |
 | `agent_mbpp/`, `agent_swebench/` (sauf `docker.py`) | `agent_swebench/docker.py` |
 | `sandbox/executor.py`, `configs/models.json` | `sandbox_template.json` |
 | `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | `BENCHMARK_REPORT.md`, `README.md` |
@@ -342,9 +350,9 @@ namespace du sandbox -> wrapper    -> client MCP -> serveur -> outil
 ```
 
 Deux maillons sur cinq sont vides : `sandbox/mcp_client/` et la generation du
-manuel. `mcp_tools/` existe sur `origin/ndi-tull` (non merge, signatures a
-caler, voir la revue en tete). Le namespace d'`executor.py:32` ne contient
-toujours que `final_answer`.
+manuel. `mcp_tools/` est merge (signatures a caler, voir la revue en tete).
+Le namespace d'`executor.py:32` ne contient toujours que `final_answer` :
+**aucun outil n'est encore appelable depuis le sandbox**.
 
 - [ ] Le manuel contient le **contrat** (nom, description, types), **jamais le
       code** : l'implementation peut changer sous le modele
@@ -366,17 +374,23 @@ dicts ? deja mise en forme ? P2 insere, il ne compose pas.
 
 *Testes independamment de la boucle.*
 
-- [ ] **FS** : `read_file(filepath, start_line, end_line)` (format `cat -n` :
+- [~] **FS** : `read_file(filepath, start_line, end_line)` (format `cat -n` :
       `"<line>: <content>"`), `edit_file(filepath, old_str, new_str)`
       (remplacement exact), `list_files(directory, pattern)`
-- [ ] **Recherche** (format commun `/abs/path.py:<line> <content>`) :
+- [~] **Recherche** (format commun `/abs/path.py:<line> <content>`) :
       `search_code`, `search_function_or_class_definition_in_code`,
       `find_references`
-- [ ] **Execution** : `run_tests()` (lance l'`eval_script`), `get_patch()` (git
+- [~] **Execution** : `run_tests()` (lance l'`eval_script`), `get_patch()` (git
       diff unifie), `run_command(command, workdir)`
-- [~] `mcp_tools_mbpp.py` et `mcp_tools_swebench.py` a la **racine** : sur
-      `origin/ndi-tull`, le serveur SWE enregistre les 9 outils, le serveur
-      MBPP **aucun**
+
+  `[~]` sur les trois : ecrits et merges, mais **3 signatures sur 9 sont
+  incompatibles** (`find_references`, `search_function_or_class_definition_in_code`,
+  `run_command`) et le **comportement** de `run_tests` (lance `pytest`, pas
+  l'`eval_script`) et de `get_patch` (sans `core.fileMode=false`) s'ecarte du
+  sujet. Tableau dans la revue en tete. `run_tests()` reste appelable sans
+  argument ; les 5 autres ont la bonne signature.
+- [~] `mcp_tools_mbpp.py` et `mcp_tools_swebench.py` a la **racine** (merges) :
+      le serveur SWE enregistre les 9 outils, le serveur MBPP **aucun**
 
 La logique va dans `mcp_tools/` (`tools_fs`, `tools_search`, `tools_exec`) ; les
 2 fichiers racine ne sont que des points d'entree fins, l'emplacement etant
@@ -1148,9 +1162,9 @@ millisecondes**). Traite en P2.3.
 
 1. [ ] **Campagne de controle MBPP** — le chantier le plus rentable et il ne
        depend de personne. Prealable : **refaire le releve des modeles gratuits**
-2. [~] **Rapatrier `origin/ndi-tull`** : `eedbf20` est merge ; restent
-       `9c8c4b2` → `64f06cc` (outils MCP), a merger une fois les signatures
-       calees sur le § V.5
+2. [x] **Rapatrier `origin/ndi-tull`** — merge le 2026-10-01 (`70207ab`).
+       Reste a **caler les signatures avec ndi-tull** (§ V.5) : c'est sa
+       partie, a lui transmettre avec le tableau de la revue
 3. [x] **Commiter la session du 2026-09-02** (`97091ce` → `3fb1d4f`)
 4. [~] **Piege de l'exemple MBPP corrige** (cf. P2.4) — reste a **mesurer**
        l'effet : c'est une ablation toute trouvee pour le rapport
