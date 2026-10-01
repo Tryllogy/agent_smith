@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **331 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **335 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
@@ -146,7 +146,11 @@ ecrit meme sans boucle, etape fantome supprimee (`6a05df8`). Puis **merge de
 la logique etait identique des deux cotes — garde le `return` reformate par
 ruff (`thomas`) et la suppression du bloc de demo `__main__` (`ndi-tull`).
 Verifie apres merge : 323 tests verts, les deux serveurs se chargent sous
-`mcp` 2.0.0 (`list_tools()` : 9 outils cote SWE, 0 cote MBPP).
+`mcp` 2.0.0 (`list_tools()` : 9 outils cote SWE, 0 cote MBPP). Ensuite :
+docstrings sur tout le code P2 (`0b356ae`), prompts et relances corriges
+(`9c4754a`), **trois campagnes MBPP** (`run9`, `run10`, `run11`, voir P2.6),
+et deux bugs de la boucle reveles par ces campagnes corriges dans la foulee
+(attente non plafonnee, cause des retries perdue — voir P2.1, **non commite**).
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -465,6 +469,24 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       le 2026-10-01, `exit_on_guard()` enregistre le tour des qu'une requete est
       partie, retries compris (`llm_output` vide, puisque rien n'est revenu).
       Plus de `total_requests: 9` avec `steps: []`
+- [x] **Une attente avant retry ne franchit plus la deadline** (2026-10-01).
+      Constate en `run11` (MBPP 247) : requete coupee a son echeance (115 s)
+      puis 5 s d'attente par defaut, sortie a **120,03 s → metriques
+      invalides**. Deux corrections : sur le plafond de retries la boucle sort
+      **sans dormir** (ce sommeil ne precedait qu'une sortie) ; une attente
+      qui finirait apres `limite - MARGIN_EXECUTION_TIME` fait sortir tout de
+      suite sur `Timeout limit exceeded`. Aucune requete perdue : dans les
+      deux cas l'ancienne boucle sortait au tour suivant sans appeler.
+      Rejoue en temps reel (limite ramenee a 12 s) : ancienne boucle 12,01 s
+      (invalide), nouvelle 7,01 s
+- [x] **La cause des retries est enregistree** (2026-10-01). En `run11`, trois
+      taches sont sorties sur 5 retries sans qu'on puisse dire si c'etait 429,
+      timeout ou 5xx. Desormais : `error` se termine par `; last LLM error:
+      <message> (HTTP <code>)` quand le tour qui sort a vu un transient (oublie
+      des qu'un tour aboutit), et chaque retry ecrit une ligne `LLM retry N on
+      step S: <cause>; waiting X.Xs` sur **stderr** — archive par
+      l'evaluation dans `stderr.log`. Rien dans `steps` : le schema de
+      `StepMetrics` est impose par la moulinette
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -644,7 +666,7 @@ activee sur le compte.
 | Requetes | 50 / jour / compte (`:free`) | 1000 / jour |
 | Tokens | — | **8000 / minute** |
 | Reset | 02:00 locales | `x-ratelimit-reset-*`, en duree |
-| Cles dans `.env` | 2 | **1** |
+| Cles dans `.env` | 2 (**1** au 2026-10-01) | **1** |
 
 Chez Groq la contrainte mordante n'est pas le nombre de requetes mais les
 **8000 tokens par minute** : une tache MBPP consomme ~750 en entree et ~500 en
@@ -709,7 +731,7 @@ de 1500 avant d'ecrire la moindre ligne de code.
 
 | Modele `:free` | latence | out | dont reasoning | note |
 |---|---|---|---|---|
-| `minimax/minimax-m3` | 5,4–11,6 s | 318–1408 | **0** | **valide sur 10 taches : `run8`, 9/10** |
+| `minimax/minimax-m3` | 5,4–11,6 s | 318–1408 | **0** | **valide sur 10 taches : `run8`, 9/10** — **plus gratuit au 2026-10-01** |
 | `google/gemma-4-31b-it` | 4,9–7,8 s | 159–254 | **0** | non teste en campagne |
 | `minimax/minimax-m2.7` | 17–23 s | 782–937 | 269–459 | **marge nulle**, voir plus bas |
 
@@ -879,7 +901,7 @@ Comparaison directe avec OpenRouter, qui tranche le choix de fournisseur :
 | Tokens | — | 8000 / minute |
 | Latence observee | 4,9 – 63 s | **0,5 – 4,0 s** |
 | Modeles utilisables | 3 sur 18 | 3 sur 8 testables |
-| Cles dans `.env` | 2 (**meme seau**) | **1** |
+| Cles dans `.env` | 2 (**meme seau** ; **1** au 2026-10-01) | **1** |
 
 → **Groq gagne sur tout sauf le nombre de cles.** 20x plus de requetes par
 jour, un ordre de grandeur plus rapide, et aucun modele elimine par la latence
@@ -933,9 +955,8 @@ protocolaire (`gpt-oss-20b`) ou budget d'entree (`compound`, `allam`).
       indentation du corps). **Le piege principal est corrige** (constate le
       2026-10-01) : `final_answer("def smallest_abs(a): return min(map(abs,a))")`
       tient sur une ligne. **Reste :**
-  - l'effet n'est pas mesure — l'ablation a jeu egal reste a faire
-- [x] **Prompts et relances corriges (2026-10-01)**, tous les changements
-      restent **non mesures** sur un vrai modele :
+- [x] **Prompts et relances corriges (2026-10-01, `9c4754a`)**, mesures le
+      meme jour en `run9`/`run10` (voir P2.6) :
   - exemple MBPP : les `assert` sont suivis de `print('all tests passed')`,
     l'observation montree est celle que le code produit vraiment (un test
     l'execute dans le vrai sandbox) ; fini le `Observation: True` fictif
@@ -955,6 +976,18 @@ protocolaire (`gpt-oss-20b`) ou budget d'entree (`compound`, `allam`).
     deux recherches litterales — le sujet dit « grep-like » sans preciser, et
     l'implementation de ndi-tull est litterale : l'alternative ne trouvait rien
   - coquilles : « how work a tool », `\n.` mal place, espaces en tete de ligne
+
+- [ ] **Les `test_list` du dump sont incomplets** : la moulinette valide sur
+      **tous** les tests de la tache, le dump n'en livre qu'une partie. MBPP
+      400 (`run10`) : 3 tests a la validation, 2 dans le dump ; le cache est
+      precisement celui de « order irrespective », que l'enonce annonce et que
+      le modele a ignore → faux positif. Le prompt doit dire que `test_list`
+      peut etre incomplet et qu'il faut couvrir **chaque exigence de
+      `task_definition`** par ses propres `assert`
+- [ ] **Montrer `assert` + `final_answer` dans le meme bloc** : `final_answer`
+      ne s'execute que si les `assert` passent, la validation est reelle et ne
+      coute pas d'iteration. Le nouvel exemple separe les deux, d'ou +1
+      iteration sur 7 taches sur 20 (voir P2.6)
 
 → **Methode :** resoudre une tache a la main avec seulement les outils de
 l'agent, et transcrire ce raisonnement dans le prompt.
@@ -1074,6 +1107,14 @@ l'agent — les deux verdicts ont toujours concorde.
 | `run5` | OpenRouter `nemotron-3-super-120b` | 4/10 | 29 | 480 s |
 | `run6` | **Groq `gpt-oss-120b`** | **10/10** | 16 | **48 s** |
 | `run7` | **Groq `gpt-oss-120b`**, 10 taches neuves | **9/10** | 18 | **53 s** |
+| `run8` | OpenRouter `minimax-m3:free`, 10 taches neuves | 9/10 | 29 | 274 s |
+| `run9` | Groq `gpt-oss-120b`, taches de `run6`, **nouveau prompt** | **10/10** | 18 | 42 s |
+| `run10` | Groq `gpt-oss-120b`, taches de `run7`, **nouveau prompt** | **7/10** | 33 | 137 s |
+| `run11` | OpenRouter `qwen3.8-27b:free`, taches de `run6` | **7/10** | 34 | 520 s |
+
+`run9` a `run11` (2026-10-01) sont valides par la **vraie moulinette**
+(`moulinette_eval validate mbpp`, Docker), plus par execution locale des
+`test_list` — et c'est ce qui a revele le test cache de MBPP 400.
 
 **19/20 sur deux jeux de taches independants** (seeds 1..10 et 11..20, aucun
 recouvrement) : le meilleur resultat du projet, et le seul sans aucun faux
@@ -1142,6 +1183,66 @@ millisecondes**). Traite en P2.3.
       emises : le correctif est teste unitairement, pas en campagne
 - [ ] Etendre a plus de taches — 10 ne separent pas deux modeles a 87 %
 
+#### Campagnes du 2026-10-01 : ablation du prompt et second fournisseur
+
+**Protocole.** Memes fichiers de taches que `run6`/`run7` (copies dans chaque
+dossier), meme modele, seul le prompt change (`9c4754a`) → ablation a jeu
+egal. Pause Groq apres chaque tache = tokens consommes / (8000/60) s.
+OpenRouter : pilote d'une tache par candidat avant de lancer. Dossiers
+`cache/run9..11` : `META.txt` (modele, commit, horaires), `RESUME.json`,
+taches, solutions, `logs/agent_XX.log` et `logs/validate_XX.txt`.
+
+**Ablation (Groq `gpt-oss-120b`, 20 taches) : 17/20 avec le nouveau prompt
+contre 19/20 avec l'ancien.** Non significatif sur un tirage par tache, et 2
+des 3 echecs ne tiennent pas au prompt :
+
+| Tache | Ancien | Nouveau | Cause |
+|---|---|---|---|
+| MBPP 462 | echec | echec | 1500 tokens de sortie des la 1re reponse (`test_list` de ~1000 tokens) ; en `run7` c'etait le seau TPM |
+| MBPP 400 | PASS | **FAIL (faux positif)** | test cache « order irrespective » ignore — seul echec de raisonnement |
+| MBPP 138 | PASS | FAIL | bonne fonction au tour 1, tests **rejoues** au tour 2 au lieu de soumettre, puis 5 retries au tour 3 (cause non enregistree a l'epoque) |
+
+**Le cout du nouveau prompt est une vraie validation.** +1 iteration sur 7
+taches sur 20, entree moyenne +40 % (890 → 1274 sur `run9`, 1071 → 1477 sur
+`run10`, max 2331 sur 6000). En `run6`, sur MBPP 127, l'ancien prompt avait
+obtenu un `final_answer` contenant les `assert` **dans la chaine** : ils n'ont
+jamais tourne. Les reussites en 1 iteration etaient des soumissions a
+l'aveugle ; le nouveau prompt fait executer les tests avant de soumettre.
+
+**Second fournisseur (OpenRouter `qwen3.8-27b:free`, taches de `run6`) :
+7/10, les 3 echecs sont des pannes fournisseur** (5 retries, 0 iteration,
+MBPP 252, 264, 247). Quand il repond, **7/7**. Latence mediane 9,5 s (max
+27 s, pour 30 s d'echeance) contre 1,2 s chez Groq ; 520 s pour 10 taches
+contre 42 s. MBPP 247 a fini a 120,03 s → **metriques invalides** : c'est le
+bug d'attente corrige en P2.1.
+
+**Constats du jour sur les fournisseurs :**
+
+- `minimax/minimax-m3:free` (`run8`) **n'est plus gratuit** : 404 « unavailable
+  for free », seul le slug payant existe
+- `google/gemma-4-31b-it:free` : 429 « temporarily rate-limited upstream »
+  (Google AI Studio) au pilote — inutilisable ce jour-la
+- `qwen/qwen3.8-27b:free` : seul candidat passe au pilote (2 iterations, 20 s,
+  mais 1302 tokens de sortie sur 1500 — marge faible)
+- 20 modeles gratuits au catalogue (463 au total), `gpt-oss-20b:free` en est
+  sorti
+- **Une seule cle OpenRouter dans le `.env`** (deux au releve du 2026-09-02).
+  ~44 requetes OpenRouter consommees ce jour-la sur 50
+
+**Pour rejouer une validation MBPP :**
+
+- Docker est **rootless** sur ce poste : le SDK de la moulinette cherche
+  `/var/run/docker.sock` et prend un `PermissionError`. Il faut
+  `DOCKER_HOST=unix:///run/user/103977/docker.sock`
+- l'image `python:3.11-slim` doit etre presente (`docker pull`, faite le
+  2026-10-01) ; sans elle la validation rend `Correctness: FAILED` **sans
+  message** — piege : on croit a une mauvaise solution
+
+- [ ] Recommencer l'ablation apres les deux corrections de prompt ci-dessus
+      (P2.4) : memes taches, meme modele
+- [ ] Les campagnes vivent dans `cache/`, gitignore : a sortir dans un dossier
+      versionne avec le reste des `solution.json` de backing
+
 ---
 
 ## A faire ensemble (fin de projet)
@@ -1176,14 +1277,15 @@ millisecondes**). Traite en P2.3.
 
 ### Prochaines actions (cote tchemin), par rentabilite
 
-1. [ ] **Campagne de controle MBPP** — le chantier le plus rentable et il ne
-       depend de personne. Prealable : **refaire le releve des modeles gratuits**
+1. [x] **Campagne de controle MBPP** — faite le 2026-10-01 (`run9`, `run10`,
+       `run11`, voir P2.6) : 17/20 Groq, 7/10 OpenRouter. A relancer apres les
+       corrections de prompt restantes (P2.4)
 2. [x] **Rapatrier `origin/ndi-tull`** — merge le 2026-10-01 (`70207ab`).
        Reste a **caler les signatures avec ndi-tull** (§ V.5) : c'est sa
        partie, a lui transmettre avec le tableau de la revue
 3. [x] **Commiter la session du 2026-09-02** (`97091ce` → `3fb1d4f`)
-4. [~] **Piege de l'exemple MBPP corrige** (cf. P2.4) — reste a **mesurer**
-       l'effet : c'est une ablation toute trouvee pour le rapport
+4. [x] **Piege de l'exemple MBPP corrige et mesure** — l'ablation est faite
+       (`run6`/`run7` contre `run9`/`run10`, voir P2.6)
 4 bis. [ ] **Strategie fournisseurs pour SWE** (cf. la revue en tete) : Groq
        risque de refuser les contextes > 8 000 tokens, OpenRouter tient
        50 req/jour. C'est ce qui conditionne `BENCHMARK_REPORT.md`
@@ -1208,7 +1310,7 @@ millisecondes**). Traite en P2.3.
 
 ### Le banc d'essai `tests/`
 
-**331 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
+**335 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable.
 
 `tests/test_agent_cli.py` (75 tests) comble le trou par lequel le `TypeError` de
