@@ -196,19 +196,14 @@ Code:
 print(abs(min([-5, 2])))
 ```<end_code>
 Observation: 5
-Thought: Expected 2, got 5. `min` picks -5 because it is the smallest signed value, and abs only runs afterwards. I must map abs over the list first, then take the minimum.
+Thought: Expected 2, got 5. `min` picks -5 because it is the smallest signed value, and abs only runs afterwards. I must map abs over the list first, then take the minimum. test_list never has only negative numbers, but the task covers them, so I add my own assert for that case. I call final_answer right after the asserts: it only runs if they all pass.
 Code:
 ```python
 def smallest_abs(a):
     return min(map(abs,a))
 assert smallest_abs([3, -1, 5]) == 1, 'smallest_abs([3, -1, 5]) == 1'
 assert smallest_abs([-5, 2]) == 2, 'smallest_abs([-5, 2]) == 2'
-print('all tests passed')
-```<end_code>
-Observation: all tests passed
-Thought: All the asserts pass, now I will return the final answer.
-Code:
-```python
+assert smallest_abs([-4, -9]) == 4, 'smallest_abs([-4, -9]) == 4'
 final_answer("def smallest_abs(a): return min(map(abs,a))")
 ```<end_code>
 """

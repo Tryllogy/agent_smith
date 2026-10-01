@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **335 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **355 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
@@ -150,7 +150,10 @@ Verifie apres merge : 323 tests verts, les deux serveurs se chargent sous
 docstrings sur tout le code P2 (`0b356ae`), prompts et relances corriges
 (`9c4754a`), **trois campagnes MBPP** (`run9`, `run10`, `run11`, voir P2.6),
 et deux bugs de la boucle reveles par ces campagnes corriges dans la foulee
-(attente non plafonnee, cause des retries perdue — voir P2.1, **non commite**).
+(attente non plafonnee, cause des retries perdue — voir P2.1, `2f7b56b`).
+Puis, **non commite** : prompt MBPP (tests caches, `assert` + `final_answer`
+dans le meme bloc), campagne `run12`, et **verification du `final_answer`
+MBPP par la boucle** contre `test_list` (voir P2.1, P2.4, P2.6).
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -487,6 +490,19 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       step S: <cause>; waiting X.Xs` sur **stderr** — archive par
       l'evaluation dans `stderr.log`. Rien dans `steps` : le schema de
       `StepMetrics` est impose par la moulinette
+- [x] **La boucle verifie le `final_answer` MBPP contre `test_list`**
+      (2026-10-01, non commite). La moulinette execute la chaine soumise
+      **seule**, puis les tests ; la boucle fait pareil
+      (`Loop.run_answer_tests()`, parametre `answer_tests`, que l'agent MBPP
+      remplit avec `test_imports` puis `test_list`). Echec → refus, et
+      l'observation donne l'erreur : un `assert` nu recoit son propre source
+      comme message (`label_assert()`), donc le test qui casse est nomme.
+      Borne par le temps restant, saute s'il n'en reste plus. Cause :
+      `run12/451`, ou le bloc teste commencait par `import re` et la chaine
+      soumise ne contenait que la fonction. **Rejeu des 45 soumissions
+      reelles** de `run6/7/9/10/12` : 42 acceptees et validees par la
+      moulinette, **0 refus a tort**, 1 vrai refus (451), 2 acceptees a tort
+      (MBPP 400, le test cache que la boucle ne voit pas)
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -977,17 +993,30 @@ protocolaire (`gpt-oss-20b`) ou budget d'entree (`compound`, `allam`).
     l'implementation de ndi-tull est litterale : l'alternative ne trouvait rien
   - coquilles : « how work a tool », `\n.` mal place, espaces en tete de ligne
 
-- [ ] **Les `test_list` du dump sont incomplets** : la moulinette valide sur
-      **tous** les tests de la tache, le dump n'en livre qu'une partie. MBPP
-      400 (`run10`) : 3 tests a la validation, 2 dans le dump ; le cache est
-      precisement celui de « order irrespective », que l'enonce annonce et que
-      le modele a ignore → faux positif. Le prompt doit dire que `test_list`
-      peut etre incomplet et qu'il faut couvrir **chaque exigence de
-      `task_definition`** par ses propres `assert`
-- [ ] **Montrer `assert` + `final_answer` dans le meme bloc** : `final_answer`
-      ne s'execute que si les `assert` passent, la validation est reelle et ne
-      coute pas d'iteration. Le nouvel exemple separe les deux, d'ou +1
-      iteration sur 7 taches sur 20 (voir P2.6)
+- [x] **Les `test_list` du dump sont incomplets** (2026-10-01, non commite).
+      Lu dans le code de la moulinette : le dump livre `test_list[1:]`, la
+      validation tourne avec `skip_first_k_tests=0` → **le premier test est
+      toujours cache**. Le prompt dit desormais que `test_list` n'est qu'un
+      echantillon et qu'il faut ajouter ses propres `assert` pour chaque
+      exigence de `task_definition` ; l'exemple le montre (un `assert` absent
+      de son `test_list`). **Mesure sur MBPP 400, 5 essais par version : 0/5
+      avant, 0/5 apres.** Le modele ajoute bien ses `assert` (doublons, liste
+      vide) mais lit « order irrespective » comme « l'ordre de la liste »
+      alors que le test cache veut `(3, 4) == (4, 3)`. Erreur de lecture
+      systematique, que le prompt ne corrige pas en general ; nommer ce cas
+      dans l'exemple serait du sur-ajustement. Cout : +80 tokens par tour
+- [x] **`assert` + `final_answer` dans le meme bloc** (2026-10-01, non
+      commite). L'exemple MBPP tient en 2 tours, le bloc de soumission
+      execute ses `assert` puis `final_answer` (qui ne tourne que s'ils
+      passent) ; la consigne et la relance « sans sortie » disent la meme
+      chose. Cause : sur MBPP 400, 2 essais sur 5 de `gpt-oss-120b` avaient
+      ecrit le code, les `assert` **et une observation inventee** dans le
+      canal `reasoning` ; le `content` ne portait que `final_answer`, les
+      tests n'ont jamais tourne. `<end_code>` n'y peut rien : la sequence
+      d'arret ne s'applique pas au raisonnement (et le modele a ecrit
+      `<end_code<|message|>`). Effet mesure en `run12` : **0 soumission a
+      l'aveugle sur 8** (2 a 3 par campagne avant), mais un nouvel echec —
+      l'import oublie de 451, rattrape depuis par la boucle (P2.1)
 
 → **Methode :** resoudre une tache a la main avec seulement les outils de
 l'agent, et transcrire ce raisonnement dans le prompt.
@@ -1111,6 +1140,7 @@ l'agent — les deux verdicts ont toujours concorde.
 | `run9` | Groq `gpt-oss-120b`, taches de `run6`, **nouveau prompt** | **10/10** | 18 | 42 s |
 | `run10` | Groq `gpt-oss-120b`, taches de `run7`, **nouveau prompt** | **7/10** | 33 | 137 s |
 | `run11` | OpenRouter `qwen3.8-27b:free`, taches de `run6` | **7/10** | 34 | 520 s |
+| `run12` | Groq `gpt-oss-120b`, taches de `run7`, `assert` + `final_answer` dans le meme bloc | **6/10** | 25 | 123 s |
 
 `run9` a `run11` (2026-10-01) sont valides par la **vraie moulinette**
 (`moulinette_eval validate mbpp`, Docker), plus par execution locale des
@@ -1238,8 +1268,38 @@ bug d'attente corrige en P2.1.
   2026-10-01) ; sans elle la validation rend `Correctness: FAILED` **sans
   message** — piege : on croit a une mauvaise solution
 
-- [ ] Recommencer l'ablation apres les deux corrections de prompt ci-dessus
-      (P2.4) : memes taches, meme modele
+#### `run12` : `assert` + `final_answer` dans le meme bloc (2026-10-01)
+
+Groq `gpt-oss-120b`, taches de `run7`, prompt avec la consigne « tests
+caches » et le bloc unique (P2.4). Soumission « a l'aveugle » = `final_answer`
+execute sans qu'aucun `assert` ait tourne avant ou dans le meme bloc, mesure
+sur l'**AST** du `sandbox_input` (des `assert` ecrits *dans la chaine* de
+`final_answer` ne comptent pas — c'etait le cas de MBPP 127 en `run6`) :
+
+| Serie | Prompt | reel | soumis | meme bloc | **a l'aveugle** | it. moy. | entree moy. | req |
+|---|---|---|---|---|---|---|---|---|
+| `run6` | ancien | 10/10 | 10 | 6 | **3** | 1,1 | 890 | 16 |
+| `run9` | 2026-10-01 matin | 10/10 | 10 | 5 | **3** | 1,5 | 1274 | 18 |
+| `run7` | ancien | 9/10 | 9 | 5 | **3** | 1,2 | 1071 | 18 |
+| `run10` | 2026-10-01 matin | 7/10 | 8 | 1 | **2** | 1,5 | 1477 | 33 |
+| `run12` | meme bloc | 6/10 | 8 | 8 | **0** | 0,8 | 850 | 25 |
+
+Les 4 echecs de `run12` : **451** (import oublie dans la chaine soumise —
+**nouveau**, cause par le bloc unique, rattrape depuis par la boucle), **400**
+(test cache, comme partout), **462** (plafond de sortie, comme partout),
+**168** (5 reponses sans `content` du fournisseur). Sur 10 taches a un tirage,
+6/10 contre 7/10 n'est pas significatif.
+
+**Premiere campagne avec la cause des retries enregistree** : les 15 retries
+de `run12` sont tous `The LLM response does not contain the expected
+'content' field. (HTTP 200)` — `gpt-oss` met toute sa reponse dans
+`reasoning` et laisse `content` vide. Avant, ces retries etaient anonymes.
+
+- [ ] **Campagne apres la verification par la boucle** : le rejeu hors ligne
+      montre que la verification trie juste, pas que le modele se corrige bien
+      apres un refus
+- [ ] Recommencer l'ablation de facon plus large : 10 taches a un tirage ne
+      separent pas des taux de 60 a 90 %
 - [ ] Les campagnes vivent dans `cache/`, gitignore : a sortir dans un dossier
       versionne avec le reste des `solution.json` de backing
 
@@ -1310,7 +1370,7 @@ bug d'attente corrige en P2.1.
 
 ### Le banc d'essai `tests/`
 
-**335 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
+**355 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable.
 
 `tests/test_agent_cli.py` (75 tests) comble le trou par lequel le `TypeError` de
@@ -1346,6 +1406,9 @@ ce fichier, les deux passaient inapercus.
   sujet teste avec un serveur MCP inconnu. D'ou l'`assert` garde comme repli MBPP.
 - **`run_tests` MBPP** : exige par le § V.3 mais non specifie. P1 choisit la
   signature, P2 la decrit et mesure l'effet. A caler ensemble, sinon le prompt
-  decrira un outil qui n'a pas cette forme.
+  decrira un outil qui n'a pas cette forme. **Recouvrement depuis le
+  2026-10-01** : la boucle verifie deja le `final_answer` contre `test_list`
+  (P2.1). L'outil sert le modele *avant* de soumettre, la verification
+  protege *a la soumission* — decider ensemble si les deux coexistent.
 - MBPP end-to-end **avant** de toucher a Docker.
 - Ne pas optimiser (tokens, choix de modele) avant que l'approche soit prouvee.

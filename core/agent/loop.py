@@ -26,12 +26,16 @@ class Loop:
         prompt: Prompt,
         bench: constants.Bench,
         config_sandbox: SandboxConfig | None = None,
+        answer_tests: list[str] | None = None,
     ) -> None:
         """Bind the client, prompt and benchmark limits.
 
-        config_sandbox defaults to SandboxConfig().
+        config_sandbox defaults to SandboxConfig(). answer_tests are Python
+        lines run after the final answer, alone in the sandbox, before it
+        is accepted (MBPP: test_imports then test_list).
         """
         self.client: LLMClient = client
+        self.answer_tests: list[str] = answer_tests or []
         self.thoughts: list = []
         self.reasoning: list = []
         self.observations: list = []
@@ -124,6 +128,8 @@ class Loop:
         )
         if error is None and is_final:
             refusal: str | None = self.check_final_answer(answer)
+            if refusal is None and self.bench == constants.MBPP:
+                refusal = self.run_answer_tests(answer)
             if refusal is None:
                 self.solution = answer
                 self.success = True
@@ -141,9 +147,9 @@ class Loop:
                 )
                 if self.bench == constants.MBPP:
                     content += (
-                        " Passing asserts print nothing: print a"
-                        " confirmation after them, like"
-                        " print('all tests passed')."
+                        " Passing asserts print nothing: call"
+                        " final_answer() right after them, in the same"
+                        " block."
                     )
             elif self.bench == constants.MBPP:
                 content: str = (
@@ -187,6 +193,53 @@ class Loop:
                 " Pass the result of get_patch() to final_answer()."
             )
         return None
+
+    def run_answer_tests(self, answer: str) -> str | None:
+        """Run the answer alone with answer_tests; return why it fails.
+
+        The moulinette runs the submitted string on its own, so code the
+        model executed but left out of final_answer() (an import, a
+        helper) is missing there. Skipped when no time is left.
+        """
+        remaining: int = int(
+            self.timeout_limit
+            - (time.time() - self.start_time)
+            - constants.MARGIN_EXECUTION_TIME
+        )
+        if not self.answer_tests or remaining <= 0:
+            return None
+        config: SandboxConfig = self.config_sandbox.model_copy()
+        config.max_execution_time_seconds = min(
+            config.max_execution_time_seconds, remaining
+        )
+        code: str = "\n".join(
+            [answer, *[self.label_assert(test) for test in self.answer_tests]]
+        )
+        _, _, error, _, _ = execute(code, config)
+        if error is None:
+            return None
+        return (
+            "Your final answer was rejected: run alone, without the rest"
+            f" of your code, against test_list it fails with {error}."
+            " final_answer() must contain the complete solution, imports"
+            " included."
+        )
+
+    @staticmethod
+    def label_assert(line: str) -> str:
+        """Give a bare assert its own source as message, to name it."""
+        try:
+            tree = ast.parse(line)
+        except SyntaxError:
+            return line
+        if (
+            len(tree.body) == 1
+            and isinstance(tree.body[0], ast.Assert)
+            and tree.body[0].msg is None
+        ):
+            tree.body[0].msg = ast.Constant(line.strip())
+            return ast.unparse(tree)
+        return line
 
     def run(
         self,
