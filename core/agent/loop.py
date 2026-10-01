@@ -106,8 +106,8 @@ class Loop:
                 {
                     "role": "user",
                     "content": f"Observation: {self.code['error']}."
-                    " Must contain a ```python <your code here>``` "
-                    " block.",
+                    " Write your code in one ```python block,"
+                    " then <end_code>.",
                 }
             )
             return False
@@ -131,36 +131,31 @@ class Loop:
             )
             return False
         elif error is None and not is_final:
-            if stdout.strip() == "":
+            if self.sandbox_output.strip() == "":
                 content: str = (
-                    "The code has been executed without any error"
-                    " or exception but did not produce any output."
+                    "Observation: The code ran without error but did not"
+                    " produce any output: only what you print() appears"
+                    " here."
                 )
                 if self.bench == constants.MBPP:
                     content += (
-                        " Make SURE to make AND print the asserts like"
-                        " assert cond, '...'."
+                        " Passing asserts print nothing: print a"
+                        " confirmation after them, like"
+                        " print('all tests passed')."
                     )
+            elif self.bench == constants.MBPP:
+                content: str = (
+                    f"Observation: {self.sandbox_output}\n"
+                    "No final_answer() captured. If your checks passed,"
+                    " call final_answer() in your next step."
+                )
             else:
                 content: str = (
-                    "The code has been"
-                    " executed without any error or exception but did not"
-                    " produce a final answer. No final_answer() captured."
-                    " Provide a final_answer() in the next response."
+                    f"Observation: {self.sandbox_output}\n"
+                    "No final_answer() captured yet: call"
+                    " final_answer(get_patch()) once the fix is verified."
                 )
-            output: str = ""
-            if self.sandbox_output.strip() != "":
-                output = (
-                    f"Observation: Output: {self.sandbox_output}. " + content
-                )
-            self.prompt.add_message(
-                {
-                    "role": "user",
-                    "content": f"{output}"
-                    if output
-                    else f"Observation: {content}",
-                }
-            )
+            self.prompt.add_message({"role": "user", "content": content})
             return False
         self.prompt.add_message(
             {"role": "user", "content": f"Observation: {self.sandbox_output}"}
