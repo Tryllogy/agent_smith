@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **323 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **331 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
@@ -924,21 +924,37 @@ protocolaire (`gpt-oss-20b`) ou budget d'entree (`compound`, `allam`).
       et par `ast`, jamais par une execution reelle — il faut `mcp_tools/`.
       `cache/swebench_task.json` (`sympy__sympy-14711`) attend comme banc d'essai
 - [~] **Injection du sandbox manual** : le slot existe (`Prompt(tools=)`) mais les
-      **deux** CLI passent `tools=None`, le prompt affiche litteralement "None".
-      Cote SWE c'est plus grave : le prompt decrit une methode entierement fondee
-      sur 9 outils dont il ne donne jamais la liste. Attend P1.4
+      **deux** CLI passent `tools=None`. Depuis le 2026-10-01, sans outils la
+      section est **omise** (elle affichait litteralement "None"). Cote SWE le
+      prompt decrit toujours une methode fondee sur 9 outils dont il ne donne
+      pas la liste. Attend P1.4
 - [~] **Exemple MBPP** : coquilles corrigees (`Obvservation`, virgule du second
       `assert` passee apres le saut de ligne, cloture ``` ``` ``` recollee,
       indentation du corps). **Le piege principal est corrige** (constate le
       2026-10-01) : `final_answer("def smallest_abs(a): return min(map(abs,a))")`
       tient sur une ligne. **Reste :**
   - l'effet n'est pas mesure — l'ablation a jeu egal reste a faire
-  - l'exemple montre `Observation: True` apres deux `assert` qui n'affichent
-    rien ; la vraie boucle repond « did not produce any output ». Le modele
-    apprend une observation que le systeme ne produit jamais
-  - la relance de `loop.py` (« make AND print the asserts ») invite au
-    `print(assert ...)`, qui est une `SyntaxError` : `assert` est une
-    instruction
+- [x] **Prompts et relances corriges (2026-10-01)**, tous les changements
+      restent **non mesures** sur un vrai modele :
+  - exemple MBPP : les `assert` sont suivis de `print('all tests passed')`,
+    l'observation montree est celle que le code produit vraiment (un test
+    l'execute dans le vrai sandbox) ; fini le `Observation: True` fictif
+  - relance « make AND print the asserts » (qui poussait au
+    `print(assert ...)`, une `SyntaxError`) remplacee par « passing asserts
+    print nothing: print a confirmation after them »
+  - relance apres une sortie sans `final_answer` : « in the next response »
+    poussait SWE a soumettre pendant l'exploration (presque chaque tour y
+    affiche quelque chose). Desormais par bench : MBPP garde « call
+    final_answer() in your next step » si les verifications passent, SWE dit
+    « once the fix is verified »
+  - un run qui n'ecrit que sur stderr n'est plus annonce comme « sans
+    sortie » (la branche se decide sur stdout + stderr)
+  - plus de prefixe `Observation: Output: ...` : la forme est celle des
+    exemples, `Observation: <sortie>`
+  - exemple SWE : `search_code(pattern="_default_cache|_defaults")` scinde en
+    deux recherches litterales — le sujet dit « grep-like » sans preciser, et
+    l'implementation de ndi-tull est litterale : l'alternative ne trouvait rien
+  - coquilles : « how work a tool », `\n.` mal place, espaces en tete de ligne
 
 → **Methode :** resoudre une tache a la main avec seulement les outils de
 l'agent, et transcrire ce raisonnement dans le prompt.
@@ -1192,7 +1208,7 @@ millisecondes**). Traite en P2.3.
 
 ### Le banc d'essai `tests/`
 
-**323 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
+**331 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable.
 
 `tests/test_agent_cli.py` (75 tests) comble le trou par lequel le `TypeError` de
