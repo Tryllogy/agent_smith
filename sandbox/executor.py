@@ -70,11 +70,3 @@ def execute(code, config=None):
         if not q.empty()
         else ("", "", "No result (process died)", False, None)
     )
-
-
-if __name__ == "__main__":
-    print("A", execute("answer = sum(range(10))"))
-    print("B", execute("while True: pass"))
-    print("C", execute("answer = 1 / 0"))
-    print("D", execute("final_answer('ma reponse')"))
-    print("E", execute("print('coucou'); final_answer(42)"))
