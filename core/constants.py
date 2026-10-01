@@ -13,6 +13,8 @@ LLM_START_SEQUENCE = [
 
 MODELS_CONFIG_FILE = "configs/models.json"
 
+PATCH_MARKERS = ("diff --git", "--- a/", "+++ b/", "@@")
+
 
 class BenchName(Enum):
     SWE = "swebench"

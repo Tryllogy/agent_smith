@@ -58,7 +58,12 @@ class AgentSWEBENCH:
         )
 
     def run(self) -> SolutionOutput:
-        solution = self.loop.run(self.task["instance_id"])
+        try:
+            solution = self.loop.run(self.task["instance_id"])
+        except Exception as e:
+            solution = self.loop.make_solution_output(
+                error=f"Unexpected error: {e}"
+            )
         with open(self.output_file, "w") as f:
             f.write(solution.model_dump_json(indent=4))
         return solution

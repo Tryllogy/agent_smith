@@ -58,7 +58,12 @@ class AgentMBPP:
         )
 
     def run(self) -> SolutionOutput:
-        solution: SolutionOutput = self.loop.run(self.task["task_id"])
+        try:
+            solution: SolutionOutput = self.loop.run(self.task["task_id"])
+        except Exception as e:
+            solution = self.loop.make_solution_output(
+                error=f"Unexpected error: {e}"
+            )
         with open(self.output_file, "w") as f:
             f.write(solution.model_dump_json(indent=4))
         return solution

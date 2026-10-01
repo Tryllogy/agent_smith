@@ -1,12 +1,14 @@
 import json
 import os
+import sys
+import time
 
 from pydantic import ValidationError
 
 from core import constants
 from core.api_key import APIKey
 from core.config_models import ProviderConfig
-from core.models import MBPPTaskInput, SWEBenchTaskInput
+from core.models import MBPPTaskInput, SolutionOutput, SWEBenchTaskInput
 
 
 def check_args(args):
@@ -114,3 +116,40 @@ def get_task_from_file(
         raise RuntimeError(
             f"An error occurred while reading the task file: {e}"
         ) from e
+
+
+def read_task_id(file_path: str, key: str) -> str:
+    """Best-effort task id for a failure report, "" if unreadable."""
+    try:
+        with open(file_path) as file:
+            task = json.load(file)
+    except (OSError, ValueError):
+        return ""
+    return str(task.get(key, "")) if isinstance(task, dict) else ""
+
+
+def write_failure_output(
+    output_file: str,
+    bench: constants.Bench,
+    task_id: str,
+    error: str,
+    start_time: float,
+) -> None:
+    """Write a valid solution.json for a run that failed before its loop."""
+    solution = SolutionOutput(
+        task_id=task_id,
+        benchmark=bench.name,
+        success=False,
+        solution="",
+        iterations=0,
+        total_requests=0,
+        total_input_tokens=0,
+        total_output_tokens=0,
+        total_time_seconds=round(time.time() - start_time, 2),
+        error=error,
+    )
+    try:
+        with open(output_file, "w") as f:
+            f.write(solution.model_dump_json(indent=4))
+    except OSError as e:
+        sys.stderr.write(f"Error: could not write '{output_file}': {e}\n")

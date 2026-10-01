@@ -1,11 +1,17 @@
 import argparse
 import sys
+import time
 
 from agent_mbpp.cli import AgentMBPP
-from core.agent_cli_helper import check_args
+from core.agent_cli_helper import (
+    check_args,
+    read_task_id,
+    write_failure_output,
+)
+from core.constants import MBPP
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description="Run the MBPP agent.")
     parser.add_argument(
         "--task-file", required=True, help="Path to the task file."
@@ -25,22 +31,29 @@ def main():
     )
 
     args = parser.parse_args()
+    start_time: float = time.time()
 
-    check_args(args)
-
-    agent_mbpp = AgentMBPP(
-        task_file=args.task_file,
-        output_file=args.output,
-        model_name=args.model_name,
-        provider_url=args.provider_url,
-    )
-    agent_mbpp.run()
+    try:
+        check_args(args)
+        agent_mbpp = AgentMBPP(
+            task_file=args.task_file,
+            output_file=args.output,
+            model_name=args.model_name,
+            provider_url=args.provider_url,
+        )
+        agent_mbpp.run()
+    except Exception as e:
+        sys.stderr.write(f"Error: {e}\n")
+        write_failure_output(
+            output_file=args.output,
+            bench=MBPP,
+            task_id=read_task_id(args.task_file, "task_id"),
+            error=str(e),
+            start_time=start_time,
+        )
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    try:
-        main()
-        sys.exit(0)
-    except Exception as e:
-        sys.stderr.write(f"Error: {e}\n")
-        sys.exit(1)
+    sys.exit(main())

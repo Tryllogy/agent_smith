@@ -36,6 +36,7 @@ class Loop:
         self.sandbox_input: str = ""
         self.sandbox_output: str = ""
         self.request_time_ms: float = 0.0
+        self.llm_output: str = ""
         self.last_usage_input: int = 0
         self.last_usage_output: int = 0
         if config_sandbox is None:
@@ -43,9 +44,11 @@ class Loop:
         else:
             self.config_sandbox: SandboxConfig = config_sandbox
         self.requests: int = 0
+        self.turn_requests: int = 0
 
     def thought(self, timeout_max: float, max_tokens: int):
         self.requests += 1
+        self.turn_requests += 1
         llm_response: LLMResponse = self.client.get_llm_reponse(
             timeout_max=timeout_max,
             messages=self.prompt.prompt,
@@ -61,6 +64,7 @@ class Loop:
         self.thoughts.append(text)
         reason: str = llm_response.reasoning if llm_response.reasoning else ""
         self.reasoning.append(reason)
+        self.llm_output = " ".join(part for part in (reason, text) if part)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
 
@@ -91,20 +95,15 @@ class Loop:
             stdout + stderr + error if error else stdout + stderr
         )
         if error is None and is_final:
-            try:
-                ast.parse(answer)
+            refusal: str | None = self.check_final_answer(answer)
+            if refusal is None:
                 self.solution = answer
                 self.success = True
                 return True
-            except Exception:
-                self.prompt.add_message(
-                    {
-                        "role": "user",
-                        "content": "Observation: The final answer returned by"
-                        " the code is NOT a valid Python expression.",
-                    }
-                )
-                return False
+            self.prompt.add_message(
+                {"role": "user", "content": f"Observation: {refusal}"}
+            )
+            return False
         elif error is None and not is_final:
             if stdout.strip() == "":
                 content: str = (
@@ -142,6 +141,30 @@ class Loop:
         )
         return False
 
+    def check_final_answer(self, answer) -> str | None:
+        """Return why the final answer is refused, or None if it is valid.
+
+        MBPP expects Python source, SWE-bench expects a git patch: a patch
+        is never valid Python, so the check depends on the benchmark.
+        """
+        if not isinstance(answer, str) or answer.strip() == "":
+            return "The final answer must be a non-empty string."
+        if self.bench == constants.MBPP:
+            try:
+                ast.parse(answer)
+            except (SyntaxError, ValueError):
+                return (
+                    "The final answer returned by the code is NOT"
+                    " a valid Python expression."
+                )
+            return None
+        if not any(marker in answer for marker in constants.PATCH_MARKERS):
+            return (
+                "The final answer is NOT a git patch."
+                " Pass the result of get_patch() to final_answer()."
+            )
+        return None
+
     def run(
         self,
         task_id: str,
@@ -150,16 +173,17 @@ class Loop:
         self.iteration: int = 0
         self.task_id: str = task_id
         self.retries: int = 0
+        self.turn_requests = 0
         while self.iteration < self.iteration_limit:
             self.sandbox_input = ""
             self.sandbox_output = ""
+            self.llm_output = ""
+            self.request_time_ms = 0.0
             self.last_usage_input = 0
             self.last_usage_output = 0
             if self.retries > constants.LLM_MAX_RETRIES:
-                self.step_metrics.append(self.make_step_metrics())
-                return self.make_solution_output(
-                    error="LLM max retries exceeded"
-                    f" ({self.retries})"
+                return self.exit_on_guard(
+                    f"LLM max retries exceeded ({self.retries})"
                 )
             try:
                 if (
@@ -167,16 +191,10 @@ class Loop:
                     - self.start_time
                     + constants.MARGIN_EXECUTION_TIME
                 ) > self.timeout_limit:
-                    self.step_metrics.append(self.make_step_metrics())
-                    return self.make_solution_output(
-                        error="Timeout limit exceeded"
-                    )
+                    return self.exit_on_guard("Timeout limit exceeded")
                 max_tokens: int = self.max_tokens_output - self.usage_output
                 if max_tokens <= 0:
-                    self.step_metrics.append(self.make_step_metrics())
-                    return self.make_solution_output(
-                        error="Output token limit exceeded"
-                    )
+                    return self.exit_on_guard("Output token limit exceeded")
                 self.thought(
                     min(
                         constants.LLM_TIMEOUT_SECONDS,
@@ -195,26 +213,18 @@ class Loop:
                 time.sleep(self.retry_after)
                 continue
             except errors.PermanentLLMResponseError as e:
-                self.step_metrics.append(self.make_step_metrics())
-                return self.make_solution_output(error=f"{str(e)}")
+                return self.exit_on_guard(f"{str(e)}")
             if (
                 self.finish_reason == "length"
                 or self.usage_output > self.max_tokens_output
             ):
-                self.step_metrics.append(self.make_step_metrics())
-                return self.make_solution_output(
-                    error="LLM response exceeded the maximum token limit"
+                return self.exit_on_guard(
+                    "LLM response exceeded the maximum token limit"
                 )
             if time.time() - self.start_time > self.timeout_limit:
-                self.step_metrics.append(self.make_step_metrics())
-                return self.make_solution_output(
-                    error="Timeout limit exceeded"
-                )
+                return self.exit_on_guard("Timeout limit exceeded")
             if self.usage_input > self.max_tokens_input:
-                self.step_metrics.append(self.make_step_metrics())
-                return self.make_solution_output(
-                    error="Input token limit exceeded"
-                )
+                return self.exit_on_guard("Input token limit exceeded")
             self.extract(self.thoughts[-1])
             max_execution_time: int = int(
                 self.timeout_limit
@@ -222,10 +232,7 @@ class Loop:
                 - constants.MARGIN_EXECUTION_TIME
             )
             if max_execution_time <= 0:
-                self.step_metrics.append(self.make_step_metrics())
-                return self.make_solution_output(
-                    error="Timeout limit exceeded"
-                )
+                return self.exit_on_guard("Timeout limit exceeded")
             if self.observation(max_execution_time=max_execution_time):
                 self.step_metrics.append(self.make_step_metrics())
                 self.iteration += 1
@@ -233,7 +240,14 @@ class Loop:
             self.step_metrics.append(self.make_step_metrics())
             self.iteration += 1
             self.retries = 0
+            self.turn_requests = 0
         return self.make_solution_output(error="Iteration limit exceeded")
+
+    def exit_on_guard(self, error: str) -> SolutionOutput:
+        """End the run, recording the turn only if it sent a request."""
+        if self.turn_requests > 0:
+            self.step_metrics.append(self.make_step_metrics())
+        return self.make_solution_output(error=error)
 
     def make_solution_output(self, error: str | None = None) -> SolutionOutput:
         self.task_id = str(self.task_id)
@@ -264,9 +278,6 @@ class Loop:
     def make_step_metrics(
         self,
     ) -> StepMetrics:
-        llm_output: str = self.reasoning[-1] if self.reasoning else ""
-        llm_output += " " + self.thoughts[-1] if self.thoughts else ""
-
         step_metric: dict = {
             "step": self.iteration + 1,
             "input_tokens": self.last_usage_input,
@@ -275,7 +286,7 @@ class Loop:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
             "api_url": self.client.url,
             "model_name": self.client.model_name,
-            "llm_output": llm_output,
+            "llm_output": self.llm_output,
             "sandbox_input": self.sandbox_input,
             "sandbox_output": self.sandbox_output,
             "retries": self.retries,

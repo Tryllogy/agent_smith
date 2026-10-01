@@ -11,29 +11,113 @@
 
 ---
 
-## Etat actuel — 2026-09-02
+## Etat actuel — 2026-10-01
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **295 tests verts, dette ruff a 0.**
+modeles. **323 tests verts, `ruff check` et `ruff format` a 0.**
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
-debloque la boucle. Restent le CLI/REPL, le manual, **et tout MCP**.
+debloque la boucle. Les 9 outils existent **sur `origin/ndi-tull`, non
+mergee** (voir la revue ci-dessous). Restent le CLI/REPL, le manual, le client
+MCP et Docker.
 
-> **Le chemin critique est cote P1.** Sans `mcp_tools/`, sans client MCP et sans
-> Docker, ni SWE-bench ni le rapport de benchmark ne peuvent avancer. Le prompt
-> SWE n'a jamais tourne contre un vrai depot.
+> **Le chemin critique est cote P1.** Sans client MCP et sans Docker, ni
+> SWE-bench ni le rapport de benchmark ne peuvent avancer. Le prompt SWE n'a
+> jamais tourne contre un vrai depot.
 
 **Deux dettes qui bloquent la mesure :**
 
-1. **`origin/ndi-tull` (`eedbf20`) n'est pas mergee** dans `thomas` — a
-   rapatrier avant toute nouvelle mesure, sinon les deux moities divergent.
-2. **Le modele declare en premier dans `configs/models.json` est inutilisable.**
+1. **`origin/ndi-tull` a 4 commits d'avance non merges** (`9c8c4b2` →
+   `64f06cc`, les outils MCP). `eedbf20` est merge, lui. A rapatrier **apres**
+   avoir cale les signatures sur le sujet (voir la revue).
+2. **Le modele par defaut du `Makefile` (`MODEL :=`) est inutilisable.**
    `nvidia/nemotron-3-ultra-550b-a55b:free` met 27 a 40 s par reponse, contre
    30 s d'echeance par appel : le run pilote de `run5` a fini a 0 iteration.
    Releve des deux fournisseurs refait le 2026-09-02, voir P2.3 — **Groq est un
    ordre de grandeur plus rapide** (0,1-4,7 s) et deja declare dans le JSON.
+
+### Revue du 2026-10-01 (sujet relu en entier, code relu, tout verifie a l'execution)
+
+**Corrige le jour meme (P2) :**
+
+- [x] **Aucune tache SWE ne pouvait reussir.** Le `ast.parse(answer)` ajoute
+      par `845e54e` s'appliquait aux deux benchs ; or un `git diff` n'est
+      jamais du Python valide (verifie : `SyntaxError`), donc
+      `final_answer(get_patch())` etait **toujours** refuse. Le controle vit
+      maintenant dans `Loop.check_final_answer()` : `ast.parse` pour MBPP,
+      marqueurs de patch pour SWE (`constants.PATCH_MARKERS`, les **memes**
+      que `_validate_swebench_patch` de la moulinette), chaine non vide pour
+      les deux. Effet de bord voulu : une reponse MBPP **vide** passait
+      (`ast.parse("")` reussit), elle est refusee. 4 tests ajoutes, qui
+      echouent tous sur l'ancien code
+
+- [x] **Erreur de config = aucun `solution.json`** — corrige. `main()` des deux
+      `__main__.py` ecrit desormais un rendu d'echec
+      (`write_failure_output()`, `success=false`, `error` rempli, `task_id`
+      relu au mieux dans la tache, `""` sinon) puis sort en 1. Un plantage
+      **pendant** la boucle est rattrape dans `cli.run()` par
+      `loop.make_solution_output()`, qui garde les steps deja enregistres —
+      un rendu a zero aurait menti sur les requetes parties. Un chemin de
+      sortie non inscriptible est signale sur `stderr`, sans trace
+- [x] **Etape fantome sur sortie par garde** — corrigee. Le `llm_output` du
+      tour vit dans `self.llm_output`, remis a zero avec `request_time_ms` en
+      tete de chaque passage ; les sorties par garde passent par
+      `exit_on_guard()`, qui n'enregistre le tour **que si une requete est
+      partie** (`turn_requests`, retries compris). Au passage, `llm_output`
+      ne commence plus par une espace pour un modele sans raisonnement
+- [x] `ruff format --check` propre (la ligne `loop.py:180` a ete reecrite)
+
+13 tests ajoutes pour ces deux points, qui echouent tous sur l'ancien code.
+
+**Constate cote P1 (a transmettre, rien n'a ete touche) :**
+
+- [ ] **Evasion du sandbox** : `random._os`, `typing.sys.modules['os']`,
+      `typing.sys.modules['builtins'].open('/etc/hostname')` et `_socket`
+      passent tous. `ast_guard` ne bloque que les `__x` ; `typing.sys` est un
+      attribut **public**, il faut filtrer les attributs des modules importes
+- [ ] **Sortie > 64 Ko = faux timeout** : interblocage `Queue` / `join`
+      (`executor.py:57-71`), l'enfant attend que le parent lise, le parent
+      attend que l'enfant finisse. Et aucune troncature (exigee, V.1)
+- [ ] **Timeout = sortie partielle perdue** (`StringIO` dans l'enfant tue) ;
+      le sujet exige de la renvoyer
+- [ ] `sandbox_template.json` fait 0 octet : `uv run sandbox
+      sandbox_template.json` plantera au parsing
+- [ ] **Signatures des outils `ndi-tull` non conformes au § V.5** — critere
+      eliminatoire (*"All mandatory tools pass independent tests"*) :
+
+| Outil | Sujet | `origin/ndi-tull` |
+|---|---|---|
+| `find_references` | `(name, filepath, line)` | `(name, file_pattern)` |
+| `search_function_or_class_definition_in_code` | `(name)` | `(name, file_pattern)` |
+| `run_command` | `(command, workdir)` | `(command, timeout, cwd, raw)`, **sans shell** |
+| `run_tests` | lance l'`eval_script` | lance `pytest` |
+| `get_patch` | `git -c core.fileMode=false diff` | `git add -A` + `diff --cached` |
+
+  `run_command` passe par `shlex.split` sans shell : le `<<'PY'` et le `&&`
+  de **notre** exemple SWE ne marcheront pas. Les recherches partent de
+  `Path(".")`, pas de `/testbed`. Le serveur MBPP n'expose aucun outil (le
+  § V.3.2 exige `run_tests`).
+
+**Risque de planning — les quotas gratuits face a SWE :**
+
+- [ ] Le prompt SWE fait **~2 700 tokens** avant toute observation. Groq
+      gratuit = 8 000 tokens/minute ; une requete plus grosse que le plafond
+      est probablement refusee d'office (**a verifier**, statut attendu 413).
+      Or 413 n'est ni dans `ERRORS_TRANSIENT` ni dans `ERRORS_PERMANENT` →
+      branche « Unexpected error », abandon. `gpt-oss-120b` chez Groq risque
+      de tomber apres quelques `read_file`
+- [ ] OpenRouter : 50 req/jour. **≥ 5 modeles × 3 taches SWE** ≈ 225 a 450
+      requetes, soit 5 a 9 jours de quota. Chercher d'autres fournisseurs
+      gratuits **maintenant** : c'est le vrai chemin critique du rapport
+
+**Rendu :**
+
+- [ ] `.gitignore` ignore `cache/` **et** `solution.json` partout, or les
+      `solution.json` de backing doivent etre dans le repo (V.7). Prevoir un
+      dossier versionne (`benchmarks/`) + `!benchmarks/**/solution.json`
+- [ ] `moulinette.zip` (250 Ko) est versionne, sans utilite pour le rendu
 
 ### Journal condense
 
@@ -49,9 +133,13 @@ nettoye, `evaluations/` gitignore, et surtout **le trou de tests comble** —
 `tests/test_agent_cli.py`, aucun autre ne construisait `AgentMBPP` ni
 `AgentSWEBENCH`.
 
-**2026-09-02** (dans l'arbre de travail, **non commite**) : `ModelConfig`
-supprime, `is_reasoning` retire partout, consigne d'`assert` rendue dependante du
-bench. Detail en P2.5 bis et P2.1.
+**2026-09-02** (`97091ce` → `3fb1d4f`) : `ModelConfig` supprime,
+`is_reasoning` retire partout, consigne d'`assert` rendue dependante du bench,
+`retry_after` propre a chaque bench, `retries` affiches sans le +1. Detail en
+P2.5 bis et P2.1.
+
+**2026-10-01** : revue complete, bug `ast.parse` / SWE corrige (voir
+ci-dessus).
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -73,7 +161,7 @@ bench. Detail en P2.5 bis et P2.1.
 |---|---|
 | `core/` : `models.py`, `config_models.py`, `errors.py`, `constants.py`, `api_key.py`, `agent_cli_helper.py` | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
 | `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `sandbox/mcp_client/` |
-| `core/llm/` : `client.py`, `provider.py` | tout `mcp_tools/` + les 2 `mcp_tools_*.py` racine |
+| `core/llm/` : `client.py`, `provider.py` | `mcp_tools/` + les 2 `mcp_tools_*.py` racine : **ecrits sur `origin/ndi-tull`, non merges** |
 | `agent_mbpp/`, `agent_swebench/` (sauf `docker.py`) | `agent_swebench/docker.py` |
 | `sandbox/executor.py`, `configs/models.json` | `sandbox_template.json` |
 | `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | `BENCHMARK_REPORT.md`, `README.md` |
@@ -173,7 +261,8 @@ FS), `resource` (`RLIMIT_AS`/`RLIMIT_CPU`), `signal`, `multiprocessing`
 `socket` (neutralisation reseau), `io`/`contextlib` (capture de sortie),
 `traceback`, `types`, `threading`/`queue`, `tempfile`, `json`, `time`.
 
-**MCP** — serveur : `from mcp.server.fastmcp import FastMCP`. Client (les **deux**
+**MCP** — serveur : `from mcp.server import MCPServer` (**`mcp` 2.0.0 installe** :
+`mcp.server.fastmcp` n'existe plus, verifie le 2026-10-01). Client (les **deux**
 transports sont obligatoires) : `ClientSession`, `StdioServerParameters`,
 `mcp.client.stdio.stdio_client`, `mcp.client.streamable_http.streamablehttp_client`.
 C'est `list_tools()` qui alimente la generation du manuel. *(verifier les
@@ -252,9 +341,10 @@ prompt (manuel)      <- decouverte <- serveur MCP
 namespace du sandbox -> wrapper    -> client MCP -> serveur -> outil
 ```
 
-Trois maillons sur cinq sont vides : `sandbox/mcp_client/`, `mcp_tools/`, et la
-generation du manuel. Le namespace d'`executor.py:32` ne contient toujours que
-`final_answer`.
+Deux maillons sur cinq sont vides : `sandbox/mcp_client/` et la generation du
+manuel. `mcp_tools/` existe sur `origin/ndi-tull` (non merge, signatures a
+caler, voir la revue en tete). Le namespace d'`executor.py:32` ne contient
+toujours que `final_answer`.
 
 - [ ] Le manuel contient le **contrat** (nom, description, types), **jamais le
       code** : l'implementation peut changer sous le modele
@@ -284,7 +374,9 @@ dicts ? deja mise en forme ? P2 insere, il ne compose pas.
       `find_references`
 - [ ] **Execution** : `run_tests()` (lance l'`eval_script`), `get_patch()` (git
       diff unifie), `run_command(command, workdir)`
-- [~] `mcp_tools_mbpp.py` et `mcp_tools_swebench.py` a la **racine** (crees, vides)
+- [~] `mcp_tools_mbpp.py` et `mcp_tools_swebench.py` a la **racine** : sur
+      `origin/ndi-tull`, le serveur SWE enregistre les 9 outils, le serveur
+      MBPP **aucun**
 
 La logique va dans `mcp_tools/` (`tools_fs`, `tools_search`, `tools_exec`) ; les
 2 fichiers racine ne sont que des points d'entree fins, l'emplacement etant
@@ -355,9 +447,10 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       `observation()` et partait pour **les deux** benchmarks — cote SWE il
       reclamait des asserts dont le prompt ne parle jamais. Il est desormais
       ajoute seulement si `name_bench == BenchName.MBPP`
-- [ ] **Les `retries` d'un tour qui sort par une garde ne sont comptes nulle
-      part** : un rendu peut afficher `total_requests: 9` avec `steps: []`, sans
-      dire ce qui a echoue
+- [x] **Les `retries` d'un tour qui sort par une garde sont comptes** : depuis
+      le 2026-10-01, `exit_on_guard()` enregistre le tour des qu'une requete est
+      partie, retries compris (`llm_output` vide, puisque rien n'est revenu).
+      Plus de `total_requests: 9` avec `steps: []`
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -468,6 +561,10 @@ de cles, puis repli de provider s'il est configure, puis **echec gracieux**.
 
 #### Modeles gratuits — releve du 2026-09-02 (les deux fournisseurs)
 
+> **A lire avec la section suivante.** Ce releve sonde avec une requete
+> **triviale** : sa colonne « bloc : oui » ne prevaut pas sous le vrai prompt
+> MBPP. Voir *« Modeles OpenRouter gratuits et utilisables »* (2026-09-03).
+
 Sonde : meme requete pour tous (une fonction triviale, bloc `python` demande),
 `max_tokens=1500`. Methode pour relister OpenRouter :
 `GET https://openrouter.ai/api/v1/models` (public, sans auth), garder
@@ -559,6 +656,236 @@ faire tourner de ce cote.
 - [ ] **Ajouter des cles Groq** : une seule aujourd'hui, contre deux chez
       OpenRouter. Le sujet exige le multi-token *par fournisseur*
 
+#### Modeles OpenRouter gratuits **et utilisables** — releve du 2026-09-03
+
+Le releve du 2026-09-02 ci-dessus sonde avec une requete **triviale** et conclut
+a 10 modeles joignables. C'est trompeur : sous le **vrai prompt systeme MBPP**
+(~800 tokens d'entree, `max_tokens=1500`, meme tache pour tous), la plupart
+s'effondrent. « Gratuit » et « au catalogue » ne disent rien ; « utilisable »
+se mesure.
+
+**Les quatre conditions cumulatives d'utilisabilite sur MBPP :**
+
+1. **Joignable** — pas de 403 / 502 structurel.
+2. **Emet un bloc ` ```python ` dans `content`** — et non la totalite du budget
+   dans le canal `reasoning`, qui laisse `content: null`.
+3. **Latence < 30 s** par appel (`LLM_TIMEOUT_SECONDS`, `constants.py:5`).
+4. **Sortie < 1500 tokens** (`MBPP.output_max_token`).
+
+> **Fiabilite de ce releve — a lire avant de s'en servir.** La sonde de
+> screening envoyait `content: p.prompt`, or `Prompt.prompt` est **deja une
+> liste de messages** : la charge utile etait malformee. OpenRouter l'a
+> acceptee sans broncher (Groq, lui, rend un 400 — c'est comme ca que le bug a
+> ete trouve, le 2026-09-03). **Ce qui reste sur : `run8` (9/10) et les trois
+> pilotes**, tous passes par `agent_mbpp` et donc par la vraie charge utile —
+> soit `minimax-m3` (utilisable), `minimax-m2.7` (`Timeout limit exceeded`,
+> 0 iteration) et `ling-3.0-flash-fin` (`LLM max retries exceeded`). **A
+> reverifier : les 6 autres** (`gemma-4-31b-it`, `glm-5.2`, `lfm-2.5-2.6b`,
+> `dots-3-note-preview`, `north-mini-code`, `nemotron-nano-...-reasoning`),
+> classes sur la seule foi de la sonde. Le quota jour etait epuise au moment
+> de la decouverte, d'ou le report.
+
+Le point 2 est le discriminant, et il est contre-intuitif : **les 18 modeles
+`:free` du catalogue exposent tous le parametre `reasoning`.** L'etiquette ne
+trie rien. Ce qui trie, c'est `usage.completion_tokens_details.reasoning_tokens`
+dans la reponse — un modele qui deliberate dans un canal separe brule le plafond
+de 1500 avant d'ecrire la moindre ligne de code.
+
+**Utilisables — les trois qui passent les quatre conditions :**
+
+| Modele `:free` | latence | out | dont reasoning | note |
+|---|---|---|---|---|
+| `minimax/minimax-m3` | 5,4–11,6 s | 318–1408 | **0** | **valide sur 10 taches : `run8`, 9/10** |
+| `google/gemma-4-31b-it` | 4,9–7,8 s | 159–254 | **0** | non teste en campagne |
+| `minimax/minimax-m2.7` | 17–23 s | 782–937 | 269–459 | **marge nulle**, voir plus bas |
+
+`minimax-m3` est le seul verifie sur une campagne complete. `gemma-4-31b-it`
+a le meme profil sain (`reasoning_tokens: 0`, bloc emis, rapide) mais n'a
+jamais tourne 10 taches. `m2.7` est **a la limite** : il tient sur une tache
+courte, mais le pilote sur MBPP 160 a depasse les 30 s a chaque appel — 4
+tentatives, **0 iteration**, `Timeout limit exceeded` a 120 s, exactement
+l'echec de `run5`.
+
+**Inutilisables — le canal `reasoning` mange le plafond de sortie :**
+
+| Modele `:free` | out | dont reasoning | `content` |
+|---|---|---|---|
+| `liquid/lfm-2.5-2.6b` | 1500 | 1498 | **vide** |
+| `z-ai/glm-5.2` | 1500 | 1459 | tronque (150 car.) |
+| `dots-studio/dots-3-note-preview` | 1500 | 1408 | **vide** |
+| `cohere/north-mini-code` | 1500 | 1350 | **null** |
+| `inclusionai/ling-3.0-flash-fin` | 1500 | 1094–1500 | **vide** |
+
+Tous finissent en `finish_reason: length`. La boucle n'a rien a extraire, part
+en retry, et sort sur `LLM max retries exceeded (5)` — verifie en pilote sur
+`ling-3.0-flash-fin`. **Ce sont les modeles que le releve du 2026-09-02
+classait « bloc : oui »** : sur une question triviale ils repondent, sur le
+prompt MBPP ils n'y arrivent plus.
+
+**Inutilisables — trop lents pour l'echeance de 30 s :**
+
+| Modele `:free` | latence | out | note |
+|---|---|---|---|
+| `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | **55–63 s** | 2763–2897 | + `502 ResourceExhausted (16/16)` sur 2 appels sur 4 |
+| `nvidia/nemotron-3-ultra-550b-a55b` | **27–40 s** | — | deja identifie comme la cause de `run5` |
+
+**Structurellement hors-jeu :**
+
+- `thinkingmachines/inkling` et `inkling-small` — **403 permanent**,
+  « only available on agentic harnesses ». Jamais appelables via l'API.
+- `nvidia/nemotron-3.5-content-safety` — classifieur, pas un generateur (400).
+- Les 2 `lyria` (audio) et `openrouter/free` (routeur non reproductible),
+  deja ecartes au releve precedent.
+
+**Non conclus** (le quota jour a saute pendant le releve, voir ci-dessous) :
+`nvidia/nemotron-3.5-lightning`, `poolside/laguna-s-2.1`, `laguna-xs-2.1`,
+`google/gemma-4-26b-a4b-it`, `nvidia/nemotron-3-super-120b-a12b`. Leurs 429 ne
+prouvent **rien** sur eux — c'est notre compte qui etait a sec, pas eux. A
+resonder. `nemotron-3-super-120b` a par ailleurs deja tourne une campagne
+(`run5`, 4/10).
+
+**Le quota est la contrainte qui structure toute mesure OpenRouter.**
+Confirme le 2026-09-03 sur les deux cles :
+
+```
+x-ratelimit-limit: 50        x-ratelimit-remaining: 0
+limit_source: openrouter_free_tier_daily
+"Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000"
+reset: 2026-09-04T02:00:00+02:00
+```
+
+**50 requetes / jour / compte**, et les deux cles du `.env` tapent dans le
+**meme seau** — la rotation multi-cles n'y gagne rien, contrairement a ce
+qu'on pourrait croire. Une campagne de 10 taches en consomme ~29 (`run8`) :
+**une seule campagne et demie par jour**, sondages compris. Il y a en plus un
+plafond court de ~20 req/min sur les modeles gratuits : un balayage de 36
+appels d'affilee part integralement en 429 (constate).
+
+→ Consequence pratique : **sonder avant de lancer**, jamais l'inverse. Trois
+pilotes d'une tache (~3 requetes) coutent moins cher qu'une campagne a
+0 iteration (~29 requetes brulees). C'est ce qui a sauve `run8`.
+
+- [ ] **Resonder les 6 modeles marques « a reverifier » ci-dessus** avec la
+      charge utile corrigee (`list(p.prompt) + [{"role": "user", ...}]`), plus
+      les 5 « non conclus » — soit 11 en tout, apres le reset du 2026-09-04
+- [ ] Verifier `google/gemma-4-31b-it:free` sur une campagne complete : c'est
+      le seul second candidat au profil sain, et il est plus rapide que `m3`
+- [ ] Le `limit_source: openrouter_free_tier_daily` distingue « ralentis » de
+      « reviens demain ». La boucle traite les deux comme transitoires — deja
+      note plus haut, ce releve en donne la trace exacte
+
+#### Modeles Groq gratuits **et utilisables** — releve du 2026-09-03
+
+Meme methode que la section OpenRouter ci-dessus : **vrai prompt systeme MBPP**,
+`max_tokens=1500`, meme tache pour tous, 2 appels par modele, espaces de 22 s
+pour ne pas saturer le seau TPM.
+
+Chez Groq la gratuite est une propriete du **compte** (free tier), pas du
+modele : les 14 entrees du catalogue sont toutes accessibles avec la cle. La
+question « lequel est gratuit » n'a donc pas de sens ici — **seule celle de
+l'utilisabilite en a une.**
+
+**Les conditions d'utilisabilite, avec une de plus que chez OpenRouter :**
+
+1. **Ne pas rendre 400** sur le prompt MBPP.
+2. **Emet un bloc ` ```python `.**
+3. **Sortie < 1500 tokens** (`MBPP.output_max_token`).
+4. **Entree < 6000 tokens** (`MBPP.input_max_token`) — c'est ce critere,
+   inoffensif chez OpenRouter, qui elimine la moitie du catalogue Groq.
+5. La latence n'est jamais un probleme : **0,5 a 4,0 s**, contre 30 s
+   d'echeance. Aucun modele Groq n'approche la limite.
+
+**Utilisables — les trois qui passent :**
+
+| Modele | latence | in | out | note |
+|---|---|---|---|---|
+| `openai/gpt-oss-120b` | 0,67–0,80 s | 933 | 191–250 | **19/20 sur `run6`+`run7`** — la reference |
+| `qwen/qwen3.8-27b` | 0,66–2,08 s | 956 | 243–933 | profil sain, jamais teste en campagne |
+| `qwen/qwen3.6-27b` | 2,32–3,27 s | 950 | 1036–**1500** | creve le plafond **1 fois sur 2** |
+
+`gpt-oss-120b` reste nettement le meilleur : entree la plus compacte (933) et
+sortie la plus econome (~200 tokens), soit **~1120 tokens par appel** — c'est
+exactement ce qui lui permet de tenir dans les 8000 tokens/minute. Les deux
+`qwen` consomment 2 a 3 fois plus en sortie pour le meme travail.
+
+**Inutilisables — 400 reproductible sur le prompt MBPP :**
+
+| Modele | echec |
+|---|---|
+| `openai/gpt-oss-20b` | `HTTP 400: Tool choice is none, but model called a tool` — **2 appels sur 2** |
+| `openai/gpt-oss-safeguard-20b` | meme 400, **1 appel sur 2** |
+
+Le modele emet un appel d'outil au format harmony alors que la requete ne
+declare aucun outil, et **Groq rejette sa propre reponse**. Le `120b` ne le
+fait jamais avec le meme prompt : c'est propre aux variantes 20b. A noter que
+`gpt-oss-20b` est le modele de `run3`/`run4` (8/10) — **cote OpenRouter il
+fonctionne**, l'echec est specifique a Groq.
+
+**Inutilisables — crevent le budget d'entree :**
+
+| Modele | in appel 1 | in appel 2 | cause |
+|---|---|---|---|
+| `groq/compound` | 3813 | **7521** | injecte son propre contexte agentique |
+| `groq/compound-mini` | 2159 | 2159 | idem, plus modere |
+| `allam-2-7b` | 1071 | 1071 | `context_window` = **4096** en tout |
+
+Les deux `compound` ne sont pas des modeles mais des **systemes agentiques** :
+ils ajoutent leur propre echafaudage au prompt. Pour le meme prompt exactement,
+`compound` est passe de 3813 a 7521 tokens d'entree d'un appel a l'autre — il
+**depasse a lui seul les 6000 tokens** du bench, sans qu'aucune iteration ait
+eu lieu. Non reproductible, donc inutilisable pour une mesure.
+
+`allam-2-7b` a un contexte total de 4096 tokens, **inferieur au budget d'entree
+MBPP de 6000**. Il tokenise en plus moins bien (1071 en entree la ou les autres
+sont a 933). Il a sorti 1500 tokens — le plafond — aux deux appels.
+
+**Structurellement hors-jeu** (6 des 14, deja ecartes au releve du 2026-09-02) :
+`whisper-large-v3` et `-turbo` (transcription, ctx 448), les 2
+`canopylabs/orpheus` (synthese vocale), les 2 `meta-llama/llama-prompt-guard-2`
+(classifieurs, ctx 512).
+
+**Quotas mesures le 2026-09-03** (en-tetes d'une reponse 200) :
+
+```
+x-ratelimit-limit-requests: 1000     x-ratelimit-remaining-requests: 995
+x-ratelimit-limit-tokens:   8000     x-ratelimit-remaining-tokens:   7923
+x-ratelimit-reset-requests: 7m12s    x-ratelimit-reset-tokens:       577ms
+```
+
+**1000 requetes/jour, 8000 tokens/minute.** La contrainte mordante est la
+seconde : a ~1120 tokens par appel, `gpt-oss-120b` tient **7 appels par
+minute** ; les `qwen`, deux a trois fois moins. C'est deja ce qui a fait
+echouer MBPP 462 en `run7`.
+
+Comparaison directe avec OpenRouter, qui tranche le choix de fournisseur :
+
+| | OpenRouter (`:free`) | Groq (free tier) |
+|---|---|---|
+| Requetes | **50 / jour / compte** | **1000 / jour** |
+| Tokens | — | 8000 / minute |
+| Latence observee | 4,9 – 63 s | **0,5 – 4,0 s** |
+| Modeles utilisables | 3 sur 18 | 3 sur 8 testables |
+| Cles dans `.env` | 2 (**meme seau**) | **1** |
+
+→ **Groq gagne sur tout sauf le nombre de cles.** 20x plus de requetes par
+jour, un ordre de grandeur plus rapide, et aucun modele elimine par la latence
+ou par le canal `reasoning`. Les echecs Groq sont d'une autre nature : 400
+protocolaire (`gpt-oss-20b`) ou budget d'entree (`compound`, `allam`).
+
+- [ ] **`x-ratelimit-reset-tokens` peut valoir `577ms`** — une **troisieme**
+      unite, apres `s` et `m` deja notees plus haut. Le parseur de duree a
+      ecrire pour `get_retry_after` (`provider.py:32-39`) doit couvrir `ms`,
+      `s`, `m`, et le decimal (`30.795s`, `5m45.6s`), sinon il retombera
+      toujours sur le plancher du bench
+- [ ] Tester `qwen/qwen3.8-27b` sur une campagne complete : seul second
+      candidat sain cote Groq, utile pour une **ablation a modele change,
+      taches et agent identiques** — exactement ce que le sujet demande
+- [ ] Ne **pas** retenir `gpt-oss-20b` cote Groq malgre ses 8/10 sur
+      OpenRouter : le 400 est reproductible et vient du fournisseur, pas de
+      nous. Si on veut le comparer, ce sera sur OpenRouter
+- [ ] **Ajouter des cles Groq** (rappel) : une seule, et c'est desormais le
+      seul avantage restant a OpenRouter
+
 ### P2.4 — System prompts
 
 - [x] Slots Thought / Code / Observation avec exemples ; l'exemple `smallest_abs`
@@ -588,12 +915,16 @@ faire tourner de ce cote.
       sur 9 outils dont il ne donne jamais la liste. Attend P1.4
 - [~] **Exemple MBPP** : coquilles corrigees (`Obvservation`, virgule du second
       `assert` passee apres le saut de ligne, cloture ``` ``` ``` recollee,
-      indentation du corps). **Le piege principal tient toujours** : le
-      `final_answer("def smallest_abs(a):` reste coupe par un vrai retour a la
-      ligne, donc le modele lit une chaine non terminee et copie une forme qui ne
-      compile pas. Il faut une chaine sur une ligne, un `\n` litteral, ou des
-      triples quotes. **Et l'effet n'est pas mesure** — l'ablation a jeu egal
-      reste a faire
+      indentation du corps). **Le piege principal est corrige** (constate le
+      2026-10-01) : `final_answer("def smallest_abs(a): return min(map(abs,a))")`
+      tient sur une ligne. **Reste :**
+  - l'effet n'est pas mesure — l'ablation a jeu egal reste a faire
+  - l'exemple montre `Observation: True` apres deux `assert` qui n'affichent
+    rien ; la vraie boucle repond « did not produce any output ». Le modele
+    apprend une observation que le systeme ne produit jamais
+  - la relance de `loop.py` (« make AND print the asserts ») invite au
+    `print(assert ...)`, qui est une `SyntaxError` : `assert` est une
+    instruction
 
 → **Methode :** resoudre une tache a la main avec seulement les outils de
 l'agent, et transcrire ce raisonnement dans le prompt.
@@ -611,7 +942,9 @@ sur toutes les taches mesurees.
 le helper lit l'environnement et les fichiers, les CLI cablent les objets.
 
 - [ ] `final_answer(get_patch())` est enseigne dans le prompt mais **non teste en
-      execution** : `get_patch()` est un outil MCP de P1.5, il n'existe pas encore
+      execution** : `get_patch()` est un outil MCP de P1.5, pas encore branche.
+      Jusqu'au 2026-10-01 la boucle l'aurait de toute facon **refuse**
+      (`ast.parse` sur un diff) — corrige, voir la revue en tete
 
 ### P2.5 bis — `configs/models.json`
 
@@ -815,12 +1148,15 @@ millisecondes**). Traite en P2.3.
 
 1. [ ] **Campagne de controle MBPP** — le chantier le plus rentable et il ne
        depend de personne. Prealable : **refaire le releve des modeles gratuits**
-2. [ ] **Rapatrier `origin/ndi-tull`** (`eedbf20`) avant toute mesure
-3. [ ] **Commiter la session du 2026-09-02** (`ModelConfig` supprime, consigne
-       d'`assert` par bench) : 5 fichiers modifies, 295 tests verts, ruff a 0
-4. [ ] **Corriger le piege de l'exemple MBPP** (chaine coupee par un vrai retour
-       a la ligne, cf. P2.4) — et **mesurer** l'effet : c'est une ablation toute
-       trouvee pour le rapport
+2. [~] **Rapatrier `origin/ndi-tull`** : `eedbf20` est merge ; restent
+       `9c8c4b2` → `64f06cc` (outils MCP), a merger une fois les signatures
+       calees sur le § V.5
+3. [x] **Commiter la session du 2026-09-02** (`97091ce` → `3fb1d4f`)
+4. [~] **Piege de l'exemple MBPP corrige** (cf. P2.4) — reste a **mesurer**
+       l'effet : c'est une ablation toute trouvee pour le rapport
+4 bis. [ ] **Strategie fournisseurs pour SWE** (cf. la revue en tete) : Groq
+       risque de refuser les contextes > 8 000 tokens, OpenRouter tient
+       50 req/jour. C'est ce qui conditionne `BENCHMARK_REPORT.md`
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer la liste des outils a `Prompt` au lieu de `tools=None`
@@ -842,7 +1178,8 @@ millisecondes**). Traite en P2.3.
 
 ### Le banc d'essai `tests/`
 
-**295 tests**, gitignore, hors rendu — c'est un outil de travail, pas un livrable.
+**323 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
+pas un livrable.
 
 `tests/test_agent_cli.py` (75 tests) comble le trou par lequel le `TypeError` de
 `get_task_from_file` est passe dans **les deux** CLI a la fois, 220 tests au vert.
