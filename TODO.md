@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **391 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **425 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Fournisseurs SWE : 5 modeles declares, le minimum du rapport.** NVIDIA Build
@@ -33,6 +33,12 @@ metriques valides 17/20 → 20/20 (`run25`/`run26`). Detail en P2.6.
 les 22 campagnes `run5` a `run26`, **versionnees dans `benchmarks/mbpp/`**
 avec leurs `solution.json`. Les sections SWE gardent la structure du sujet et
 attendent les outils (P2.6).
+
+**Repli entre fournisseurs : fait** (2026-10-02, non commite). Une erreur
+permanente, ou 5 transients de suite sur le meme modele, ne terminent plus la
+tache : elle continue sur le modele suivant de `configs/fallback.json` (une
+liste par benchmark), puis echoue proprement. Verifie en reel sur deux taches
+MBPP validees par la moulinette (P2.3, « Repli de provider »).
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
@@ -207,7 +213,11 @@ la boucle** (P2.1) et le rejeu de `codestral` (`run25`/`run26`, 17/20).
 Correctifs commites dans `c21b0ce`. Enfin **`BENCHMARK_REPORT.md`, partie
 MBPP**, et les 22 campagnes versionnees dans `benchmarks/mbpp/` (`0faae67`).
 La revalidation de `run5` a `run8` par la moulinette fait passer **`run7` de
-9/10 a 8/10** (MBPP 400, test cache) : chiffres corriges ci-dessous.
+9/10 a 8/10** (MBPP 400, test cache) : chiffres corriges ci-dessous
+(`1a2a024`). Puis le **repli entre fournisseurs** (P2.3). **Non commite** :
+`configs/fallback.json`, `core/llm/fallback.py`, `core/agent/loop.py`,
+`core/agent_cli_helper.py`, `core/config_models.py`, `core/constants.py`,
+`agent_mbpp/cli.py`, `agent_swebench/cli.py`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -616,7 +626,9 @@ lu dans `configs/models.json`. Brancher un second fournisseur devient une entree
 JSON, pas une branche `if`. Quatre declares : `openrouter`, `groq`, `nvidia`,
 `mistral` (les deux derniers branches sans une ligne de code, 2026-10-01 et
 2026-10-02). Un reglage propre a un modele (couper le raisonnement) passe par
-`extra_body`, fusionne dans le corps de la requete (P2.5 bis).
+`extra_body`, fusionne dans le corps de la requete (P2.5 bis). Depuis le
+2026-10-02, **repli entre fournisseurs** : une chaine de clients par
+benchmark (`FallbackClient`, voir « Repli de provider » ci-dessous).
 
 Multi-tokens + **rotation** : 429 fait tourner sans condamner, 402 marque la cle
 epuisee, vivier vide remonte en `Permanent`. Cles depuis env vars uniquement
@@ -660,7 +672,7 @@ tout le message :
 | Mecanisme | Formulation | Statut |
 |---|---|---|
 | Plusieurs cles par provider | *"multi-token management is **mandatory**"*, *"token rotation **must** be implemented"* | obligatoire — **fait** |
-| Repli de provider | *"**consider** implementing"* | suggere — a defendre |
+| Repli de provider | *"**consider** implementing"* | suggere — **fait le 2026-10-02** |
 
 Trois contraintes tranchent a sa place :
 
@@ -682,13 +694,68 @@ moulinette** : y substituer autre chose serait desobeir. Panne d'**execution** e
 cours de tache (429, 503, timeout) → escalade : retry avec backoff, puis rotation
 de cles, puis repli de provider s'il est configure, puis **echec gracieux**.
 
-- [~] **Repli entre providers non implemente** : la configuration est
-      multi-provider mais le choix est fige au demarrage par `--provider-url`.
-      Deux pieges a traiter le jour ou on le branche — le budget de tokens est
-      **cumulatif par tache**, un repli au step 20 herite des tokens deja
-      consommes et ne les reinitialise pas ; et il change de modele, donc de
-      tokenizer et de verbosite (un repli vers un modele de raisonnement peut
-      faire exploser la limite de sortie a lui seul)
+- [x] **Repli entre providers — fait le 2026-10-02** (non commite). La
+      politique ci-dessus, telle quelle : erreur de config au demarrage →
+      sortie ; panne en cours de tache → retries, rotation de cles, **puis
+      modele suivant**, puis echec gracieux. En cinq pieces :
+  - **`configs/fallback.json`** : une liste ordonnee par benchmark, chaque
+    entree = un fournisseur **nomme** comme dans `models.json` (pas d'URL,
+    donc pas le piege de l'egalite stricte) + un modele. Fichier a part :
+    les cles de premier niveau de `models.json` sont des fournisseurs,
+    parcourus par `find_provider_by_url` et par les tests. Valide par
+    `FallbackConfig` / `FallbackTarget` (`config_models.py`), en
+    `extra="forbid"`. Ordre choisi d'apres la campagne MBPP (P2.6) : MBPP =
+    Groq `gpt-oss-120b`, `ministral-14b-2512`, `nemotron-3-super` ; SWE =
+    `nemotron-3-super`, `ministral-14b-2512` (Groq exclu, 413)
+  - **`core/llm/fallback.py`, `FallbackClient`** : enveloppe une liste de
+    `LLMClient` et presente a la boucle la meme interface
+    (`get_llm_reponse`, `url`, `model_name` du client en cours). Chaque step
+    porte donc le modele qui a **reellement** repondu (exigence de
+    `StepMetrics`). `fall_back()` passe au suivant, jamais de retour en
+    arriere. `LLMClient` reste mono-fournisseur avec sa rotation de cles
+  - **`get_fallback_clients()`** (`agent_cli_helper.py`) : saute le modele
+    demande lui-meme et **tout fournisseur sans cle dans l'environnement**
+    (le `.env` decide quels replis existent ; un `.env` d'evaluation avec une
+    seule cle ne doit pas faire planter le demarrage). Fournisseur inconnu
+    ou fichier invalide → erreur au demarrage ; fichier absent → pas de
+    repli. `make_llm_client()` factorise la construction d'un client, que
+    les deux CLI dupliquaient
+  - **Les CLI** gardent `self.llm_client` (le modele demande) et passent a
+    la boucle `self.client = FallbackClient([llm_client, *replis])`
+  - **La boucle decide *quand*, la chaine *vers quoi*.** Erreur permanente
+    → bascule immediate, sans attente, la tentative comptant comme retry.
+    Plafond de transients atteint → bascule au lieu de sortir. Chaque
+    tentative HTTP passe par la boucle, donc reste comptee dans
+    `total_requests` et bornee par le budget de temps : une chaine qui
+    retenterait seule cacherait des requetes. **Deux compteurs** : `retries`
+    reste la metrique du step (toutes les tentatives ratees du tour),
+    `backend_retries` est le plafond **par modele**, remis a 0 a chaque
+    bascule. Une ligne stderr par bascule : `LLM fallback on step S:
+    <cause>; switching to <modele> at <url>`
+  - Les deux pieges notes ici avant : le budget de tokens **reste cumule**
+    sur la tache (teste : 900 + 1 200 sur deux modeles) ; la verbosite d'un
+    modele de repli se regle dans la config (NVIDIA sans raisonnement,
+    `gpt-oss-120b` a 534 tokens de sortie en moyenne sur MBPP)
+
+  **Verifie** : 34 tests ajoutes (`tests/test_fallback.py`,
+  `tests/test_agent_cli.py`), 9 echouent sur l'ancienne boucle ; les 391
+  anciens passent sans changement (seuls les faux clients ont gagne
+  `fall_back()`) : **sans repli disponible, comportement identique**. Deux
+  runs reels valides par la moulinette (PASSED, VALID) : Groq
+  `openai/does-not-exist` → 404 → Groq `gpt-oss-120b`, MBPP 80 ; NVIDIA
+  `nvidia/does-not-exist` → 404 → Groq `gpt-oss-120b`, **4 `content` vides
+  puis succes au 5e essai**, MBPP 65 — avec un compteur unique par tour, la
+  404 + 4 vides auraient atteint le plafond et abandonne la tache
+- [ ] **A decider : quelles erreurs declenchent le repli.** Aujourd'hui
+      toutes les permanentes, 404 (modele inconnu) et 401 (cle refusee)
+      comprises : un mauvais `--model-name` est remplace en silence par un
+      autre modele (seul le step et la ligne stderr le disent). Les exclure
+      si on prefere une erreur franche
+- [ ] **A decider : l'ordre des listes de repli**, et Mistral dedans tant que
+      sa validation par l'equipe pedagogique n'est pas faite
+- [ ] Le repli SWE n'a pas tourne en reel (outils non branches)
+- [ ] Cosmetique : la cause d'une 404 NVIDIA s'ecrit sur deux lignes dans
+      stderr (message de `httpx` repris tel quel)
 - [ ] **Le fournisseur est retrouve par egalite stricte d'URL**
       (`find_provider_by_url`) : un `/` final de trop dans `--provider-url` et
       rien ne matche. Normaliser, ou chercher par nom
@@ -1770,6 +1837,9 @@ une part de l'ecart peut etre du hasard.
        `sympy__sympy-13480`, `pydata__xarray-4629`), les deux metriques
        propres a SWE, et de preference une ablation SWE. **Chaque nouvelle
        campagne va directement dans `benchmarks/`**, pas dans `cache/`
+4 septies. [~] **Repli entre fournisseurs** — fait le 2026-10-02 (P2.3,
+       « Repli de provider »). Restent : **commiter**, **decider** des
+       erreurs qui declenchent le repli et de l'ordre des listes
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer la liste des outils a `Prompt` au lieu de `tools=None`
@@ -1791,7 +1861,7 @@ une part de l'ecart peut etre du hasard.
 
 ### Le banc d'essai `tests/`
 
-**391 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
+**425 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

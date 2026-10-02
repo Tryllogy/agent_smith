@@ -7,7 +7,7 @@ from core import constants, errors
 from core.agent.extraction import extract_code_from_text
 from core.agent.prompt import Prompt
 from core.config_models import LLMResponse
-from core.llm.client import LLMClient
+from core.llm.fallback import FallbackClient
 from core.models import SandboxConfig, SolutionOutput, StepMetrics
 from sandbox.executor import execute
 
@@ -23,7 +23,7 @@ class Loop:
 
     def __init__(
         self,
-        client: LLMClient,
+        client: FallbackClient,
         prompt: Prompt,
         bench: constants.Bench,
         config_sandbox: SandboxConfig | None = None,
@@ -35,7 +35,7 @@ class Loop:
         lines run after the final answer, alone in the sandbox, before it
         is accepted (MBPP: test_imports then test_list).
         """
-        self.client: LLMClient = client
+        self.client: FallbackClient = client
         self.answer_tests: list[str] = answer_tests or []
         self.thoughts: list = []
         self.reasoning: list = []
@@ -281,6 +281,7 @@ class Loop:
         self.iteration: int = 0
         self.task_id: str = task_id
         self.retries: int = 0
+        self.backend_retries: int = 0
         self.turn_requests = 0
         self.last_llm_error = ""
         while self.iteration < self.iteration_limit:
@@ -317,10 +318,11 @@ class Loop:
                 )
             except errors.TransientLLMResponseError as e:
                 self.retries += 1
-                self.last_llm_error = str(e)
-                if e.status_code is not None:
-                    self.last_llm_error += f" (HTTP {e.status_code})"
-                if self.retries > constants.LLM_MAX_RETRIES:
+                self.backend_retries += 1
+                self.last_llm_error = self.describe_llm_error(e)
+                if self.backend_retries > constants.LLM_MAX_RETRIES:
+                    if self.fall_back(self.last_llm_error):
+                        continue
                     return self.exit_on_guard(
                         f"LLM max retries exceeded ({self.retries})"
                     )
@@ -343,6 +345,10 @@ class Loop:
                 time.sleep(self.retry_after)
                 continue
             except errors.PermanentLLMResponseError as e:
+                if self.fall_back(self.describe_llm_error(e)):
+                    self.retries += 1
+                    self.last_llm_error = self.describe_llm_error(e)
+                    continue
                 return self.exit_on_guard(f"{str(e)}")
             if (
                 self.finish_reason == "length"
@@ -370,9 +376,33 @@ class Loop:
             self.step_metrics.append(self.make_step_metrics())
             self.iteration += 1
             self.retries = 0
+            self.backend_retries = 0
             self.turn_requests = 0
             self.last_llm_error = ""
         return self.make_solution_output(error="Iteration limit exceeded")
+
+    @staticmethod
+    def describe_llm_error(error: errors.LLMResponseError) -> str:
+        """Return the error message, with its HTTP status if known."""
+        if error.status_code is None:
+            return str(error)
+        return f"{error} (HTTP {error.status_code})"
+
+    def fall_back(self, reason: str) -> bool:
+        """Switch to the client's next model, which reason made necessary.
+
+        The new model starts with a full retry budget, while the turn
+        keeps counting all its retries for the step. Logged on stderr.
+        Returns False when no model is left.
+        """
+        if not self.client.fall_back():
+            return False
+        self.backend_retries = 0
+        sys.stderr.write(
+            f"LLM fallback on step {self.iteration + 1}: {reason};"
+            f" switching to {self.client.model_name} at {self.client.url}\n"
+        )
+        return True
 
     def exit_on_guard(self, error: str) -> SolutionOutput:
         """End the run with error, plus the last LLM error of the turn.

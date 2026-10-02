@@ -13,6 +13,7 @@ LLM_START_SEQUENCE = [
 ]
 
 MODELS_CONFIG_FILE = "configs/models.json"
+FALLBACK_CONFIG_FILE = "configs/fallback.json"
 
 PATCH_MARKERS = ("diff --git", "--- a/", "+++ b/", "@@")
 
