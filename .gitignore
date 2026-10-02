@@ -222,3 +222,5 @@ cache/
 moulinette/
 solution.json
 evaluations/
+!benchmarks/**/*.log
+!benchmarks/**/solution.json

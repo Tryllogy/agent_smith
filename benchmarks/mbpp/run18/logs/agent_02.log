@@ -1,0 +1,7 @@
+exit=0
+--- stdout
+
+--- stderr
+LLM retry 1 on step 2: The request to the LLM provider timed out.; waiting 5.0s
+LLM retry 1 on step 3: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 5.0s
+LLM retry 2 on step 3: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 5.0s

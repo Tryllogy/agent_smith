@@ -1,0 +1,9 @@
+modele=minimax/minimax-m3:free
+provider=https://openrouter.ai/api/v1
+debut=2026-09-03T14:54:02+02:00
+fin=2026-09-03T14:58:40+02:00
+note=modele de reasoning gratuit OpenRouter; 3 candidats ecartes avant lancement
+     (nemotron-3-nano-omni-...-reasoning:free, cohere/north-mini-code:free,
+      inclusionai/ling-3.0-flash-fin:free) -- voir RAPPORT.md
+note=validation de correction faite en executant les test_list localement :
+     le socket Docker etait inaccessible (PermissionError) pour moulinette validate

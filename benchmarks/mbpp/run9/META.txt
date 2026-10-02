@@ -1,0 +1,7 @@
+modele=openai/gpt-oss-120b
+provider=https://api.groq.com/openai/v1
+taches=cache/run6 (memes fichiers)
+code=9c4754a
+debut=2026-10-01T17:49:21+02:00
+note=ablation prompts du 2026-10-01, ancien prompt run6 : 10/10; pause apres chaque tache = tokens consommes / (8000/60) s
+fin=2026-10-01T17:52:54+02:00
