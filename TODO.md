@@ -29,6 +29,11 @@ modeles sur les 20 taches de reference (`run15` a `run24`), puis deux
 defauts de la boucle corriges et `codestral` rejoue : 11/20 → **17/20**,
 metriques valides 17/20 → 20/20 (`run25`/`run26`). Detail en P2.6.
 
+**`BENCHMARK_REPORT.md` : partie MBPP ecrite** (2026-10-02, en anglais), sur
+les 22 campagnes `run5` a `run26`, **versionnees dans `benchmarks/mbpp/`**
+avec leurs `solution.json`. Les sections SWE gardent la structure du sujet et
+attendent les outils (P2.6).
+
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
 debloque la boucle. Les 9 outils sont **merges dans `thomas`** depuis le
@@ -141,9 +146,12 @@ revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
 
 **Rendu :**
 
-- [ ] `.gitignore` ignore `cache/` **et** `solution.json` partout, or les
-      `solution.json` de backing doivent etre dans le repo (V.7). Prevoir un
-      dossier versionne (`benchmarks/`) + `!benchmarks/**/solution.json`
+- [x] `.gitignore` ignore `cache/` **et** `solution.json` partout, or les
+      `solution.json` de backing doivent etre dans le repo (V.7) — **regle le
+      2026-10-02** (`0faae67`) : campagnes copiees dans `benchmarks/mbpp/`,
+      et `!benchmarks/**/*.log` + `!benchmarks/**/solution.json` en fin de
+      `.gitignore` (sans la premiere, `*.log` ignorait les logs d'agent, seule
+      trace des causes de retries citees dans le rapport)
 - [ ] `moulinette.zip` (250 Ko) est versionne, sans utilite pour le rendu
 
 ### Journal condense
@@ -196,7 +204,10 @@ dans `94539e7`. Puis **campagne MBPP des 5 modeles** (`run15` a `run24`) :
 5 metriques INVALID (entree cumulee > 6 000) et 9 echecs de `codestral` sur
 des `final_answer` d'une ligne cassee par des `;`. D'ou **deux correctifs de
 la boucle** (P2.1) et le rejeu de `codestral` (`run25`/`run26`, 17/20).
-**Non commite** : `core/agent/loop.py`, `core/constants.py`.
+Correctifs commites dans `c21b0ce`. Enfin **`BENCHMARK_REPORT.md`, partie
+MBPP**, et les 22 campagnes versionnees dans `benchmarks/mbpp/` (`0faae67`).
+La revalidation de `run5` a `run8` par la moulinette fait passer **`run7` de
+9/10 a 8/10** (MBPP 400, test cache) : chiffres corriges ci-dessous.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -546,8 +557,8 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       reelles** de `run6/7/9/10/12` : 42 acceptees et validees par la
       moulinette, **0 refus a tort**, 1 vrai refus (451), 2 acceptees a tort
       (MBPP 400, le test cache que la boucle ne voit pas)
-- [x] **L'entree cumulee est verifiee avant l'envoi** (2026-10-02, non
-      commite). Constate sur la campagne `run15`-`run24` : **5 metriques
+- [x] **L'entree cumulee est verifiee avant l'envoi** (2026-10-02,
+      `c21b0ce`). Constate sur la campagne `run15`-`run24` : **5 metriques
       INVALID**, toutes pour une entree cumulee de 6 163 a 7 513 tokens sur
       6 000. Le controle n'avait lieu qu'apres la reponse : la requete qui
       debordait etait deja partie et comptee. Desormais
@@ -562,7 +573,7 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       s'arreter alors que la requete aurait tenu (2 fois sur 20 au rejeu, aux
       tours 4 et 5). En SWE (300k), la garde ne joue qu'en fin de tache
 - [x] **Le refus d'un `final_answer` MBPP invalide dit quoi corriger**
-      (2026-10-02, non commite). Il disait « NOT a valid Python expression »,
+      (2026-10-02, `c21b0ce`). Il disait « NOT a valid Python expression »,
       sans l'erreur ni le remede. Il donne maintenant `SyntaxError: <msg>
       (line L, column C)` et la consigne : `for`, `if` et `while` ne suivent
       pas un `;`, ecrire la fonction sur plusieurs lignes dans
@@ -922,7 +933,7 @@ l'utilisabilite en a une.**
 
 | Modele | latence | in | out | note |
 |---|---|---|---|---|
-| `openai/gpt-oss-120b` | 0,67–0,80 s | 933 | 191–250 | **19/20 sur `run6`+`run7`** — la reference |
+| `openai/gpt-oss-120b` | 0,67–0,80 s | 933 | 191–250 | **18/20 sur `run6`+`run7`** (19/20 avant la revalidation du 2026-10-02) — la reference |
 | `qwen/qwen3.8-27b` | 0,66–2,08 s | 956 | 243–933 | profil sain, jamais teste en campagne |
 | `qwen/qwen3.6-27b` | 2,32–3,27 s | 950 | 1036–**1500** | creve le plafond **1 fois sur 2** |
 
@@ -1216,7 +1227,7 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
     l'implementation de ndi-tull est litterale : l'alternative ne trouvait rien
   - coquilles : « how work a tool », `\n.` mal place, espaces en tete de ligne
 
-- [x] **Les `test_list` du dump sont incomplets** (2026-10-01, non commite).
+- [x] **Les `test_list` du dump sont incomplets** (2026-10-01, `4c8d206`).
       Lu dans le code de la moulinette : le dump livre `test_list[1:]`, la
       validation tourne avec `skip_first_k_tests=0` → **le premier test est
       toujours cache**. Le prompt dit desormais que `test_list` n'est qu'un
@@ -1228,8 +1239,8 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       alors que le test cache veut `(3, 4) == (4, 3)`. Erreur de lecture
       systematique, que le prompt ne corrige pas en general ; nommer ce cas
       dans l'exemple serait du sur-ajustement. Cout : +80 tokens par tour
-- [x] **`assert` + `final_answer` dans le meme bloc** (2026-10-01, non
-      commite). L'exemple MBPP tient en 2 tours, le bloc de soumission
+- [x] **`assert` + `final_answer` dans le meme bloc** (2026-10-01,
+      `4c8d206`). L'exemple MBPP tient en 2 tours, le bloc de soumission
       execute ses `assert` puis `final_answer` (qui ne tourne que s'ils
       passent) ; la consigne et la relance « sans sortie » disent la meme
       chose. Cause : sur MBPP 400, 2 essais sur 5 de `gpt-oss-120b` avaient
@@ -1341,7 +1352,7 @@ que l'etape 2 reclamait.
 - [ ] Regle de precedence CLI > fichier : sans objet tant qu'aucun reglage n'est
       expose en double. A rouvrir des qu'un l'est
 
-### P2.6 — `BENCHMARK_REPORT.md` *(vide)*
+### P2.6 — `BENCHMARK_REPORT.md` *(partie MBPP ecrite, SWE a faire)*
 
 **≥ 5 modeles × ≥ 3 taches SWE-bench communes.**
 
@@ -1353,15 +1364,46 @@ passes par le vrai CLI SWE, detail en P2.3 « Fournisseurs pour SWE » :
 (19 modeles NVIDIA sondes, Groq, Cerebras, Together, Gemini) est deja de la
 matiere pour la partie « Setup ».
 
-- [ ] Setup (modeles/providers, taches + justification)
-- [ ] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
-- [ ] Fiabilite provider : temps de reponse moyen, retries, disponibilite
-- [ ] ≥ 2 metriques intermediaires : etape du 1er acces au fichier du patch final
+**Ecrit le 2026-10-02 (`0faae67`), en anglais, partie MBPP.** Les 6 points
+du sujet, chacun avec une partie MBPP remplie et une partie SWE *to be
+completed* : setup (agent, validation par la moulinette, jeux de taches A/B/C
+et leurs seeds, 9 couples modele/fournisseur, fournisseurs ecartes),
+comparatif des 6 modeles + matrice tache par tache, historique `run5`-`run14`,
+fiabilite par fournisseur (tentatives, disponibilite, temps de reponse,
+causes), metriques intermediaires adaptees a MBPP (discipline de soumission,
+soumissions a l'aveugle, refus de la boucle, faux succes), 4 ablations, et
+conclusions MBPP provisoires (`ministral-14b` retenu, `nemotron-3-super` en
+repli). Tous les chiffres sont recalcules par script depuis les
+`solution.json`, pas recopies de ce TODO.
+
+**Revalidation de `run5` a `run8` par la moulinette** (2026-10-02) : ils
+n'avaient ete verifies qu'en executant les `test_list` en local. Seul ecart,
+**`run7` passe de 9/10 a 8/10** : MBPP 400 echoue au test cache, invisible
+localement. Corrige partout dans ce TODO ; sorties dans
+`benchmarks/mbpp/run5..8/logs/checker_2026-10-02_XX.txt`.
+
+**Backing data** : `benchmarks/mbpp/runN/` (META, RESUME, taches,
+solutions, logs), 22 runs, 1 031 fichiers, 5,1 Mo dont 1,9 Mo de logs ;
+`benchmarks/README.md` dit quel verdict fait foi pour chaque run. Scan des
+cles d'API avant versionnage : aucune.
+
+- [~] Setup (modeles/providers, taches + justification) — MBPP fait, taches
+      SWE a justifier
+- [~] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
+      — MBPP fait (6 modeles × 20 taches), SWE vide
+- [~] Fiabilite provider : temps de reponse moyen, retries, disponibilite —
+      MBPP fait ; SWE : seules les latences a 56k tokens
+- [~] ≥ 2 metriques intermediaires : etape du 1er acces au fichier du patch final
       (exploration) / etape ou les echecs de tests baissent (progres partiel) /
       iterations entre "tests au vert" et `final_answer` (discipline, 0 ideal)
-- [ ] **Etude d'ablation** avant/apres un changement, memes taches, meme modele
-- [ ] Conclusions justifiees par les donnees + les `solution.json` de backing
-      **presents dans le repo**
+      — la discipline est mesuree sur MBPP ; les deux autres n'existent que
+      sur SWE
+- [~] **Etude d'ablation** avant/apres un changement, memes taches, meme modele
+      — 4 sur MBPP. Le sujet ne dit pas qu'elle doit porter sur SWE ; en
+      faire une sur SWE reste plus sur
+- [~] Conclusions justifiees par les donnees + les `solution.json` de backing
+      **presents dans le repo** — conclusions MBPP provisoires ; backing MBPP
+      versionne dans `benchmarks/mbpp/`
 
 → Mesure manuelle acceptee, c'est l'analyse qui compte.
 
@@ -1377,7 +1419,7 @@ l'agent — les deux verdicts ont toujours concorde.
 | `run4` | OpenRouter `gpt-oss-20b` (apres correctifs) | 8/10 | — | 461 s |
 | `run5` | OpenRouter `nemotron-3-super-120b` | 4/10 | 29 | 480 s |
 | `run6` | **Groq `gpt-oss-120b`** | **10/10** | 16 | **48 s** |
-| `run7` | **Groq `gpt-oss-120b`**, 10 taches neuves | **9/10** | 18 | **53 s** |
+| `run7` | **Groq `gpt-oss-120b`**, 10 taches neuves | **8/10** (9/10 en local, MBPP 400 echoue au test cache) | 18 | **53 s** |
 | `run8` | OpenRouter `minimax-m3:free`, 10 taches neuves | 9/10 | 29 | 274 s |
 | `run9` | Groq `gpt-oss-120b`, taches de `run6`, **nouveau prompt** | **10/10** | 18 | 42 s |
 | `run10` | Groq `gpt-oss-120b`, taches de `run7`, **nouveau prompt** | **7/10** | 33 | 137 s |
@@ -1390,23 +1432,25 @@ l'agent — les deux verdicts ont toujours concorde.
 (`moulinette_eval validate mbpp`, Docker), plus par execution locale des
 `test_list` — et c'est ce qui a revele le test cache de MBPP 400.
 
-**19/20 sur deux jeux de taches independants** (seeds 1..10 et 11..20, aucun
-recouvrement) : le meilleur resultat du projet, et le seul sans aucun faux
-positif. Rapports complets dans `cache/run5..7/RAPPORT.md`.
+**18/20 sur deux jeux de taches independants** (seeds 1..10 et 11..20, aucun
+recouvrement) : le meilleur resultat de Groq. On l'a cru longtemps a 19/20
+sans faux positif ; la revalidation par la moulinette du 2026-10-02 y trouve
+le faux positif de MBPP 400. Rapports complets dans `cache/run5..7/RAPPORT.md`
+(non versionnes).
 
 Le basculement vers Groq explique l'essentiel : `run5` et `run6` portent sur
 **les memes 10 taches** avec le meme agent, 4/10 contre 10/10. Les quatre
 echecs `run5` par plafond de sortie crevé passent tous en un seul tour chez
 Groq. Matiere directe pour le `BENCHMARK_REPORT.md`.
 
-Le seul echec restant (`run7`, MBPP 462) est un **echec de quota, pas de
-raisonnement** : l'enonce porte un `test_list` de ~1000 tokens, la tache
+Les deux echecs de `run7` : **MBPP 400** (test cache, voir plus haut) et
+**MBPP 462**, un **echec de quota, pas de raisonnement** : l'enonce porte un `test_list` de ~1000 tokens, la tache
 consomme 2961 tokens d'un coup, le seau Groq (8000/min) tombe a 2438 et les
 cinq tentatives suivantes partent en 429. Les deux gardes ont joue leur role —
 le plafond a coupe la rafale, les metriques restent valides sur les 10.
 
 Barre du sujet : 4/5 (80 %). Sur les campagnes OpenRouter, 84 % ; sur Groq,
-**95 % (19/20)**.
+**90 % (18/20)**.
 
 Les trois echecs, et ce qu'ils ont appris :
 
@@ -1449,8 +1493,8 @@ millisecondes**). Traite en P2.3.
 
 > **Traces perdues.** `cache/run1..4` n'existent plus : `cache/` est gitignore,
 > rien n'a jamais ete commite. Les chiffres ci-dessus sont tout ce qu'il reste —
-> suffisant au recit, pas a une verification. **Prochaine campagne : sortir les
-> `solution.json` de `cache/` et les versionner**, le sujet exige les fichiers de
+> suffisant au recit, pas a une verification. **Fait le 2026-10-02 pour
+> `run5` a `run26` : `benchmarks/mbpp/`.** Le sujet exige les fichiers de
 > backing dans le repo.
 
 - [ ] Rejouer 59 et 413 en quota epuise pour verifier le nombre de requetes
@@ -1467,13 +1511,14 @@ OpenRouter : pilote d'une tache par candidat avant de lancer. Dossiers
 taches, solutions, `logs/agent_XX.log` et `logs/validate_XX.txt`.
 
 **Ablation (Groq `gpt-oss-120b`, 20 taches) : 17/20 avec le nouveau prompt
-contre 19/20 avec l'ancien.** Non significatif sur un tirage par tache, et 2
-des 3 echecs ne tiennent pas au prompt :
+contre 18/20 avec l'ancien** (19/20 avant la revalidation du 2026-10-02, qui
+fait echouer la 400 de `run7`). Non significatif sur un tirage par tache :
+les deux prompts echouent sur 462 et 400, **seule MBPP 138 les separe** :
 
 | Tache | Ancien | Nouveau | Cause |
 |---|---|---|---|
 | MBPP 462 | echec | echec | 1500 tokens de sortie des la 1re reponse (`test_list` de ~1000 tokens) ; en `run7` c'etait le seau TPM |
-| MBPP 400 | PASS | **FAIL (faux positif)** | test cache « order irrespective » ignore — seul echec de raisonnement |
+| MBPP 400 | **FAIL (faux positif)** | **FAIL (faux positif)** | test cache « order irrespective » ignore — seul echec de raisonnement. L'ancien PASS venait de l'execution locale des `test_list`, qui ne voit pas le test cache |
 | MBPP 138 | PASS | FAIL | bonne fonction au tour 1, tests **rejoues** au tour 2 au lieu de soumettre, puis 5 retries au tour 3 (cause non enregistree a l'epoque) |
 
 **Le cout du nouveau prompt est une vraie validation.** +1 iteration sur 7
@@ -1524,7 +1569,7 @@ sur l'**AST** du `sandbox_input` (des `assert` ecrits *dans la chaine* de
 |---|---|---|---|---|---|---|---|---|
 | `run6` | ancien | 10/10 | 10 | 6 | **3** | 1,1 | 890 | 16 |
 | `run9` | 2026-10-01 matin | 10/10 | 10 | 5 | **3** | 1,5 | 1274 | 18 |
-| `run7` | ancien | 9/10 | 9 | 5 | **3** | 1,2 | 1071 | 18 |
+| `run7` | ancien | 8/10 | 9 | 5 | **3** | 1,2 | 1071 | 18 |
 | `run10` | 2026-10-01 matin | 7/10 | 8 | 1 | **2** | 1,5 | 1477 | 33 |
 | `run12` | meme bloc | 6/10 | 8 | 8 | **0** | 0,8 | 850 | 25 |
 | `run13` | meme bloc + verification | 8/10 | 9 | 9 | **0** | 1,0 | 1032 | 17 |
@@ -1546,8 +1591,9 @@ de `run12` sont tous `The LLM response does not contain the expected
 Groq `gpt-oss-120b`, taches de `run7` puis de `run6`, code = `HEAD` +
 `code.diff` (le diff exact est dans chaque dossier, rien n'etait commite).
 **16/20, 0 soumission a l'aveugle sur 17**, metriques valides sur les 20.
-Contre 19/20 avec l'ancien prompt (`run6`+`run7`) et 17/20 avec celui du
-matin (`run9`+`run10`) — non significatif a un tirage par tache.
+Contre 18/20 avec l'ancien prompt (`run6`+`run7`, apres revalidation) et
+17/20 avec celui du matin (`run9`+`run10`) — non significatif a un tirage par
+tache.
 
 **Les 2 refus de la boucle, rejoues contre la liste complete des tests du
 jeu de donnees, etaient tous les deux justes** :
@@ -1577,8 +1623,9 @@ pese plus que le prompt** : les 12 retries de ces deux campagnes sont tous
       (P2.5 bis)
 - [ ] Recommencer l'ablation de facon plus large : 10 taches a un tirage ne
       separent pas des taux de 60 a 90 %
-- [ ] Les campagnes vivent dans `cache/`, gitignore : a sortir dans un dossier
-      versionne avec le reste des `solution.json` de backing
+- [x] Les campagnes vivent dans `cache/`, gitignore : a sortir dans un dossier
+      versionne avec le reste des `solution.json` de backing — fait le
+      2026-10-02, `benchmarks/mbpp/` (`0faae67`)
 
 #### Campagne multi-modeles du 2026-10-02 (`run15` a `run24`)
 
@@ -1625,8 +1672,8 @@ quand la boucle s'en apercevait. Corrige le jour meme (P2.1).
 #### `run25` / `run26` : `codestral` apres les deux correctifs (2026-10-02)
 
 Memes 20 taches, memes conditions, code = `94539e7` + les deux correctifs de
-P2.1 (garde d'entree avant envoi, refus `SyntaxError` explicite), non
-commites.
+P2.1 (garde d'entree avant envoi, refus `SyntaxError` explicite), commites
+depuis dans `c21b0ce`.
 
 | `codestral-2508` | Avant (`run19`/`run20`) | Apres (`run25`/`run26`) |
 |---|---|---|
@@ -1713,10 +1760,16 @@ une part de l'ecart peut etre du hasard.
        `MODEL` pour les deux cibles ne convient plus, prevoir un defaut par
        benchmark
 4 quinquies. [~] **Campagne MBPP des 5 modeles** — faite (`run15` a
-       `run24`), deux defauts de la boucle corriges et `codestral` rejoue
-       (`run25`/`run26`, 17/20). Restent : **commiter** `loop.py` et
-       `constants.py`, **decider** de l'exemple MBPP d'une ligne (P2.4),
-       rejouer les 4 autres modeles avec les correctifs
+       `run24`), deux defauts de la boucle corriges (`c21b0ce`) et
+       `codestral` rejoue (`run25`/`run26`, 17/20). Restent : **decider** de
+       l'exemple MBPP d'une ligne (P2.4), rejouer les 4 autres modeles avec
+       les correctifs
+4 sexies. [~] **`BENCHMARK_REPORT.md`** — partie MBPP ecrite et backing
+       versionne (`0faae67`). Reste la partie SWE, des que les outils sont
+       appelables : 5 modeles × 3 taches (`sympy__sympy-14711`,
+       `sympy__sympy-13480`, `pydata__xarray-4629`), les deux metriques
+       propres a SWE, et de preference une ablation SWE. **Chaque nouvelle
+       campagne va directement dans `benchmarks/`**, pas dans `cache/`
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer la liste des outils a `Prompt` au lieu de `tools=None`
