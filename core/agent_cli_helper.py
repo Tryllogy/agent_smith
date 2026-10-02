@@ -7,7 +7,9 @@ from pydantic import ValidationError
 
 from core import constants
 from core.api_key import APIKey
-from core.config_models import ModelConfig, ProviderConfig
+from core.config_models import FallbackConfig, ModelConfig, ProviderConfig
+from core.llm.client import LLMClient
+from core.llm.provider import Provider
 from core.models import MBPPTaskInput, SolutionOutput, SWEBenchTaskInput
 
 
@@ -101,6 +103,92 @@ def get_api_keys(provider_config: ProviderConfig) -> list[APIKey]:
             " Please provide at least one valid API key."
         )
     return keys
+
+
+def make_llm_client(
+    provider_config: ProviderConfig,
+    model_config: ModelConfig,
+    model_name: str,
+    api_keys: list[APIKey],
+) -> LLMClient:
+    """Build the client of model_name at the provider, with api_keys."""
+    return LLMClient(
+        url=provider_config.url,
+        endpoint=provider_config.endpoint,
+        model_name=model_name,
+        api_keys=api_keys,
+        stop_sequence=constants.LLM_STOP_SEQUENCE,
+        provider=Provider(provider_config),
+        model_config=model_config,
+    )
+
+
+def read_config_file(path: str) -> dict:
+    """Return the JSON object stored at path.
+
+    Raises FileNotFoundError, or ValueError if it is not a JSON object.
+    """
+    try:
+        with open(path) as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"The configuration file '{path}' was not found."
+        ) from None
+    except json.JSONDecodeError:
+        raise ValueError(
+            f"The configuration file '{path}' is not a valid JSON file."
+        ) from None
+    if not isinstance(config, dict):
+        raise ValueError(f"The configuration file '{path}' is not an object.")
+    return config
+
+
+def get_fallback_clients(
+    bench: constants.Bench, model_name: str, provider_url: str
+) -> list[LLMClient]:
+    """Build, in order, the fallback clients declared for bench.
+
+    Read from FALLBACK_CONFIG_FILE, an absent file meaning no fallback.
+    The requested model is skipped, and so is a fallback whose provider
+    has no key in the environment: the .env decides which fallbacks
+    exist. A malformed file or an unknown provider raises ValueError.
+    """
+    if not os.path.exists(constants.FALLBACK_CONFIG_FILE):
+        return []
+    try:
+        fallbacks = FallbackConfig.model_validate(
+            read_config_file(constants.FALLBACK_CONFIG_FILE)
+        )
+    except ValidationError as e:
+        raise ValueError(f"Error in fallback configuration: {e}") from e
+    models_config: dict = read_config_file(constants.MODELS_CONFIG_FILE)
+    clients: list[LLMClient] = []
+    for target in getattr(fallbacks, bench.name):
+        entry = models_config.get(target.provider)
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"Fallback provider '{target.provider}' is not declared in"
+                f" '{constants.MODELS_CONFIG_FILE}'."
+            )
+        provider_config = ProviderConfig.model_validate(
+            entry.get("provider", {})
+        )
+        if provider_config.url == provider_url and target.model == model_name:
+            continue
+        try:
+            api_keys: list[APIKey] = get_api_keys(provider_config)
+        except ValueError:
+            continue
+        model_config = ModelConfig.model_validate(
+            entry.get("models", {}).get(target.model, {})
+        )
+        clients.append(
+            make_llm_client(
+                provider_config, model_config, target.model, api_keys
+            )
+        )
+    return clients
 
 
 def get_task_from_file(

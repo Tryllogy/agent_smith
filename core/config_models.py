@@ -99,3 +99,25 @@ class ModelConfig(BaseModel):
                 f"extra_body cannot set {clash}: the loop sets them"
             )
         return value
+
+
+class FallbackTarget(BaseModel):
+    """One fallback: a provider named as in configs/models.json, a model."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: str
+    model: str
+
+
+class FallbackConfig(BaseModel):
+    """Ordered fallbacks per benchmark, from configs/fallback.json.
+
+    Keys are the BenchName values. extra="forbid" turns a misspelled
+    benchmark into a startup error.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mbpp: list[FallbackTarget] = Field(default_factory=list)
+    swebench: list[FallbackTarget] = Field(default_factory=list)
