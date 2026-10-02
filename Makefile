@@ -1,8 +1,10 @@
 PYTHON_VERSION := 3.10
 UV             := uv
 CACHE_DIR      := cache
-URL := https://openrouter.ai/api/v1
-MODEL := nvidia/nemotron-3-ultra-550b-a55b:free
+MBPP_MODEL     := ministral-14b-2512
+MBPP_URL       := https://api.mistral.ai/v1
+SWE_MODEL      := nvidia/nemotron-3-super-120b-a12b
+SWE_URL        := https://integrate.api.nvidia.com/v1
 .DEFAULT_GOAL := help
 
 .PHONY: help setup install dev sandbox sandbox-mbpp sandbox-swebench \
@@ -22,9 +24,11 @@ help:
 	@echo "    sandbox-mbpp       REPL sandbox + MCP MBPP (stdio)"
 	@echo "    sandbox-swebench   REPL sandbox + MCP SWE-bench (stdio)"
 	@echo ""
-	@echo "  Agents             (requis : TASK=... MODEL=... URL=...)"
+	@echo "  Agents             (requis : TASK=... ; option : MODEL=... URL=...)"
 	@echo "    mbpp               Lance l'agent MBPP"
+	@echo "                       defaut : $(MBPP_MODEL) ($(MBPP_URL))"
 	@echo "    swebench           Lance l'agent SWE-bench"
+	@echo "                       defaut : $(SWE_MODEL) ($(SWE_URL))"
 	@echo ""
 	@echo "  Qualite"
 	@echo "    lint               Analyse statique (ruff)"
@@ -61,16 +65,16 @@ mbpp:
 	$(UV) run python -m agent_mbpp \
 		--task-file $(TASK) \
 		--output $(CACHE_DIR)/mbpp_solution.json \
-		--model-name "$(MODEL)" \
-		--provider-url "$(URL)"
+		--model-name "$(or $(MODEL),$(MBPP_MODEL))" \
+		--provider-url "$(or $(URL),$(MBPP_URL))"
 
 swebench:
 	@mkdir -p $(CACHE_DIR)
 	$(UV) run python -m agent_swebench \
 		--task-file $(TASK) \
 		--output $(CACHE_DIR)/swebench_solution.json \
-		--model-name "$(MODEL)" \
-		--provider-url "$(URL)"
+		--model-name "$(or $(MODEL),$(SWE_MODEL))" \
+		--provider-url "$(or $(URL),$(SWE_URL))"
 
 lint:
 	$(UV) run ruff check .

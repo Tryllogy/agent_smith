@@ -21,8 +21,15 @@ modeles. **440 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 **Fournisseurs SWE : 5 modeles declares, le minimum du rapport.** NVIDIA Build
 (`nemotron-3-super`, `nemotron-3-ultra`) et Mistral (`codestral-2508`,
 `ministral-14b-2512`, `ministral-8b-2512`), tous passes par le vrai CLI SWE le
-2026-10-02. **Les 3 modeles Mistral dependent d'une validation de l'equipe
-pedagogique** (credits offerts, voir P2.3 « Fournisseurs pour SWE »).
+2026-10-02. **Mistral valide par l'equipe pedagogique le 2026-10-02**
+(credits mensuels offerts, sans carte ; le sujet le range d'ailleurs parmi
+les *« Cloud providers with free access »*, § V.6.1).
+
+**`Makefile` : un modele par defaut par benchmark** (2026-10-02, non
+commite) — MBPP `ministral-14b-2512` (Mistral), SWE
+`nvidia/nemotron-3-super-120b-a12b` (NVIDIA). **Seuls les modeles declares
+dans `configs/models.json` sont acceptes** (`c7727cc`) : un modele payant
+non declare est refuse avant toute requete.
 
 **MBPP : 4 modeles a 15-17/20, au niveau de Groq (16/20).** Campagne des 5
 modeles sur les 20 taches de reference (`run15` a `run24`), puis deux
@@ -55,18 +62,16 @@ revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
 > SWE-bench ni le rapport de benchmark ne peuvent avancer. Le prompt SWE n'a
 > jamais tourne contre un vrai depot.
 
-**Trois dettes qui bloquent la mesure :**
+**Dettes qui bloquent la mesure** (la 2 est reglee) :
 
 1. **Les outils MCP sont merges mais non conformes** : `origin/ndi-tull`
    (`9c8c4b2` → `64f06cc`) est rapatrie dans `thomas` le 2026-10-01
    (`70207ab`). Les signatures restent a caler sur le § V.5 avant de brancher
    quoi que ce soit dessus (voir la revue).
-2. **Le modele par defaut du `Makefile` (`MODEL :=`) est inutilisable.**
-   `nvidia/nemotron-3-ultra-550b-a55b:free` met 27 a 40 s par reponse, contre
-   30 s d'echeance par appel : le run pilote de `run5` a fini a 0 iteration.
-   Releve des deux fournisseurs refait le 2026-09-02, voir P2.3 — **Groq est un
-   ordre de grandeur plus rapide** (0,1-4,7 s) et deja declare dans le JSON.
-   Toujours en l'etat le 2026-10-02 (`URL` OpenRouter, `MODEL` `:free`)
+2. ~~**Le modele par defaut du `Makefile` (`MODEL :=`) est inutilisable.**~~
+   **Reglee le 2026-10-02** : `nemotron-3-ultra-550b-a55b:free` (OpenRouter,
+   27 a 40 s par reponse) remplace par un defaut par benchmark, voir
+   « Prochaines actions », 4 quater
 3. **L'echeance de 30 s par appel est trop courte pour SWE.**
    `LLM_TIMEOUT_SECONDS` (`constants.py:5`) vaut pour les deux benchs. Mesure
    le 2026-10-02 sur un contexte de 56k tokens : `nemotron-3-super` a repondu
@@ -152,8 +157,8 @@ revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
       gratuits **maintenant** : c'est le vrai chemin critique du rapport.
       **Releve fait le 2026-10-01** (P2.3, « Fournisseurs pour SWE »), **cles
       posees et fournisseurs branches le 2026-10-02** : NVIDIA (2 modeles) +
-      Mistral (3 modeles) = 5. Reste la validation Mistral par l'equipe
-      pedagogique
+      Mistral (3 modeles) = 5. **Mistral valide par l'equipe pedagogique le
+      2026-10-02**
 
 **Rendu :**
 
@@ -220,9 +225,13 @@ MBPP**, et les 22 campagnes versionnees dans `benchmarks/mbpp/` (`0faae67`).
 La revalidation de `run5` a `run8` par la moulinette fait passer **`run7` de
 9/10 a 8/10** (MBPP 400, test cache) : chiffres corriges ci-dessous
 (`1a2a024`). Puis le **repli entre fournisseurs** (P2.3, `19e17be`), et la
-**limite de tokens par minute de Mistral verifiee avant l'envoi** (P2.3).
-**Non commite** : `configs/models.json`, `core/api_key.py`,
-`core/config_models.py`, `core/llm/client.py`, `core/llm/provider.py`.
+**limite de tokens par minute de Mistral verifiee avant l'envoi** (P2.3,
+`36e071b`). Puis **seuls les modeles declares dans `models.json` sont
+acceptes** (`c7727cc`) : OpenRouter avait servi `openai/gpt-4o-mini`, payant,
+sur un compte sans credit (P2.5 bis). Relecture du sujet sur le payant
+(P2.3, « Ce que dit le sujet du payant »). **Mistral valide** par l'equipe
+pedagogique, d'ou le defaut MBPP du `Makefile` sur `ministral-14b-2512`.
+**Non commite** : `Makefile`, `TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -756,8 +765,16 @@ de cles, puis repli de provider s'il est configure, puis **echec gracieux**.
       comprises : un mauvais `--model-name` est remplace en silence par un
       autre modele (seul le step et la ligne stderr le disent). Les exclure
       si on prefere une erreur franche
-- [ ] **A decider : l'ordre des listes de repli**, et Mistral dedans tant que
-      sa validation par l'equipe pedagogique n'est pas faite
+- [ ] **A decider : l'ordre des listes de repli** (Mistral valide le
+      2026-10-02 : sa presence n'est plus en question)
+- [ ] **A decider : le repli en milieu de tache.** `moulinette_eval display`
+      (l'outil d'inspection du correcteur) affiche en rouge `WARN: Multiple
+      model_names across steps` des que les steps d'un `solution.json`
+      portent plusieurs modeles (`moulinette/__main__.py:426-429`). Sans
+      effet sur le verdict de `validate`, mais visible en soutenance. Soit
+      l'assumer et l'expliquer, soit ne replier **qu'avant la premiere
+      reponse obtenue** (tous les steps portent alors le meme modele, au
+      prix de moins de robustesse en cours de tache)
 - [ ] Le repli SWE n'a pas tourne en reel (outils non branches)
 - [ ] Cosmetique : la cause d'une 404 NVIDIA s'ecrit sur deux lignes dans
       stderr (message de `httpx` repris tel quel)
@@ -774,7 +791,7 @@ JSON**, qui ne donne que la consommation de la requete (`usage` :
 les memes par requete (`-req-minute`). C'est une limite **par minute** ;
 **aucune reponse ne donne le credit mensuel restant ni un cout**.
 
-- [x] **Fait (non commite)**, en quatre pieces :
+- [x] **Fait (`36e071b`)**, en quatre pieces :
   - `configs/models.json` : bloc facultatif `token_rate_limit` du fournisseur
     (nom des deux en-tetes, fenetre de 60 s), declare **pour `mistral`
     seulement** ; valide par `TokenRateLimitConfig` (`extra="forbid"`,
@@ -812,6 +829,42 @@ les memes par requete (`-req-minute`). C'est une limite **par minute** ;
       relais
 - [ ] Non couverts : la limite par requete (`x-ratelimit-*-req-minute`), et
       Groq, qui a des en-tetes du meme genre (8 000 tokens/min)
+
+#### Ce que dit le sujet du payant (relu le 2026-10-02)
+
+- § V.6, p. 28 : *« You are free to use other providers as long as your
+  system complies with the project requirements. (it must be free, must
+  support multiple API tokens per provider) »*
+- § V.6.1, « Important », p. 29 : *« The entire solution must rely
+  exclusively on free tiers. »* — *« No paid plans, purchased credits, or
+  billing-enabled accounts are allowed. »* — *« The project must be fully
+  executable using only free quotas at evaluation time. »*
+- Meme section : Mistral AI figure parmi les *« Cloud providers with free
+  access »* ; la liste est *« not exhaustive and not contractual »*
+  (Together y est, alors qu'il exige aujourd'hui un achat)
+- Chap. VI, p. 33 : `./exam_TYPE.sh --student-path … --moulinette-path …
+  --env-file /path/to/.env`, **sans argument de modele** ; *« API keys and
+  configuration are provided via a .env file »*. Les scripts d'examen ne
+  sont pas dans `moulinette/`
+
+**Lecture.** Les trois interdits visent d'abord le **compte** : un modele
+gratuit appele avec la cle d'un compte qui a une carte enfreint la regle.
+Le code ne peut pas le verifier (sauf OpenRouter, via `/key` →
+`is_free_tier`) : c'est une discipline sur les cles du `.env`.
+
+| Risque | Couvert ? |
+|---|---|
+| Modele payant non declare | **Oui** : refuse au demarrage (`c7727cc`) |
+| Repli vers un modele payant | **Oui** : les replis doivent etre declares |
+| Modele payant **declare** dans `models.json` | **Non** — aujourd'hui aucun (OpenRouter : variantes `:free` seulement) |
+| Cle d'un compte avec facturation | **Non**, invisible pour le code |
+| Credits gratuits Mistral epuises | En partie : plafonds par tache, compte sans carte non facturable |
+| Rester dans les quotas gratuits a l'evaluation | En partie : rotation, repli, limite par minute Mistral |
+
+- [ ] Un test qui exige le suffixe `:free` pour toute entree OpenRouter de
+      `models.json` (protege le depot d'un ajout par erreur)
+- [ ] Optionnel : verifier au demarrage, pour OpenRouter, `is_free_tier` via
+      `/key` (une requete de plus par run)
 - [ ] **Le fournisseur est retrouve par egalite stricte d'URL**
       (`find_provider_by_url`) : un `/` final de trop dans `--provider-url` et
       rien ne matche. Normaliser, ou chercher par nom
@@ -1159,7 +1212,7 @@ pour Cerebras et Together :
 | Fournisseur | Gratuit | Limites | Contexte | Verdict |
 |---|---|---|---|---|
 | **NVIDIA Build** (API NIM) | permanent, sans carte ni telephone, credits **supprimes** en 2026 | **40 RPM**, pas de plafond journalier | 128k a 1M selon modele | **branche** : 2 modeles retenus sur 19 sondes |
-| **Mistral** | depuis le **14/08/2026** : **10 $ de credits/mois** offerts, sans carte ; entrees/sorties utilisees pour l'entrainement sauf opt-out | par modele, lues dans les en-tetes : 30 a 750 req/min, 625k a 1,3M tokens/min | 131k-262k | **branche** : 3 modeles, **validation de l'equipe pedagogique en attente** |
+| **Mistral** | depuis le **14/08/2026** : **10 $ de credits/mois** offerts, sans carte ; entrees/sorties utilisees pour l'entrainement sauf opt-out | par modele, lues dans les en-tetes : 30 a 750 req/min, 625k a 1,3M tokens/min | 131k-262k | **branche** : 3 modeles, **valide par l'equipe pedagogique le 2026-10-02** |
 | OpenRouter `:free` | oui, cle deja dans le `.env` | **50 req/jour/compte**, ~20 req/min | 262k | trop peu de requetes : 1-2 taches SWE/jour ; 429 « upstream » frequents (encore le 2026-10-01 sur un test a ~30k tokens) |
 | Groq | oui | 8 000 tokens/min | — | **exclu** : 413 au-dela de 8 000 tokens par requete (verifie) |
 | Cerebras | **non** : moyen de paiement exige pour activer l'API (doc officielle), 5 $ d'essai une seule fois, valables 30 jours. Ancien palier gratuit fini le **21/07/2026** selon des guides tiers (le 01/09/2026 note ici le 2026-10-01 n'est pas confirme) | essai : 5 req/min, 30k tokens/min hors cache, par modele | — | **exclu** (« billing-enabled accounts », et l'essai serait expire le jour de l'evaluation) |
@@ -1210,10 +1263,11 @@ delai par defaut (10 s en SWE).
 | `ministral-3b-2512` | 2,3 s, bon format | 9,4 s, **coupe a 1 500 tokens** | 750 req/min, contexte 131k | ecarte |
 | `mistral-medium-2604`, `mistral-small-2603` | **429 des la 1re requete** | 429 | `x-ratelimit-limit-req-minute: 0` | fermes sur ce compte |
 
-**Mistral, le point a trancher.** Le sujet interdit les « purchased
-credits » et les « billing-enabled accounts ». Des credits **offerts** chaque
-mois ne sont ni l'un ni l'autre, mais c'est une lecture : **a faire
-confirmer par l'equipe pedagogique** avant d'en dependre. Verifier aussi
+**Mistral, le point tranche** (valide par l'equipe pedagogique le
+2026-10-02). Le sujet interdit les « purchased credits » et les
+« billing-enabled accounts ». Des credits **offerts** chaque mois ne sont ni
+l'un ni l'autre, et le sujet range Mistral parmi les *« Cloud providers with
+free access »* (§ V.6.1). Reste a s'y tenir : verifier aussi
 qu'aucune carte n'est liee au compte, et suivre la consommation des 10 $ dans
 la console (le sondage a envoye ~240k tokens d'entree). La console est le
 seul endroit ou la voir : l'API ne donne que la limite **par minute**, pas le
@@ -1236,9 +1290,8 @@ branches donc `NameError` a chaque appel d'outil) :
 - [x] Entree `nvidia` dans `configs/models.json`, sondage avec une requete de
       56k tokens, relance de `sympy__sympy-14711` — fait (ci-dessus)
 - [x] Cle Mistral posee, meme protocole, 3 modeles branches — 2026-10-02
-- [ ] **Faire valider les credits mensuels Mistral par l'equipe
-      pedagogique** (action humaine) — sans cela, 3 des 5 modeles du rapport
-      tombent
+- [x] **Faire valider les credits mensuels Mistral par l'equipe
+      pedagogique** — **valide le 2026-10-02**
 - [ ] Echeance par appel propre a SWE (voir « Etat actuel », dette 3)
 - [ ] Non verifie : GitHub Models (plafond d'entree par requete repute bas
       sur le gratuit), Cohere (cle d'essai a ~1000 appels/mois), SambaNova.
@@ -1467,13 +1520,31 @@ que l'etape 2 reclamait.
       revenue avec la premiere cle (`extra_body`), en `extra="forbid"`, comme
       prevu ici. Teste : coquille `extra_bodi` → erreur au demarrage,
       `extra_body: {"max_tokens": ...}` → refuse
-- [ ] **Le repli sur modele inconnu est silencieux** : aucun avertissement n'est
-      affiche quand `--model-name` est absent du JSON. Assumer, ou logger. A
-      savoir dire : absent de `models.json` **n'est pas** invalide chez le
-      fournisseur — ce fichier est notre base de connaissances, pas le catalogue
-      d'OpenRouter. Le nom part dans la requete quel que soit le contenu du JSON,
-      et un nom faux revient en 400/404, donc en `Permanent` (pas de rotation de
-      cles : elles seraient toutes brulees pour rien)
+- [x] **Le repli sur modele inconnu etait silencieux** — **regle le
+      2026-10-02 (`c7727cc`) en sens inverse : un modele absent de
+      `models.json` est desormais refuse au demarrage.** Constate le meme
+      jour : OpenRouter a **servi `openai/gpt-4o-mini`, payant**, sur un
+      compte `is_free_tier: true` a 0 credit (757 tokens en entree, 180 en
+      sortie, tache reussie ; compteurs du compte inchanges quelques minutes
+      apres, cout theorique ~0,0002 $). `models.json` devient la **liste
+      blanche des modeles gratuits** : `get_declared_model()`
+      (`agent_cli_helper.py`) refuse, avant toute requete, un `--model-name`
+      non declare chez le fournisseur vise (exit 1, `solution.json` en echec,
+      `total_requests: 0`), et un modele de repli non declare (erreur au
+      demarrage). Erreur de configuration, donc pas de repli. 9 tests
+      ajoutes, 8 echouent sur l'ancien code ; verifie en reel
+  - Consequence voulue : un modele **declare** est accepte, payant ou non.
+    `models.json` est la frontiere de confiance ; le code ne peut pas savoir
+    si un modele est gratuit (seul OpenRouter expose un prix, dans
+    `/models`)
+  - Consequence assumee : si l'evaluation passe un modele gratuit **non
+    declare**, chaque tache echoue au demarrage. Les scripts d'examen ne
+    sont pas fournis et la commande (`exam_TYPE.sh --env-file`) n'a pas
+    d'argument de modele : **demander a l'equipe pedagogique comment ils
+    choisissent `--model-name`**
+  - Desormais refuses car non declares : `qwen/qwen3.8-27b:free` (`run11`)
+    et `minimax/minimax-m3:free` (plus gratuit). A declarer si on veut
+    rejouer `run11`
 - [ ] Regle de precedence CLI > fichier : sans objet tant qu'aucun reglage n'est
       expose en double. A rouvrir des qu'un l'est
 
@@ -1485,7 +1556,7 @@ que l'etape 2 reclamait.
 passes par le vrai CLI SWE, detail en P2.3 « Fournisseurs pour SWE » :
 `nvidia/nemotron-3-super-120b-a12b`, `nvidia/nemotron-3-ultra-550b-a55b`
 (NVIDIA), `codestral-2508`, `ministral-14b-2512`, `ministral-8b-2512`
-(Mistral, **sous reserve de validation**). Le releve de ce qui a ete ecarte
+(Mistral, **valide le 2026-10-02**). Le releve de ce qui a ete ecarte
 (19 modeles NVIDIA sondes, Groq, Cerebras, Together, Gemini) est deja de la
 matiere pour la partie « Setup ».
 
@@ -1778,8 +1849,8 @@ par Groq. Un ecart de 1/20 ne separe rien.
 **Par modele :**
 
 - `ministral-14b` : au niveau des meilleurs, le plus rapide, aucun retry.
-  **Candidat pour le modele MBPP par defaut**, sous reserve de la
-  validation Mistral
+  **Modele MBPP par defaut du `Makefile` depuis le 2026-10-02**, Mistral
+  etant valide
 - `nemotron-3-super` : meme score, 2 fois plus lent, quelques retries.
   **Le repli si Mistral est refuse**
 - `nemotron-3-ultra` : 26 retries (echeances de 30 s, 503), 2 taches perdues
@@ -1867,23 +1938,25 @@ une part de l'ecart peut etre du hasard.
        `BENCHMARK_REPORT.md` ne sont atteignables, quoi que fasse ndi-tull.
        **Releve fait** (P2.3, « Fournisseurs pour SWE ») : NVIDIA Build en
        tete, Mistral en second. **Cles posees et fournisseurs branches le
-       2026-10-02 : 5 modeles** (2 NVIDIA, 3 Mistral). Reste **la validation
-       Mistral par l'equipe pedagogique** (action humaine) — sans elle on
-       retombe a 2 modeles
+       2026-10-02 : 5 modeles** (2 NVIDIA, 3 Mistral), **Mistral valide
+       par l'equipe pedagogique le 2026-10-02**
 4 ter. [ ] **Echeance par appel propre a SWE** : 30 s pour les deux benchs
        aujourd'hui (`LLM_TIMEOUT_SECONDS`), alors que NVIDIA a repondu en
        44,4 s sur 56k tokens et que le run `nemotron-3-ultra` a perdu un appel
        sur l'echeance. Un champ du `Bench` (`constants.MBPP` / `constants.SWE`)
        plutot qu'une constante globale ; MBPP garde 30 s (120 s pour 10
        iterations)
-4 quater. [ ] **`Makefile` : `URL` / `MODEL` par defaut** toujours sur
-       OpenRouter `nemotron-3-ultra-550b-a55b:free`, mesure inutilisable. A
-       remplacer par un modele branche. **La campagne du 2026-10-02 donne le
-       choix** (P2.6) : `ministral-14b-2512` pour MBPP (15/20, le plus
-       rapide, 0 retry), `nemotron-3-super` en repli si Mistral est refuse.
-       Groq reste le meilleur sur MBPP mais est exclu pour SWE : un seul
-       `MODEL` pour les deux cibles ne convient plus, prevoir un defaut par
-       benchmark
+4 quater. [x] **`Makefile` : un defaut par benchmark** — fait le
+       2026-10-02 (non commite). `URL` / `MODEL` (OpenRouter
+       `nemotron-3-ultra-550b-a55b:free`, inutilisable) remplaces par
+       `MBPP_MODEL` / `MBPP_URL` = **`ministral-14b-2512`** sur Mistral
+       (15/20, le plus rapide, 0 retry ; Groq le temps que Mistral soit
+       valide) et `SWE_MODEL` / `SWE_URL` = **`nemotron-3-super`** sur NVIDIA
+       (Groq exclu pour SWE, 413). Les cibles prennent
+       `$(or $(MODEL),$(MBPP_MODEL))` : `MODEL=` / `URL=` en ligne de commande
+       restent prioritaires ; `make help` affiche les defauts. Verifie :
+       `make -n` sur les deux cibles et une surcharge, `make mbpp` reel
+       (MBPP 80, PASSED / VALID, sous Groq avant le passage a Mistral)
 4 quinquies. [~] **Campagne MBPP des 5 modeles** — faite (`run15` a
        `run24`), deux defauts de la boucle corriges (`c21b0ce`) et
        `codestral` rejoue (`run25`/`run26`, 17/20). Restent : **decider** de
@@ -1897,10 +1970,17 @@ une part de l'ecart peut etre du hasard.
        campagne va directement dans `benchmarks/`**, pas dans `cache/`
 4 septies. [~] **Repli entre fournisseurs** — fait le 2026-10-02
        (`19e17be`, P2.3, « Repli de provider »). Reste a **decider** des
-       erreurs qui declenchent le repli et de l'ordre des listes
+       erreurs qui declenchent le repli, de l'ordre des listes, et du repli
+       en milieu de tache (avertissement `Multiple model_names` de la
+       moulinette)
 4 octies. [~] **Limite de tokens par minute de Mistral** — verifiee avant
-       l'envoi (P2.3). Restent : **commiter** ; decider s'il faut aussi la
-       limite par requete, Groq, ou un plafond mensuel compte par nous
+       l'envoi (P2.3, `36e071b`). Reste a decider s'il faut aussi la limite
+       par requete, Groq, ou un plafond mensuel compte par nous
+4 nonies. [~] **Modeles payants** — seuls les modeles declares sont acceptes
+       (`c7727cc`, P2.5 bis) ; relecture du sujet faite (P2.3, « Ce que dit
+       le sujet du payant »). Restent : le test `:free` pour OpenRouter, et
+       **demander a l'equipe pedagogique comment les scripts d'examen
+       choisissent `--model-name`**
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer la liste des outils a `Prompt` au lieu de `tools=None`
