@@ -24,8 +24,10 @@ def get_provider_and_model_config(
 ) -> tuple[ProviderConfig, ModelConfig]:
     """Return the provider matching provider_url and the model's entry.
 
-    The entry is ModelConfig() for a model absent from models.json.
-    Raises FileNotFoundError, ValueError or RuntimeError on a bad config.
+    Only the models declared under the provider are accepted: the file
+    lists the free ones, so an absent model, possibly a paid one, is
+    refused before any request. Raises FileNotFoundError, ValueError or
+    RuntimeError on a bad config.
     """
     try:
         with open(constants.MODELS_CONFIG_FILE) as f:
@@ -38,7 +40,7 @@ def get_provider_and_model_config(
                 provider_config.get("provider", {})
             )
             model_config = ModelConfig.model_validate(
-                provider_config.get("models", {}).get(model_name, {})
+                get_declared_model(provider_config, provider_name, model_name)
             )
             return provider, model_config
     except FileNotFoundError:
@@ -58,6 +60,23 @@ def get_provider_and_model_config(
             "An unexpected error occurred while"
             f" reading the models configuration: {e}"
         ) from e
+
+
+def get_declared_model(
+    provider_entry: dict, provider_name: str, model_name: str
+) -> dict:
+    """Return the entry of model_name under the provider.
+
+    Raises ValueError if the model is not declared there.
+    """
+    models = provider_entry.get("models", {})
+    if not isinstance(models, dict) or model_name not in models:
+        raise ValueError(
+            f"Model '{model_name}' is not declared under '{provider_name}'"
+            f" in '{constants.MODELS_CONFIG_FILE}': only the models declared"
+            " there, all free, are accepted."
+        )
+    return models[model_name]
 
 
 def find_provider_by_url(models_config: dict, url: str) -> str:
@@ -152,7 +171,8 @@ def get_fallback_clients(
     Read from FALLBACK_CONFIG_FILE, an absent file meaning no fallback.
     The requested model is skipped, and so is a fallback whose provider
     has no key in the environment: the .env decides which fallbacks
-    exist. A malformed file or an unknown provider raises ValueError.
+    exist. A malformed file, an unknown provider or a model not
+    declared in models.json raises ValueError.
     """
     if not os.path.exists(constants.FALLBACK_CONFIG_FILE):
         return []
@@ -174,15 +194,15 @@ def get_fallback_clients(
         provider_config = ProviderConfig.model_validate(
             entry.get("provider", {})
         )
+        model_config = ModelConfig.model_validate(
+            get_declared_model(entry, target.provider, target.model)
+        )
         if provider_config.url == provider_url and target.model == model_name:
             continue
         try:
             api_keys: list[APIKey] = get_api_keys(provider_config)
         except ValueError:
             continue
-        model_config = ModelConfig.model_validate(
-            entry.get("models", {}).get(target.model, {})
-        )
         clients.append(
             make_llm_client(
                 provider_config, model_config, target.model, api_keys
