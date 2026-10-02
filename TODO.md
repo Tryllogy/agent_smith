@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **425 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **440 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Fournisseurs SWE : 5 modeles declares, le minimum du rapport.** NVIDIA Build
@@ -34,11 +34,16 @@ les 22 campagnes `run5` a `run26`, **versionnees dans `benchmarks/mbpp/`**
 avec leurs `solution.json`. Les sections SWE gardent la structure du sujet et
 attendent les outils (P2.6).
 
-**Repli entre fournisseurs : fait** (2026-10-02, non commite). Une erreur
+**Repli entre fournisseurs : fait** (2026-10-02, `19e17be`). Une erreur
 permanente, ou 5 transients de suite sur le meme modele, ne terminent plus la
 tache : elle continue sur le modele suivant de `configs/fallback.json` (une
 liste par benchmark), puis echoue proprement. Verifie en reel sur deux taches
 MBPP validees par la moulinette (P2.3, « Repli de provider »).
+
+**Limite de tokens par minute de Mistral respectee avant l'envoi**
+(2026-10-02, non commite) : une requete qui ne tiendrait pas dans les tokens
+restants de la minute n'est plus envoyee (P2.3, « Limite de tokens par
+minute »).
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
@@ -214,10 +219,10 @@ Correctifs commites dans `c21b0ce`. Enfin **`BENCHMARK_REPORT.md`, partie
 MBPP**, et les 22 campagnes versionnees dans `benchmarks/mbpp/` (`0faae67`).
 La revalidation de `run5` a `run8` par la moulinette fait passer **`run7` de
 9/10 a 8/10** (MBPP 400, test cache) : chiffres corriges ci-dessous
-(`1a2a024`). Puis le **repli entre fournisseurs** (P2.3). **Non commite** :
-`configs/fallback.json`, `core/llm/fallback.py`, `core/agent/loop.py`,
-`core/agent_cli_helper.py`, `core/config_models.py`, `core/constants.py`,
-`agent_mbpp/cli.py`, `agent_swebench/cli.py`.
+(`1a2a024`). Puis le **repli entre fournisseurs** (P2.3, `19e17be`), et la
+**limite de tokens par minute de Mistral verifiee avant l'envoi** (P2.3).
+**Non commite** : `configs/models.json`, `core/api_key.py`,
+`core/config_models.py`, `core/llm/client.py`, `core/llm/provider.py`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -694,7 +699,7 @@ moulinette** : y substituer autre chose serait desobeir. Panne d'**execution** e
 cours de tache (429, 503, timeout) → escalade : retry avec backoff, puis rotation
 de cles, puis repli de provider s'il est configure, puis **echec gracieux**.
 
-- [x] **Repli entre providers — fait le 2026-10-02** (non commite). La
+- [x] **Repli entre providers — fait le 2026-10-02** (`19e17be`). La
       politique ci-dessus, telle quelle : erreur de config au demarrage →
       sortie ; panne en cours de tache → retries, rotation de cles, **puis
       modele suivant**, puis echec gracieux. En cinq pieces :
@@ -756,6 +761,57 @@ de cles, puis repli de provider s'il est configure, puis **echec gracieux**.
 - [ ] Le repli SWE n'a pas tourne en reel (outils non branches)
 - [ ] Cosmetique : la cause d'une 404 NVIDIA s'ecrit sur deux lignes dans
       stderr (message de `httpx` repris tel quel)
+
+#### Limite de tokens par minute — verifiee avant l'envoi (2026-10-02)
+
+**Pourquoi.** `codestral` peut etre payant : ne pas depasser ce que le compte
+autorise. **Ou est la limite** (verifie sur une vraie reponse) : **pas dans le
+JSON**, qui ne donne que la consommation de la requete (`usage` :
+`prompt_tokens`, `completion_tokens`, `total_tokens`, `service_tier:
+"standard"`), mais dans les **en-tetes HTTP** :
+`x-ratelimit-limit-tokens-minute: 625000`,
+`x-ratelimit-remaining-tokens-minute`, `x-ratelimit-tokens-query-cost`, et
+les memes par requete (`-req-minute`). C'est une limite **par minute** ;
+**aucune reponse ne donne le credit mensuel restant ni un cout**.
+
+- [x] **Fait (non commite)**, en quatre pieces :
+  - `configs/models.json` : bloc facultatif `token_rate_limit` du fournisseur
+    (nom des deux en-tetes, fenetre de 60 s), declare **pour `mistral`
+    seulement** ; valide par `TokenRateLimitConfig` (`extra="forbid"`,
+    fenetre > 0). Sans ce bloc, rien ne change pour un fournisseur
+  - `Provider.get_token_rate(headers)` → `(limite, restant)`, `None` si un
+    en-tete manque ou n'est pas un nombre (casse indifferente)
+  - `APIKey.set_token_budget()` / `get_token_budget()` : budget memorise
+    **par cle** (limite, restant, heure de la mesure) — les quotas sont
+    attaches aux cles
+  - `LLMClient` : `record_token_rate()` apres chaque reponse reussie ;
+    `check_token_rate()` **avant** l'envoi, sur un cout estime par exces
+    (`estimate_cost()` : prompt a `ESTIMATED_CHARS_PER_TOKEN` + `max_tokens`
+    entier). Budget inconnu ou fenetre ecoulee → la requete part ; elle tient
+    → elle part ; sinon → **cle suivante** qui a assez ; aucune →
+    **rien n'est envoye**, `Transient` avec l'attente jusqu'a la fin de
+    fenetre la plus proche (la boucle la traite comme un 429) ; requete
+    plus grosse que la limite elle-meme → `Permanent`, donc repli sur le
+    modele suivant
+- Effet : nul sur MBPP (7 500 tokens au plus par tache contre 625k/min) ;
+  peut jouer en SWE (`codestral` a ~2 s par requete de 56k ≈ 1,7M tokens/min
+  s'il enchainait)
+- **Verifie** : 15 tests (`tests/test_llm_client.py`), dont 6 echouent avec
+  le controle desactive ; 440 tests verts, `ruff` propre. En reel contre
+  Mistral : budget lu `limit=625000`, `remaining=624991` ; restant force a
+  50 → requete de ~103 tokens retenue, attente 60 s, **0 envoi HTTP** ;
+  requete de ~640 100 tokens → `Permanent`, **0 envoi HTTP**
+- [ ] **Ne protege pas du « payant »** : le credit mensuel n'est expose
+      nulle part. Ce qui borne deja la depense : les plafonds par tache
+      (MBPP 6 000 / 1 500, SWE 300 000 / 10 000) et un compte **sans carte**,
+      qui ne peut pas etre facture (avec carte : interdit par le sujet). Un
+      plafond mensuel demanderait de compter nous-memes la consommation
+      entre les runs
+- [ ] Plusieurs cles Mistral d'un meme espace de travail partagent sans doute
+      le quota : changer de cle n'y aidera pas, le 429 classique prendra le
+      relais
+- [ ] Non couverts : la limite par requete (`x-ratelimit-*-req-minute`), et
+      Groq, qui a des en-tetes du meme genre (8 000 tokens/min)
 - [ ] **Le fournisseur est retrouve par egalite stricte d'URL**
       (`find_provider_by_url`) : un `/` final de trop dans `--provider-url` et
       rien ne matche. Normaliser, ou chercher par nom
@@ -1159,7 +1215,9 @@ credits » et les « billing-enabled accounts ». Des credits **offerts** chaque
 mois ne sont ni l'un ni l'autre, mais c'est une lecture : **a faire
 confirmer par l'equipe pedagogique** avant d'en dependre. Verifier aussi
 qu'aucune carte n'est liee au compte, et suivre la consommation des 10 $ dans
-la console (le sondage a envoye ~240k tokens d'entree).
+la console (le sondage a envoye ~240k tokens d'entree). La console est le
+seul endroit ou la voir : l'API ne donne que la limite **par minute**, pas le
+credit restant (« Limite de tokens par minute », plus haut).
 
 **Runs reels par le CLI SWE** (`sympy__sympy-14711`, 5 iterations, outils non
 branches donc `NameError` a chaque appel d'outil) :
@@ -1837,9 +1895,12 @@ une part de l'ecart peut etre du hasard.
        `sympy__sympy-13480`, `pydata__xarray-4629`), les deux metriques
        propres a SWE, et de preference une ablation SWE. **Chaque nouvelle
        campagne va directement dans `benchmarks/`**, pas dans `cache/`
-4 septies. [~] **Repli entre fournisseurs** — fait le 2026-10-02 (P2.3,
-       « Repli de provider »). Restent : **commiter**, **decider** des
+4 septies. [~] **Repli entre fournisseurs** — fait le 2026-10-02
+       (`19e17be`, P2.3, « Repli de provider »). Reste a **decider** des
        erreurs qui declenchent le repli et de l'ordre des listes
+4 octies. [~] **Limite de tokens par minute de Mistral** — verifiee avant
+       l'envoi (P2.3). Restent : **commiter** ; decider s'il faut aussi la
+       limite par requete, Groq, ou un plafond mensuel compte par nous
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer la liste des outils a `Prompt` au lieu de `tools=None`
@@ -1861,7 +1922,7 @@ une part de l'ecart peut etre du hasard.
 
 ### Le banc d'essai `tests/`
 
-**425 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
+**440 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

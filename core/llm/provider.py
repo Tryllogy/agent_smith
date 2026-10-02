@@ -28,6 +28,23 @@ class Provider:
         except ValueError:
             return False
 
+    def get_token_rate(self, headers: Headers) -> tuple[int, int] | None:
+        """Return the (limit, remaining) tokens of the current window.
+
+        Read from the headers named in token_rate_limit; None when the
+        provider declares none or a header is missing or not a number.
+        """
+        config = self.config.token_rate_limit
+        if config is None:
+            return None
+        limit = headers.get(config.limit)
+        remaining = headers.get(config.remaining)
+        if limit is None or remaining is None:
+            return None
+        if not str(limit).isdigit() or not str(remaining).isdigit():
+            return None
+        return int(limit), int(remaining)
+
     def get_retry_after(self, headers: Headers) -> float | None:
         """Return the wait in seconds from the rate-limit headers.
 

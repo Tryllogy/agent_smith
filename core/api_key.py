@@ -1,3 +1,6 @@
+import time
+
+
 class APIKey:
     """An API key and its rotation state.
 
@@ -22,6 +25,7 @@ class APIKey:
         self.__key = new_key
         self.__usable = True
         self.__next_retry_time: float = 0.0
+        self.__token_budget: tuple[int, int, float] | None = None
 
     def set_usable(self, usable: bool) -> None:
         """Mark the key as usable or exhausted."""
@@ -45,6 +49,14 @@ class APIKey:
     def get_retry_time(self) -> float:
         """Return the wait in seconds before the key may be retried."""
         return self.__next_retry_time
+
+    def set_token_budget(self, limit: int, remaining: int) -> None:
+        """Record the provider's token limit and what is left, as of now."""
+        self.__token_budget = (limit, remaining, time.time())
+
+    def get_token_budget(self) -> tuple[int, int, float] | None:
+        """Return (limit, remaining, time observed), or None if unknown."""
+        return self.__token_budget
 
     def __repr__(self) -> str:
         """Show the state only, never the key."""

@@ -161,6 +161,11 @@
                         ]
                     }
                 }
+            },
+            "token_rate_limit": {
+                "limit": "x-ratelimit-limit-tokens-minute",
+                "remaining": "x-ratelimit-remaining-tokens-minute",
+                "window_seconds": 60
             }
         },
         "models": {
