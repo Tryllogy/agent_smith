@@ -11,12 +11,18 @@
 
 ---
 
-## Etat actuel — 2026-10-01
+## Etat actuel — 2026-10-02
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **357 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **379 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
+
+**Fournisseurs SWE : 5 modeles declares, le minimum du rapport.** NVIDIA Build
+(`nemotron-3-super`, `nemotron-3-ultra`) et Mistral (`codestral-2508`,
+`ministral-14b-2512`, `ministral-8b-2512`), tous passes par le vrai CLI SWE le
+2026-10-02. **Les 3 modeles Mistral dependent d'une validation de l'equipe
+pedagogique** (credits offerts, voir P2.3 « Fournisseurs pour SWE »).
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
@@ -28,7 +34,7 @@ revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
 > SWE-bench ni le rapport de benchmark ne peuvent avancer. Le prompt SWE n'a
 > jamais tourne contre un vrai depot.
 
-**Deux dettes qui bloquent la mesure :**
+**Trois dettes qui bloquent la mesure :**
 
 1. **Les outils MCP sont merges mais non conformes** : `origin/ndi-tull`
    (`9c8c4b2` → `64f06cc`) est rapatrie dans `thomas` le 2026-10-01
@@ -39,6 +45,13 @@ revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
    30 s d'echeance par appel : le run pilote de `run5` a fini a 0 iteration.
    Releve des deux fournisseurs refait le 2026-09-02, voir P2.3 — **Groq est un
    ordre de grandeur plus rapide** (0,1-4,7 s) et deja declare dans le JSON.
+   Toujours en l'etat le 2026-10-02 (`URL` OpenRouter, `MODEL` `:free`)
+3. **L'echeance de 30 s par appel est trop courte pour SWE.**
+   `LLM_TIMEOUT_SECONDS` (`constants.py:5`) vaut pour les deux benchs. Mesure
+   le 2026-10-02 sur un contexte de 56k tokens : `nemotron-3-super` a repondu
+   en **44,4 s** une fois sur trois, et le run reel de `nemotron-3-ultra` a
+   perdu un appel sur l'echeance. Une echeance propre a SWE est a ecrire
+   (P2.3)
 
 ### Revue du 2026-10-01 (sujet relu en entier, code relu, tout verifie a l'execution)
 
@@ -113,11 +126,13 @@ revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
       `Permanent` : traitement juste (rejouer ne sert a rien), message
       imprecis. Meme sous le plafond, a ~3 500 tokens par requete, le seau TPM
       impose des 429 de ~20 s (vu sur le run SWE du meme jour, P2.4)
-- [ ] OpenRouter : 50 req/jour. **≥ 5 modeles × 3 taches SWE** ≈ 225 a 450
+- [~] OpenRouter : 50 req/jour. **≥ 5 modeles × 3 taches SWE** ≈ 225 a 450
       requetes, soit 5 a 9 jours de quota. Chercher d'autres fournisseurs
       gratuits **maintenant** : c'est le vrai chemin critique du rapport.
-      **Releve fait le 2026-10-01** (P2.3, « Fournisseurs pour SWE ») :
-      NVIDIA Build en tete, Mistral en second, en attente de cles
+      **Releve fait le 2026-10-01** (P2.3, « Fournisseurs pour SWE »), **cles
+      posees et fournisseurs branches le 2026-10-02** : NVIDIA (2 modeles) +
+      Mistral (3 modeles) = 5. Reste la validation Mistral par l'equipe
+      pedagogique
 
 **Rendu :**
 
@@ -163,8 +178,15 @@ dans `4c8d206`. Campagnes `run13`/`run14` avec la verification (16/20, 0
 soumission a l'aveugle, 2 refus justes). Premiere tache **SWE** lancee
 (`sympy__sympy-14711`, 5 iterations) : outils non branches, modele qui
 **recite le correctif** de memoire, Groq **413 confirme** au-dela de 8 000
-tokens. D'ou, **non commite** : regle anti-recitation dans le prompt SWE et
-exemple SWE mis en conformite (P2.4).
+tokens. D'ou la regle anti-recitation dans le prompt SWE et l'exemple SWE mis
+en conformite (P2.4). Enfin **NVIDIA branche** et `ModelConfig` revenu avec
+`extra_body` (P2.5 bis) — le tout commite dans `ccbbe79`.
+
+**2026-10-02** : sondage du catalogue NVIDIA (19 candidats, 2 retenus),
+Cerebras et Together ecartes, **cle Mistral posee et 3 modeles branches**. Les
+5 modeles ont tourne 5 iterations chacun par le vrai CLI SWE. Detail en P2.3
+« Fournisseurs pour SWE ». **Non commite** : `configs/models.json`
+(`nemotron-3-ultra` et le fournisseur `mistral`), `.env.example`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -545,7 +567,10 @@ testable sans reseau. **`core/llm/provider.py`** : le client ne connait plus la
 *forme* des reponses — chaque champ (`choices`, `message`, `content`, `usage`,
 `reasoning`, `error`, `finish_reason`, en-tetes de delai) est designe par un nom
 lu dans `configs/models.json`. Brancher un second fournisseur devient une entree
-JSON, pas une branche `if`. Deux declares : `openrouter`, `groq`.
+JSON, pas une branche `if`. Quatre declares : `openrouter`, `groq`, `nvidia`,
+`mistral` (les deux derniers branches sans une ligne de code, 2026-10-01 et
+2026-10-02). Un reglage propre a un modele (couper le raisonnement) passe par
+`extra_body`, fusionne dans le corps de la requete (P2.5 bis).
 
 Multi-tokens + **rotation** : 429 fait tourner sans condamner, 402 marque la cle
 epuisee, vivier vide remonte en `Permanent`. Cles depuis env vars uniquement
@@ -949,7 +974,7 @@ protocolaire (`gpt-oss-20b`) ou budget d'entree (`compound`, `allam`).
 - [ ] **Ajouter des cles Groq** (rappel) : une seule, et c'est desormais le
       seul avantage restant a OpenRouter
 
-#### Fournisseurs pour SWE — releve du 2026-10-01
+#### Fournisseurs pour SWE — releve du 2026-10-01, sondes du 2026-10-02
 
 **Le besoin.** Une tache SWE, c'est ~30 requetes dont le contexte grossit
 jusqu'a plusieurs dizaines de milliers de tokens (300 000 cumules autorises),
@@ -958,39 +983,95 @@ requete ≥ ~60k, assez de requetes par minute et **par jour** (examen : 3
 taches ; rapport : ≥ 5 modeles × 3 taches), une API au format OpenAI (une
 entree dans `configs/models.json`, pas de code), et plusieurs cles possibles.
 
-**Releve par recherche web** — chiffres surtout tires de guides tiers, **a
-confirmer avec une cle** :
+**Releve par recherche web** (2026-10-01, guides tiers surtout), **verifie
+avec une cle le 2026-10-02** pour NVIDIA et Mistral, et dans la doc officielle
+pour Cerebras et Together :
 
 | Fournisseur | Gratuit | Limites | Contexte | Verdict |
 |---|---|---|---|---|
-| **NVIDIA Build** (API NIM) | permanent, sans carte ni telephone, credits **supprimes** en 2026 | **40 RPM**, pas de plafond journalier | 128k a 1M selon modele | **candidat n°1** |
-| **Mistral** | depuis le **14/08/2026** : **10 $ de credits/mois** offerts, sans carte ; entrees/sorties utilisees pour l'entrainement sauf opt-out | au debit des credits (Mistral Small 4 a 0,15 $/M en entree → des dizaines de taches SWE/mois) | 128k-256k ; Devstral Small 2 annonce **68 % sur SWE-bench Verified** | **candidat n°2**, a faire valider |
+| **NVIDIA Build** (API NIM) | permanent, sans carte ni telephone, credits **supprimes** en 2026 | **40 RPM**, pas de plafond journalier | 128k a 1M selon modele | **branche** : 2 modeles retenus sur 19 sondes |
+| **Mistral** | depuis le **14/08/2026** : **10 $ de credits/mois** offerts, sans carte ; entrees/sorties utilisees pour l'entrainement sauf opt-out | par modele, lues dans les en-tetes : 30 a 750 req/min, 625k a 1,3M tokens/min | 131k-262k | **branche** : 3 modeles, **validation de l'equipe pedagogique en attente** |
 | OpenRouter `:free` | oui, cle deja dans le `.env` | **50 req/jour/compte**, ~20 req/min | 262k | trop peu de requetes : 1-2 taches SWE/jour ; 429 « upstream » frequents (encore le 2026-10-01 sur un test a ~30k tokens) |
 | Groq | oui | 8 000 tokens/min | — | **exclu** : 413 au-dela de 8 000 tokens par requete (verifie) |
-| Cerebras | **non** depuis le **01/09/2026** : moyen de paiement exige, 5 $ d'essai sur 30 jours | — | — | **exclu** (« billing-enabled accounts ») |
+| Cerebras | **non** : moyen de paiement exige pour activer l'API (doc officielle), 5 $ d'essai une seule fois, valables 30 jours. Ancien palier gratuit fini le **21/07/2026** selon des guides tiers (le 01/09/2026 note ici le 2026-10-01 n'est pas confirme) | essai : 5 req/min, 30k tokens/min hors cache, par modele | — | **exclu** (« billing-enabled accounts », et l'essai serait expire le jour de l'evaluation) |
+| Together AI | **non** : « Together AI does not currently offer free trials », achat minimum de 5 $, plateforme prepayee (doc officielle). Les endpoints `-Free` a 0 $ exigent quand meme un solde positif | — | — | **exclu** (« purchased credits ») |
 | Gemini (AI Studio) | oui | ~**20 req/jour** sur 2.5 Flash depuis le 06/12/2025, Pro retire du gratuit | 1M | **exclu** pour SWE (une tache = ~30 requetes) |
 
-**NVIDIA Build, en detail.** Base URL `https://integrate.api.nvidia.com/v1`,
-cles `nvapi-...`. Modeles orientes code cites : DeepSeek V3.2, GLM-5.1
-(« optimized for agentic coding »), Qwen 3.5, Kimi K2.5 (1M), MiniMax M2.7.
+**NVIDIA Build — sondage du 2026-10-02.** Base URL
+`https://integrate.api.nvidia.com/v1`, cles `nvapi-...`, `NVIDIA_API_KEY`.
 Hausse a 200 RPM « sur demande » selon un guide, mais NVIDIA repond sur son
-forum ne pas relever les limites des comptes personnels gratuits.
+forum ne pas relever les limites des comptes personnels gratuits. Le
+catalogue `/v1/models` liste 81 modeles ; 19 candidats sondes sur le vrai
+prompt SWE (3 164 tokens), chacun en 3 variantes (sans reglage,
+`chat_template_kwargs.enable_thinking=false`,
+`chat_template_kwargs.thinking=false`), 4 requetes en parallele, echeance de
+120 s :
+
+| Resultat | Modeles |
+|---|---|
+| **retenus** | `nemotron-3-super-120b-a12b` (`enable_thinking: false`, 5-8 s), `nemotron-3-ultra-550b-a55b` (`thinking: false`, 7-19 s) |
+| satures : plus de 120 s sur les 3 variantes | `deepseek-v4.1-flash`, `kimi-k3`, `glm-5.3`, `glm-5.3-flash`, `gemma-4-31b-it` |
+| sature : 503 « worker limit 212/32 », 82 s quand il repond | `poolside/laguna-xs-2.1` |
+| protocole incompatible : `content` vide, appels d'outils au format natif dans le raisonnement | `gpt-oss-20b` (meme avec `reasoning_effort: low`, meme sans `stop`), `meta/muse-glimmer-30b` |
+| sortie degeneree | `nemotron-3.5-lightning-30b-a3b` : boucle de `>>`, ou `print(get_patch())` des le 1er tour |
+| 404 bien que listes au catalogue | `kimi-k2.6`, `nemotron-nano-3-30b-a3b`, `mistral-large`, `mistral-large-2-instruct`, `llama-3.1-nemotron-ultra-253b-v1`, `llama-3.1-nemotron-70b-instruct`, `jamba-1.5-large-instruct`, `phi-3.5-moe-instruct` |
+
+Le reglage qui coupe le raisonnement **depend du modele** : `nemotron-3-super`
+prend `enable_thinking`, `nemotron-3-ultra` prend `thinking` (sa variante
+`enable_thinking` n'a pas pu etre testee : 503 deux fois). Sans reglage,
+`nemotron-3-super` passe de 5 s a 17 s et bute sur le plafond de 1 500 tokens.
+
+**Contexte de 56 082 tokens** (16 tours d'historique synthetique), 3 essais :
+`nemotron-3-super` 44,4 / 13,2 / 8,8 s, `nemotron-3-ultra` 15,6 / 9,9 / 8,0 s.
+Accepte par les deux, mais **un appel sur six depasse l'echeance de 30 s**.
+L'historique etait repetitif et les modeles l'ont recopie : la mesure vaut
+pour la latence, pas pour la qualite.
+
+**Mistral — sondage du 2026-10-02.** Base URL `https://api.mistral.ai/v1`,
+`MISTRAL_API_KEY`. `/v1/models` liste 46 modeles, **pas de Devstral**. Pas
+d'en-tete `retry-after` ni de reset sur les 429, seulement
+`x-ratelimit-limit-*` / `x-ratelimit-remaining-*` : la boucle attend son
+delai par defaut (10 s en SWE).
+
+| Modele | Prompt SWE (3 153 tokens) | 56k tokens | Limites du compte | Verdict |
+|---|---|---|---|---|
+| `codestral-2508` | 1,0 s, bon format | 2,2 s | 125 req/min, 625k tokens/min | **branche** |
+| `ministral-14b-2512` | 5,2 s, un « ### Plan: » en markdown avant le code | 4,1 s | 30 req/min, 937k tokens/min | **branche** |
+| `ministral-8b-2512` | 2,8 s, idem | 6,0 s | 188 req/min, 625k tokens/min | **branche** |
+| `ministral-3b-2512` | 2,3 s, bon format | 9,4 s, **coupe a 1 500 tokens** | 750 req/min, contexte 131k | ecarte |
+| `mistral-medium-2604`, `mistral-small-2603` | **429 des la 1re requete** | 429 | `x-ratelimit-limit-req-minute: 0` | fermes sur ce compte |
 
 **Mistral, le point a trancher.** Le sujet interdit les « purchased
 credits » et les « billing-enabled accounts ». Des credits **offerts** chaque
 mois ne sont ni l'un ni l'autre, mais c'est une lecture : **a faire
-confirmer par l'equipe pedagogique** avant d'en dependre.
+confirmer par l'equipe pedagogique** avant d'en dependre. Verifier aussi
+qu'aucune carte n'est liee au compte, et suivre la consommation des 10 $ dans
+la console (le sondage a envoye ~240k tokens d'entree).
 
-- [ ] **Creer une cle NVIDIA Build** (action humaine) et la poser dans le
-      `.env` (ex. `NVIDIA_API_KEY`)
-- [ ] Une fois la cle la : entree `nvidia` dans `configs/models.json` (meme
-      forme qu'OpenRouter, l'API est au format OpenAI), puis sonder 2-3
-      modeles avec une requete de 30 a 60k tokens — acceptee ou non, latence
-      (l'echeance par appel est de 30 s, l'infra est partagee), `stop` pris en
-      compte, champ `usage` present — et relancer `sympy__sympy-14711`
-- [ ] Faire valider les credits mensuels Mistral, puis meme protocole
+**Runs reels par le CLI SWE** (`sympy__sympy-14711`, 5 iterations, outils non
+branches donc `NameError` a chaque appel d'outil) :
+
+| Modele | Requetes / retries | Tokens in / out | Duree | Comportement |
+|---|---|---|---|---|
+| Groq `gpt-oss-120b` (2026-10-01, reference) | 11 / 6 | 16 009 / 3 326 | 91 s | recite le correctif de memoire |
+| `nemotron-3-super` | 5 / 0 | 16 777 / 402 | 18 s | explore (`find`, `ls`, README) en chemins `/testbed` |
+| `nemotron-3-ultra` | 8 / 3 (1 echeance de 30 s, 2 × 503) | 17 567 / 742 | 103 s | alterne `run_command` et `import subprocess` / `sys`, refuses par le sandbox |
+| `codestral-2508` | 5 / 0 | 17 083 / 525 | 5,0 s | alterne les deux memes appels `read_file` / `search_code` |
+| `ministral-14b-2512` | 5 / 0 | 18 884 / 1 091 | 13,9 s | explore avec des outils varies |
+| `ministral-8b-2512` | 5 / 0 | 21 878 / 3 301 | 36,6 s | ecrit un correctif de `__mul__` de memoire des le tour 2 : **ignore la regle anti-recitation**. Bon point de comparaison faible, mauvais candidat pour l'examen |
+
+- [x] **Creer une cle NVIDIA Build** et la poser dans le `.env`
+      (`NVIDIA_API_KEY`) — fait le 2026-10-01
+- [x] Entree `nvidia` dans `configs/models.json`, sondage avec une requete de
+      56k tokens, relance de `sympy__sympy-14711` — fait (ci-dessus)
+- [x] Cle Mistral posee, meme protocole, 3 modeles branches — 2026-10-02
+- [ ] **Faire valider les credits mensuels Mistral par l'equipe
+      pedagogique** (action humaine) — sans cela, 3 des 5 modeles du rapport
+      tombent
+- [ ] Echeance par appel propre a SWE (voir « Etat actuel », dette 3)
 - [ ] Non verifie : GitHub Models (plafond d'entree par requete repute bas
-      sur le gratuit), Cohere (cle d'essai a ~1000 appels/mois), SambaNova
+      sur le gratuit), Cohere (cle d'essai a ~1000 appels/mois), SambaNova.
+      Utile seulement si Mistral est refuse
 
 Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-build/),
 [pasqualepillitteri.it — NVIDIA Build 2026](https://pasqualepillitteri.it/en/news/1621/nvidia-build-free-api-100-ai-models-2026),
@@ -999,7 +1080,10 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
 [mistral.ai — Devstral 2](https://mistral.ai/news/devstral-2-vibe-cli/),
 [docs Cerebras — rate limits](https://inference-docs.cerebras.ai/support/rate-limits),
 [toolfreebie.com — Cerebras](https://toolfreebie.com/cerebras-free-api/),
-[aifreeapi.com — Gemini, decembre 2025](https://www.aifreeapi.com/en/posts/gemini-api-free-tier-rate-limits).
+[aifreeapi.com — Gemini, decembre 2025](https://www.aifreeapi.com/en/posts/gemini-api-free-tier-rate-limits),
+[docs Together — billing](https://docs.together.ai/docs/billing),
+[pricepertoken.com — Together free](https://pricepertoken.com/endpoints/together/free),
+[morphllm.com — Cerebras pricing](https://www.morphllm.com/cerebras-pricing).
 
 ### P2.4 — System prompts
 
@@ -1036,7 +1120,7 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
   - il explore et edite **dans le meme bloc** des le tour 1
   - chemins relatifs au lieu de `/testbed/...`, `list_files()` sans
     arguments (le manuel devrait y remedier)
-- [x] **Regle anti-recitation** (2026-10-01, non commite) : « Never edit code
+- [x] **Regle anti-recitation** (2026-10-01, `ccbbe79`) : « Never edit code
       you have not read: every old_str must be copied from a read_file()
       observation of an EARLIER step, never written from memory, and never
       call edit_file() in the same code block as the read_file() it relies
@@ -1049,7 +1133,9 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       pas 91 et 301). Un test verifie que chaque ligne de chaque `old_str` de
       l'exemple a ete vue dans un `read_file` d'un tour **anterieur**.
       **Effet non mesure** : impossible tant que les outils ne sont pas
-      appelables
+      appelables. Premier indice le 2026-10-02 (P2.3, « Runs reels ») : 4
+      des 5 nouveaux modeles explorent sans reciter, `ministral-8b` ecrit un
+      correctif de memoire des le tour 2
 - [~] **Injection du sandbox manual** : le slot existe (`Prompt(tools=)`) mais les
       **deux** CLI passent `tools=None`. Depuis le 2026-10-01, sans outils la
       section est **omise** (elle affichait litteralement "None"). Cote SWE le
@@ -1148,10 +1234,10 @@ JSON dit *quels* modeles et *comment* les appeler, le `.env` fournit *avec quoi*
 (`get_provider_and_model_config`, meme frontiere que `get_api_keys`), **jamais**
 dans `LLMClient` : le client recoit une config, il ne va pas la chercher.
 
-#### `ModelConfig` supprime (2026-09-02) — fin d'un chantier de trois semaines
+#### `ModelConfig` supprime (2026-09-02), revenu avec un vrai reglage (2026-10-01)
 
-Le champ `reasoning: bool` cote `models` a vecu trois etats et c'est le troisieme
-qui est le bon :
+Le champ `reasoning: bool` cote `models` a vecu trois etats, puis `ModelConfig`
+est revenu sous une autre forme des qu'un reglage reel est apparu :
 
 1. **2026-08-18** — cree, valide par un model Pydantic `ModelConfig`, avec un
    repli conservateur `{"reasoning": False}` pour un modele absent du JSON
@@ -1174,18 +1260,29 @@ qui est le bon :
    Les entrees `"models"` sont des dicts vides — elles ne servent plus qu'a lister
    les modeles connus par fournisseur, et de point d'accroche pour de futurs
    reglages.
+4. **2026-10-01 — revenu, avec `extra_body` (`ccbbe79`).** NVIDIA exige de
+   couper le raisonnement par un champ du corps de requete
+   (`chat_template_kwargs`), et ce champ change d'un modele a l'autre
+   (`enable_thinking` pour `nemotron-3-super`, `thinking` pour
+   `nemotron-3-ultra`). `ModelConfig` (`config_models.py`) n'a qu'un champ,
+   `extra_body: dict`, **fusionne tel quel** dans le corps par `LLMClient` ;
+   un validateur refuse qu'il fixe `model`, `messages`, `stop` ou
+   `max_tokens`, que la boucle calcule. `extra="forbid"` : une coquille dans
+   une entree arrete le demarrage. Le helper rend
+   `tuple[ProviderConfig, ModelConfig]`, `ModelConfig()` pour un modele absent
+   du JSON. Cette fois le champ est **lu** a chaque requete, et un test verifie
+   qu'il arrive dans le corps envoye.
 
 **Ce qu'on defend :** une abstraction a un seul champ jamais lu ne portait rien,
-et sa suppression supprime avec elle la classe de bug qui venait de mordre.
+et sa suppression supprime avec elle la classe de bug qui venait de mordre. Elle
+est revenue le jour ou un reglage reel l'a justifiee, avec la validation stricte
+que l'etape 2 reclamait.
 
-- [ ] **Le typage a perdu en precision** : `model_config: dict` cote helper et
-      cote `LLMClient`, plus rien ne valide ce qui sort du JSON pour un modele.
-      Prix assume tant que le dict est vide — **le jour ou une cle y revient, la
-      validation doit revenir avec**, sinon une faute de frappe deviendra un
-      `KeyError` en pleine tache au lieu d'une erreur au demarrage. Et choisir
-      `extra=` explicitement a ce moment-la : `extra="forbid"` attrape la
-      coquille, `extra="ignore"` (le defaut) la laisse passer sans bruit — c'est
-      exactement ce qui a produit la regression de l'etape 2
+- [x] **Le typage avait perdu en precision** (`model_config: dict`, rien ne
+      validait ce qui sortait du JSON) — regle le 2026-10-01 : la validation est
+      revenue avec la premiere cle (`extra_body`), en `extra="forbid"`, comme
+      prevu ici. Teste : coquille `extra_bodi` → erreur au demarrage,
+      `extra_body: {"max_tokens": ...}` → refuse
 - [ ] **Le repli sur modele inconnu est silencieux** : aucun avertissement n'est
       affiche quand `--model-name` est absent du JSON. Assumer, ou logger. A
       savoir dire : absent de `models.json` **n'est pas** invalide chez le
@@ -1199,6 +1296,14 @@ et sa suppression supprime avec elle la classe de bug qui venait de mordre.
 ### P2.6 — `BENCHMARK_REPORT.md` *(vide)*
 
 **≥ 5 modeles × ≥ 3 taches SWE-bench communes.**
+
+**Modeles retenus (2026-10-02)** — declares dans `configs/models.json` et
+passes par le vrai CLI SWE, detail en P2.3 « Fournisseurs pour SWE » :
+`nvidia/nemotron-3-super-120b-a12b`, `nvidia/nemotron-3-ultra-550b-a55b`
+(NVIDIA), `codestral-2508`, `ministral-14b-2512`, `ministral-8b-2512`
+(Mistral, **sous reserve de validation**). Le releve de ce qui a ete ecarte
+(19 modeles NVIDIA sondes, Groq, Cerebras, Together, Gemini) est deja de la
+matiere pour la partie « Setup ».
 
 - [ ] Setup (modeles/providers, taches + justification)
 - [ ] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
@@ -1475,7 +1580,19 @@ pese plus que le prompt** : les 12 retries de ces deux campagnes sont tous
        fournisseur gratuit a gros contexte, ni les 2/3 SWE de l'examen ni
        `BENCHMARK_REPORT.md` ne sont atteignables, quoi que fasse ndi-tull.
        **Releve fait** (P2.3, « Fournisseurs pour SWE ») : NVIDIA Build en
-       tete, Mistral en second. **Bloque sur la creation d'une cle NVIDIA**
+       tete, Mistral en second. **Cles posees et fournisseurs branches le
+       2026-10-02 : 5 modeles** (2 NVIDIA, 3 Mistral). Reste **la validation
+       Mistral par l'equipe pedagogique** (action humaine) — sans elle on
+       retombe a 2 modeles
+4 ter. [ ] **Echeance par appel propre a SWE** : 30 s pour les deux benchs
+       aujourd'hui (`LLM_TIMEOUT_SECONDS`), alors que NVIDIA a repondu en
+       44,4 s sur 56k tokens et que le run `nemotron-3-ultra` a perdu un appel
+       sur l'echeance. Un champ du `Bench` (`constants.MBPP` / `constants.SWE`)
+       plutot qu'une constante globale ; MBPP garde 30 s (120 s pour 10
+       iterations)
+4 quater. [ ] **`Makefile` : `URL` / `MODEL` par defaut** toujours sur
+       OpenRouter `nemotron-3-ultra-550b-a55b:free`, mesure inutilisable. A
+       remplacer par un modele branche
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer la liste des outils a `Prompt` au lieu de `tools=None`
@@ -1497,8 +1614,9 @@ pese plus que le prompt** : les 12 retries de ces deux campagnes sont tous
 
 ### Le banc d'essai `tests/`
 
-**357 tests** (2026-10-01), gitignore, hors rendu — c'est un outil de travail,
-pas un livrable.
+**379 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
+pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
+chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 
 `tests/test_agent_cli.py` (75 tests) comble le trou par lequel le `TypeError` de
 `get_task_from_file` est passe dans **les deux** CLI a la fois, 220 tests au vert.
