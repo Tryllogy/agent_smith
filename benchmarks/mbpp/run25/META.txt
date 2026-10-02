@@ -1,0 +1,7 @@
+modele=codestral-2508
+provider=https://api.mistral.ai/v1
+taches=cache/run6 (memes fichiers)
+code=94539e7 + modifications non commitees
+debut=2026-10-02T16:41:22+02:00
+note=apres les deux correctifs de la boucle (garde d entree avant envoi, refus SyntaxError explicite); a comparer a run19/run20 (codestral avant correctifs) et run14 (Groq gpt-oss-120b) 8/10, memes taches
+fin=2026-10-02T16:43:25+02:00

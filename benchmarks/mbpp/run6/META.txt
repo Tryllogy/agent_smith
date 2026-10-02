@@ -1,0 +1,5 @@
+modele=openai/gpt-oss-120b
+provider=https://api.groq.com/openai/v1
+debut=2026-09-02T18:26:36+02:00
+note=attente du seau TPM (>6500) avant chaque tache, limite 8000 tok/min
+fin=2026-09-02T18:28:47+02:00

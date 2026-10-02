@@ -1,0 +1,7 @@
+modele=openai/gpt-oss-120b
+provider=https://api.groq.com/openai/v1
+taches=cache/run7 (memes fichiers)
+code=4c8d206
+debut=2026-10-01T18:48:08+02:00
+note=verification du final_answer par la boucle + prompt bloc unique et tests caches; code = HEAD + code.diff; a comparer a run7 9/10, run10 7/10, run12 6/10, memes taches
+fin=2026-10-01T18:51:34+02:00

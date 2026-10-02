@@ -1,0 +1,5 @@
+exit=0
+--- stdout
+
+--- stderr
+LLM retry 1 on step 1: The LLM response does not contain the expected 'content' field. (HTTP 200); waiting 5.0s

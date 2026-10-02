@@ -1,0 +1,15 @@
+task_01 attente rem=7927
+task_02 attente rem=6833
+task_03 attente rem=6498
+task_03 attente rem=7927
+task_04 attente rem=5934
+task_04 attente rem=7895
+task_05 attente rem=6892
+task_06 attente rem=5872
+task_06 attente rem=7840
+task_07 attente rem=6751
+task_08 attente rem=6264
+task_08 attente rem=7927
+task_09 attente rem=6721
+task_10 attente rem=5427
+task_10 attente rem=7386

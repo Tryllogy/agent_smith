@@ -1,0 +1,7 @@
+modele=qwen/qwen3.8-27b:free
+provider=https://openrouter.ai/api/v1
+taches=cache/run6 (memes fichiers)
+code=9c4754a
+debut=2026-10-01T17:49:20+02:00
+note=comparaison de fournisseurs a taches egales avec run9; minimax-m3 (run8) n'est plus gratuit; gemma-4-31b-it:free rate-limited upstream au pilote
+fin=2026-10-01T17:59:10+02:00

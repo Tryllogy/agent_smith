@@ -1,0 +1,10 @@
+task_01 exit=0 duree=1.546643607
+task_02 exit=0 duree=1.731821779
+task_03 exit=0 duree=3.877358274
+task_04 exit=0 duree=1.394259781
+task_05 exit=0 duree=1.944242717
+task_06 exit=0 duree=22.297213524
+task_07 exit=0 duree=1.799082933
+task_08 exit=0 duree=2.088024063
+task_09 exit=0 duree=7.297675312
+task_10 exit=0 duree=8.241905808

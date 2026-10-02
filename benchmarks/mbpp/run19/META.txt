@@ -1,0 +1,7 @@
+modele=codestral-2508
+provider=https://api.mistral.ai/v1
+taches=cache/run6 (memes fichiers)
+code=94539e7
+debut=2026-10-02T16:19:25+02:00
+note=campagne multi-modeles du 2026-10-02, verification par la boucle active; a comparer a run14 (Groq gpt-oss-120b) 8/10, memes taches
+fin=2026-10-02T16:22:18+02:00

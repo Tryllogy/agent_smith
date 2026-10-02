@@ -1,0 +1,4 @@
+modele=nvidia/nemotron-3-super-120b-a12b:free
+provider=https://openrouter.ai/api/v1
+debut=2026-09-02T17:00:07+02:00
+fin=2026-09-02T17:08:26+02:00

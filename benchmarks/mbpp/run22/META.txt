@@ -1,0 +1,7 @@
+modele=ministral-14b-2512
+provider=https://api.mistral.ai/v1
+taches=cache/run7 (memes fichiers)
+code=94539e7
+debut=2026-10-02T16:21:51+02:00
+note=campagne multi-modeles du 2026-10-02, verification par la boucle active; a comparer a run13 (Groq gpt-oss-120b) 8/10, memes taches
+fin=2026-10-02T16:24:36+02:00
