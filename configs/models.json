@@ -123,7 +123,50 @@
                         "enable_thinking": false
                     }
                 }
+            },
+            "nvidia/nemotron-3-ultra-550b-a55b": {
+                "extra_body": {
+                    "chat_template_kwargs": {
+                        "thinking": false
+                    }
+                }
             }
+        }
+    },
+    "mistral": {
+        "provider": {
+            "url": "https://api.mistral.ai/v1",
+            "endpoint": "/chat/completions",
+            "header": {
+                "Authorization": "Bearer {api_key}"
+            },
+            "api_key_env_var": "MISTRAL_API_KEY",
+            "choice": "choices",
+            "reasoning": "reasoning",
+            "usage": "usage",
+            "model": "model",
+            "error": "error",
+            "content": "content",
+            "input_tokens": "prompt_tokens",
+            "output_tokens": "completion_tokens",
+            "finish_reason": "finish_reason",
+            "message": "message",
+            "retry_after": {
+                "names": {
+                    "retry-after": {
+                        "scale": 1,
+                        "format": [
+                            "duration",
+                            "date"
+                        ]
+                    }
+                }
+            }
+        },
+        "models": {
+            "codestral-2508": {},
+            "ministral-14b-2512": {},
+            "ministral-8b-2512": {}
         }
     }
 }
