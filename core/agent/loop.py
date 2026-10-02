@@ -1,4 +1,5 @@
 import ast
+import math
 import sys
 import time
 
@@ -56,6 +57,8 @@ class Loop:
         self.llm_output: str = ""
         self.last_usage_input: int = 0
         self.last_usage_output: int = 0
+        self.last_prompt_tokens: int = 0
+        self.last_prompt_chars: int = 0
         if config_sandbox is None:
             self.config_sandbox: SandboxConfig = SandboxConfig()
         else:
@@ -83,6 +86,8 @@ class Loop:
         self.usage_output += llm_response.output_tokens
         self.last_usage_input = llm_response.input_tokens
         self.last_usage_output = llm_response.output_tokens
+        self.last_prompt_tokens = llm_response.input_tokens
+        self.last_prompt_chars = self.prompt_chars()
         self.finish_reason: str = llm_response.finish_reason
         self.thoughts.append(text)
         reason: str = llm_response.reasoning if llm_response.reasoning else ""
@@ -90,6 +95,22 @@ class Loop:
         self.llm_output = " ".join(part for part in (reason, text) if part)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
+
+    def prompt_chars(self) -> int:
+        """Return the number of characters of the conversation."""
+        return sum(len(message["content"]) for message in self.prompt.prompt)
+
+    def estimate_next_input(self) -> int:
+        """Estimate the input tokens of the next request.
+
+        The provider counted the previous prompt exactly: only the
+        messages added since are estimated, at ESTIMATED_CHARS_PER_TOKEN,
+        chosen below the ratios measured so the estimate errs high.
+        """
+        added_chars: int = self.prompt_chars() - self.last_prompt_chars
+        return self.last_prompt_tokens + math.ceil(
+            added_chars / constants.ESTIMATED_CHARS_PER_TOKEN
+        )
 
     def extract(self, text: str) -> bool:
         """Extract the first code block of text into self.code.
@@ -181,11 +202,17 @@ class Loop:
         if self.bench == constants.MBPP:
             try:
                 ast.parse(answer)
-            except (SyntaxError, ValueError):
+            except SyntaxError as e:
                 return (
-                    "The final answer returned by the code is NOT"
-                    " a valid Python expression."
+                    "The final answer is NOT valid Python:"
+                    f" SyntaxError: {e.msg} (line {e.lineno},"
+                    f" column {e.offset}). for, if and while cannot"
+                    " follow a ';' on the same line: pass your function"
+                    " on several lines, in a triple-quoted string:"
+                    ' final_answer("""...""").'
                 )
+            except ValueError as e:
+                return f"The final answer is NOT valid Python: {e}."
             return None
         if not any(marker in answer for marker in constants.PATCH_MARKERS):
             return (
@@ -273,6 +300,12 @@ class Loop:
                 max_tokens: int = self.max_tokens_output - self.usage_output
                 if max_tokens <= 0:
                     return self.exit_on_guard("Output token limit exceeded")
+                next_input: int = self.estimate_next_input()
+                if self.usage_input + next_input > self.max_tokens_input:
+                    return self.exit_on_guard(
+                        "Input token limit exceeded: the next request"
+                        f" (~{next_input} tokens) would go over"
+                    )
                 self.thought(
                     min(
                         constants.LLM_TIMEOUT_SECONDS,
