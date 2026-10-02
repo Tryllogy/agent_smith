@@ -1,11 +1,12 @@
 import json
+import math
 import threading
 import time
 
 import httpx
 from pydantic import ValidationError
 
-from core import errors
+from core import constants, errors
 from core.api_key import APIKey
 from core.config_models import (
     LLMResponse,
@@ -134,12 +135,14 @@ class LLMClient:
                 "No API key provided for LLM client.",
                 status_code=None,
             )
+        self.check_token_rate(messages=messages, max_tokens=max_tokens)
         try:
             request, request_time_ms = self.make_request(
                 timeout_max=timeout_max,
                 messages=messages,
                 max_tokens=max_tokens,
             )
+            self.record_token_rate(request.headers)
             data: dict = request.json()
             if not isinstance(data, dict):
                 raise errors.TransientLLMResponseError(
@@ -199,6 +202,71 @@ class LLMClient:
                 + f" schema: {e}",
                 status_code=request.status_code,
             ) from e
+
+    @staticmethod
+    def estimate_cost(messages: list, max_tokens: int) -> int:
+        """Estimate a request's tokens from above: prompt plus max_tokens.
+
+        The prompt is counted at ESTIMATED_CHARS_PER_TOKEN, below the
+        ratios measured, and the answer at its maximum.
+        """
+        chars: int = sum(len(str(m.get("content", ""))) for m in messages)
+        return (
+            math.ceil(chars / constants.ESTIMATED_CHARS_PER_TOKEN) + max_tokens
+        )
+
+    def check_token_rate(self, messages: list, max_tokens: int) -> None:
+        """Hold back a request the provider's token rate would refuse.
+
+        Uses the limit and the tokens left that each key's last answer
+        reported, while its window runs. The key in use is kept if it
+        has enough, else the next usable key that has enough is taken.
+        Raises PermanentLLMResponseError if the request exceeds the
+        limit itself, TransientLLMResponseError with the shortest wait
+        if no key has enough left.
+        """
+        config = self.provider.config.token_rate_limit
+        if config is None:
+            return
+        cost: int = self.estimate_cost(messages, max_tokens)
+        waits: list[float] = []
+        for offset in range(len(self.api_keys)):
+            index: int = (self.index_api_key + offset) % len(self.api_keys)
+            key: APIKey = self.api_keys[index]
+            if not key.get_usable():
+                continue
+            budget = key.get_token_budget()
+            if budget is None:
+                self.index_api_key = index
+                return
+            limit, remaining, observed_at = budget
+            if cost > limit:
+                raise errors.PermanentLLMResponseError(
+                    f"This request (~{cost} tokens) exceeds the provider's"
+                    f" limit of {limit} tokens per"
+                    f" {config.window_seconds:g}s window.",
+                    status_code=None,
+                )
+            elapsed: float = time.time() - observed_at
+            if elapsed >= config.window_seconds or cost <= remaining:
+                self.index_api_key = index
+                return
+            waits.append(config.window_seconds - elapsed)
+        if not waits:
+            return
+        raise errors.TransientLLMResponseError(
+            f"Token rate limit: this request needs ~{cost} tokens, more"
+            " than any key has left in its"
+            f" {config.window_seconds:g}s window.",
+            status_code=None,
+            retry_after=min(waits),
+        )
+
+    def record_token_rate(self, headers: httpx.Headers) -> None:
+        """Store on the key in use the token budget its answer reported."""
+        token_rate = self.provider.get_token_rate(headers)
+        if token_rate is not None:
+            self.api_keys[self.index_api_key].set_token_budget(*token_rate)
 
     def check_error(
         self,

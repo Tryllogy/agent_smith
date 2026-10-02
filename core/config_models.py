@@ -47,6 +47,20 @@ class RetryAfterConfig(BaseModel):
     names: dict[str, NamesRetryAfterConfig]
 
 
+class TokenRateLimitConfig(BaseModel):
+    """Response headers giving a key's token budget per window.
+
+    limit is the most tokens a window allows, remaining what is left
+    after the request; both are read on every answer.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    limit: str
+    remaining: str
+    window_seconds: float = Field(default=60.0, gt=0)
+
+
 class ProviderConfig(BaseModel):
     """How to talk to a provider, as declared in configs/models.json.
 
@@ -71,6 +85,7 @@ class ProviderConfig(BaseModel):
     finish_reason: str
     message: str
     retry_after: RetryAfterConfig
+    token_rate_limit: TokenRateLimitConfig | None = None
 
 
 # ===== ModelConfig ======
