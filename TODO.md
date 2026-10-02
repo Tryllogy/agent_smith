@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **379 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **391 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Fournisseurs SWE : 5 modeles declares, le minimum du rapport.** NVIDIA Build
@@ -23,6 +23,11 @@ modeles. **379 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `ministral-14b-2512`, `ministral-8b-2512`), tous passes par le vrai CLI SWE le
 2026-10-02. **Les 3 modeles Mistral dependent d'une validation de l'equipe
 pedagogique** (credits offerts, voir P2.3 « Fournisseurs pour SWE »).
+
+**MBPP : 4 modeles a 15-17/20, au niveau de Groq (16/20).** Campagne des 5
+modeles sur les 20 taches de reference (`run15` a `run24`), puis deux
+defauts de la boucle corriges et `codestral` rejoue : 11/20 → **17/20**,
+metriques valides 17/20 → 20/20 (`run25`/`run26`). Detail en P2.6.
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
@@ -186,7 +191,12 @@ en conformite (P2.4). Enfin **NVIDIA branche** et `ModelConfig` revenu avec
 Cerebras et Together ecartes, **cle Mistral posee et 3 modeles branches**. Les
 5 modeles ont tourne 5 iterations chacun par le vrai CLI SWE. Detail en P2.3
 « Fournisseurs pour SWE ». **Non commite** : `configs/models.json`
-(`nemotron-3-ultra` et le fournisseur `mistral`), `.env.example`.
+(`nemotron-3-ultra` et le fournisseur `mistral`), `.env.example` — commites
+dans `94539e7`. Puis **campagne MBPP des 5 modeles** (`run15` a `run24`) :
+5 metriques INVALID (entree cumulee > 6 000) et 9 echecs de `codestral` sur
+des `final_answer` d'une ligne cassee par des `;`. D'ou **deux correctifs de
+la boucle** (P2.1) et le rejeu de `codestral` (`run25`/`run26`, 17/20).
+**Non commite** : `core/agent/loop.py`, `core/constants.py`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -524,7 +534,7 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       l'evaluation dans `stderr.log`. Rien dans `steps` : le schema de
       `StepMetrics` est impose par la moulinette
 - [x] **La boucle verifie le `final_answer` MBPP contre `test_list`**
-      (2026-10-01, non commite). La moulinette execute la chaine soumise
+      (2026-10-01, `4c8d206`). La moulinette execute la chaine soumise
       **seule**, puis les tests ; la boucle fait pareil
       (`Loop.run_answer_tests()`, parametre `answer_tests`, que l'agent MBPP
       remplit avec `test_imports` puis `test_list`). Echec → refus, et
@@ -536,6 +546,31 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       reelles** de `run6/7/9/10/12` : 42 acceptees et validees par la
       moulinette, **0 refus a tort**, 1 vrai refus (451), 2 acceptees a tort
       (MBPP 400, le test cache que la boucle ne voit pas)
+- [x] **L'entree cumulee est verifiee avant l'envoi** (2026-10-02, non
+      commite). Constate sur la campagne `run15`-`run24` : **5 metriques
+      INVALID**, toutes pour une entree cumulee de 6 163 a 7 513 tokens sur
+      6 000. Le controle n'avait lieu qu'apres la reponse : la requete qui
+      debordait etait deja partie et comptee. Desormais
+      `Loop.estimate_next_input()` estime la requete suivante — compte exact
+      du fournisseur pour le prompt precedent (`last_prompt_tokens`), plus les
+      caracteres ajoutes depuis divises par `ESTIMATED_CHARS_PER_TOKEN = 2.5`
+      (`constants.py`) — et la boucle sort sur `Input token limit exceeded:
+      the next request (~N tokens) would go over` sans rien envoyer. Le 2,5 est
+      pris sous les ratios mesures sur 55 tours de la campagne (mediane 3,44,
+      10e centile 2,89, minimum 2,25) : l'estimation se trompe vers le haut.
+      Le controle apres reponse reste en filet. Prix assume : une tache peut
+      s'arreter alors que la requete aurait tenu (2 fois sur 20 au rejeu, aux
+      tours 4 et 5). En SWE (300k), la garde ne joue qu'en fin de tache
+- [x] **Le refus d'un `final_answer` MBPP invalide dit quoi corriger**
+      (2026-10-02, non commite). Il disait « NOT a valid Python expression »,
+      sans l'erreur ni le remede. Il donne maintenant `SyntaxError: <msg>
+      (line L, column C)` et la consigne : `for`, `if` et `while` ne suivent
+      pas un `;`, ecrire la fonction sur plusieurs lignes dans
+      `final_answer("""...""")`. Cause : 5 des 9 echecs de
+      `codestral-2508` (P2.6), qui recommencait la meme erreur jusqu'au
+      plafond de sortie.
+      12 tests ajoutes pour ces deux points, dont 10 echouent sur l'ancien
+      `loop.py`
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -1146,6 +1181,19 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       indentation du corps). **Le piege principal est corrige** (constate le
       2026-10-01) : `final_answer("def smallest_abs(a): return min(map(abs,a))")`
       tient sur une ligne. **Reste :**
+- [ ] **Ce `final_answer` d'une ligne est imite a tort par `codestral-2508`**
+      (2026-10-02). Sur une fonction a boucles, il colle tout avec des `;`
+      (`final_answer("def lps(s): n = len(s); for i in ...")`), une
+      `SyntaxError` : 9 refus de la boucle sur 20 taches, en `run19`/`run20`
+      comme en `run25`/`run26`. Depuis le refus explicite (P2.1), il se
+      corrige au tour suivant (6 soumissions en `"""..."""`), mais chaque
+      erreur coute un tour et ~420 tokens de sortie sur 1 500 (moyenne des 18
+      tours refuses, 257 a 595). **A decider** :
+      passer l'exemple en multiligne (`final_answer("""def ...\n    ...""")`)
+      eviterait l'erreur des le premier essai, mais change le prompt de tous
+      les modeles — le format d'une ligne avait ete choisi contre le piege des
+      `\n` litteraux (`run5`, MBPP 94). A remesurer sur au moins Groq et
+      `codestral` si on le change
 - [x] **Prompts et relances corriges (2026-10-01, `9c4754a`)**, mesures le
       meme jour en `run9`/`run10` (voir P2.6) :
   - exemple MBPP : les `assert` sont suivis de `print('all tests passed')`,
@@ -1524,12 +1572,78 @@ pese plus que le prompt** : les 12 retries de ces deux campagnes sont tous
 - [ ] **Piste : `reasoning_effort: low` pour `gpt-oss` chez Groq** (parametre
       a verifier). Moins de raisonnement → moins de `content` vides et moins
       de plafonds de sortie (462, 252). C'est un reglage **du modele** : sa
-      place est dans les entrees `models` de `configs/models.json`, vides et
-      prevues pour ca — et la validation Pydantic doit revenir avec (P2.5 bis)
+      place est dans les entrees `models` de `configs/models.json`. **Faisable
+      sans code depuis le 2026-10-01** : `extra_body` et sa validation existent
+      (P2.5 bis)
 - [ ] Recommencer l'ablation de facon plus large : 10 taches a un tirage ne
       separent pas des taux de 60 a 90 %
 - [ ] Les campagnes vivent dans `cache/`, gitignore : a sortir dans un dossier
       versionne avec le reste des `solution.json` de backing
+
+#### Campagne multi-modeles du 2026-10-02 (`run15` a `run24`)
+
+**Protocole.** Les 5 modeles branches le jour meme, sur les 20 taches de
+`run13`/`run14` (fichiers de `run6` et `run7`, copies dans chaque dossier),
+code `94539e7` sans modification, verification par la boucle active. Un fil
+par modele, les 5 en parallele ; chaque solution validee par
+`moulinette_eval validate` (Docker). « Faux succes » : `success: true` dans
+le rendu, `FAIL` a la moulinette.
+
+| Modele | Runs | PASS | Metriques valides | Faux succes | Temps moyen / max | Retries |
+|---|---|---|---|---|---|---|
+| Groq `gpt-oss-120b` (reference) | `run14` + `run13` | **16/20** | 20/20 | 1 | 5,7 / 27,7 s | 13 |
+| `nemotron-3-super` | `run15` + `run16` | 15/20 | 20/20 | 1 | 16,8 / 79,9 s | 4 |
+| `nemotron-3-ultra` | `run17` + `run18` | 14/20 | 19/20 | 2 | 34,9 / 94,2 s | **26** |
+| `codestral-2508` | `run19` + `run20` | **11/20** | 17/20 | 0 | 8,8 / 17,3 s | 0 |
+| `ministral-14b-2512` | `run21` + `run22` | 15/20 | 20/20 | 1 | 8,1 / 21,5 s | 0 |
+| `ministral-8b-2512` | `run23` + `run24` | 15/20 | 19/20 | 1 | 8,2 / 26,7 s | 0 |
+
+**Ce qui vaut pour tous :** **0 soumission a l'aveugle**, sur aucun modele.
+**400** echoue partout (6/6, le test cache ; 4 modeles s'annoncent en
+succes), **462** aussi (6/6, plafond de sortie), **108** n'est reussie que
+par Groq. Un ecart de 1/20 ne separe rien.
+
+**Par modele :**
+
+- `ministral-14b` : au niveau des meilleurs, le plus rapide, aucun retry.
+  **Candidat pour le modele MBPP par defaut**, sous reserve de la
+  validation Mistral
+- `nemotron-3-super` : meme score, 2 fois plus lent, quelques retries.
+  **Le repli si Mistral est refuse**
+- `nemotron-3-ultra` : 26 retries (echeances de 30 s, 503), 2 taches perdues
+  sur 5 retries sans une seule reponse. Pas un candidat MBPP
+- `codestral` : ses 9 echecs sont tous un plafond de sortie atteint. **5**
+  (247, 65, 400, 71, 138) viennent de refus repetes du meme `final_answer`
+  d'une ligne casse par des `;` (voir P2.4) — c'est ce qui a mene au second
+  correctif ci-dessous ; les 4 autres (264, 305, 462, 108) sont des `assert`
+  qui echouent en boucle
+
+**Les 5 metriques INVALID** : toutes une entree cumulee au-dela de 6 000
+(6 163, 6 216, 6 665, 7 103, 7 513), la requete fautive etant deja partie
+quand la boucle s'en apercevait. Corrige le jour meme (P2.1).
+
+#### `run25` / `run26` : `codestral` apres les deux correctifs (2026-10-02)
+
+Memes 20 taches, memes conditions, code = `94539e7` + les deux correctifs de
+P2.1 (garde d'entree avant envoi, refus `SyntaxError` explicite), non
+commites.
+
+| `codestral-2508` | Avant (`run19`/`run20`) | Apres (`run25`/`run26`) |
+|---|---|---|
+| PASS | 11/20 | **17/20** |
+| Metriques valides | 17/20 | **20/20** |
+| Refus de la boucle | 9 | 9 |
+| Soumissions acceptees en `"""..."""` | 0 | 6 |
+| Sorties par la garde d'entree | — | 2 (264, 138), metriques valides |
+
+Le modele fait **toujours** l'erreur du premier coup (9 refus des deux
+cotes) : le correctif ne la previent pas, il permet d'en sortir au tour
+suivant. Premiere reussite de la **400** par un modele. **Un seul tirage** :
+une part de l'ecart peut etre du hasard.
+
+- [ ] Rejouer les 4 autres modeles avec les correctifs (seul `codestral` l'a
+      ete). Attendu : peu d'effet, ils faisaient peu de refus (0 a 3) et
+      seulement 2 metriques INVALID a eux quatre
 
 ---
 
@@ -1592,7 +1706,17 @@ pese plus que le prompt** : les 12 retries de ces deux campagnes sont tous
        iterations)
 4 quater. [ ] **`Makefile` : `URL` / `MODEL` par defaut** toujours sur
        OpenRouter `nemotron-3-ultra-550b-a55b:free`, mesure inutilisable. A
-       remplacer par un modele branche
+       remplacer par un modele branche. **La campagne du 2026-10-02 donne le
+       choix** (P2.6) : `ministral-14b-2512` pour MBPP (15/20, le plus
+       rapide, 0 retry), `nemotron-3-super` en repli si Mistral est refuse.
+       Groq reste le meilleur sur MBPP mais est exclu pour SWE : un seul
+       `MODEL` pour les deux cibles ne convient plus, prevoir un defaut par
+       benchmark
+4 quinquies. [~] **Campagne MBPP des 5 modeles** — faite (`run15` a
+       `run24`), deux defauts de la boucle corriges et `codestral` rejoue
+       (`run25`/`run26`, 17/20). Restent : **commiter** `loop.py` et
+       `constants.py`, **decider** de l'exemple MBPP d'une ligne (P2.4),
+       rejouer les 4 autres modeles avec les correctifs
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer la liste des outils a `Prompt` au lieu de `tools=None`
@@ -1614,7 +1738,7 @@ pese plus que le prompt** : les 12 retries de ces deux campagnes sont tous
 
 ### Le banc d'essai `tests/`
 
-**379 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
+**391 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 
