@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **440 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **453 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Fournisseurs SWE : 5 modeles declares, le minimum du rapport.** NVIDIA Build
@@ -62,7 +62,7 @@ revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
 > SWE-bench ni le rapport de benchmark ne peuvent avancer. Le prompt SWE n'a
 > jamais tourne contre un vrai depot.
 
-**Dettes qui bloquent la mesure** (la 2 est reglee) :
+**Dettes qui bloquent la mesure** (la 2 et la 3 sont reglees) :
 
 1. **Les outils MCP sont merges mais non conformes** : `origin/ndi-tull`
    (`9c8c4b2` → `64f06cc`) est rapatrie dans `thomas` le 2026-10-01
@@ -72,12 +72,10 @@ revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
    **Reglee le 2026-10-02** : `nemotron-3-ultra-550b-a55b:free` (OpenRouter,
    27 a 40 s par reponse) remplace par un defaut par benchmark, voir
    « Prochaines actions », 4 quater
-3. **L'echeance de 30 s par appel est trop courte pour SWE.**
-   `LLM_TIMEOUT_SECONDS` (`constants.py:5`) vaut pour les deux benchs. Mesure
-   le 2026-10-02 sur un contexte de 56k tokens : `nemotron-3-super` a repondu
-   en **44,4 s** une fois sur trois, et le run reel de `nemotron-3-ultra` a
-   perdu un appel sur l'echeance. Une echeance propre a SWE est a ecrire
-   (P2.3)
+3. ~~**L'echeance de 30 s par appel est trop courte pour SWE.**~~
+   **Reglee le 2026-10-02** : l'echeance depend du benchmark
+   (`Bench.llm_timeout`), 60 s pour SWE, 30 s pour MBPP. Voir « Prochaines
+   actions », 4 ter
 
 ### Revue du 2026-10-01 (sujet relu en entier, code relu, tout verifie a l'execution)
 
@@ -230,8 +228,9 @@ La revalidation de `run5` a `run8` par la moulinette fait passer **`run7` de
 acceptes** (`c7727cc`) : OpenRouter avait servi `openai/gpt-4o-mini`, payant,
 sur un compte sans credit (P2.5 bis). Relecture du sujet sur le payant
 (P2.3, « Ce que dit le sujet du payant »). **Mistral valide** par l'equipe
-pedagogique, d'ou le defaut MBPP du `Makefile` sur `ministral-14b-2512`.
-**Non commite** : `Makefile`, `TODO.md`.
+pedagogique, d'ou le defaut MBPP du `Makefile` sur `ministral-14b-2512`
+(`e0a7737`). Puis **l'echeance par appel propre a SWE** (60 s, 4 ter).
+**Non commite** : `core/agent/loop.py`, `core/constants.py`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -666,7 +665,9 @@ On n'interrompt pas le thread — impossible en Python — on l'**abandonne** ; 
 drapeau `daemon` empeche l'interpreteur de l'attendre a la sortie (8,65 s contre
 3,47 s sans). L'exception du thread est relevee **dans le meme `try`**, sinon les
 gestionnaires `httpx.*` ne voient plus rien passer. Le `timeout=` de `httpx` est
-conserve **en plus** : il coupe les serveurs muets, l'echeance borne les lents.
+conserve **en plus** : il coupe les serveurs muets, l'echeance borne les lents. Depuis le 2026-10-02,
+l'echeance depend du benchmark (`Bench.llm_timeout`) : 30 s pour MBPP, 60 s
+pour SWE (« Prochaines actions », 4 ter).
 
 **Recul entre deux tentatives (2026-08-22).** Trois pieces : `Provider.get_retry_after()`
 lit `X-RateLimit-Reset` — un **instant** epoch en millisecondes, pas une duree —
@@ -922,7 +923,7 @@ audio, 2 `prompt-guard` classifieurs).
 
 **Groq est un ordre de grandeur plus rapide** — 0,1 a 4,7 s contre 1,9 a 27,2 s.
 Sur MBPP, ou 120 s couvrent 10 iterations, c'est decisif : `LLM_TIMEOUT_SECONDS`
-vaut 30 s, donc un modele a 27 s comme `nemotron-3-ultra` est hors-jeu en
+(aujourd'hui `MBPP.llm_timeout`) vaut 30 s, donc un modele a 27 s comme `nemotron-3-ultra` est hors-jeu en
 pratique (mesure a **39,8 s** le meme jour sur une autre requete : c'est lui qui
 a fait echouer le run pilote de `run5` a 0 iteration).
 
@@ -979,7 +980,8 @@ se mesure.
 1. **Joignable** — pas de 403 / 502 structurel.
 2. **Emet un bloc ` ```python ` dans `content`** — et non la totalite du budget
    dans le canal `reasoning`, qui laisse `content: null`.
-3. **Latence < 30 s** par appel (`LLM_TIMEOUT_SECONDS`, `constants.py:5`).
+3. **Latence < 30 s** par appel (`LLM_TIMEOUT_SECONDS` a l'epoque,
+   `MBPP.llm_timeout` depuis le 2026-10-02).
 4. **Sortie < 1500 tokens** (`MBPP.output_max_token`).
 
 > **Fiabilite de ce releve — a lire avant de s'en servir.** La sonde de
@@ -1292,7 +1294,7 @@ branches donc `NameError` a chaque appel d'outil) :
 - [x] Cle Mistral posee, meme protocole, 3 modeles branches — 2026-10-02
 - [x] **Faire valider les credits mensuels Mistral par l'equipe
       pedagogique** — **valide le 2026-10-02**
-- [ ] Echeance par appel propre a SWE (voir « Etat actuel », dette 3)
+- [x] Echeance par appel propre a SWE — fait le 2026-10-02, 60 s (4 ter)
 - [ ] Non verifie : GitHub Models (plafond d'entree par requete repute bas
       sur le gratuit), Cohere (cle d'essai a ~1000 appels/mois), SambaNova.
       Utile seulement si Mistral est refuse
@@ -1940,12 +1942,23 @@ une part de l'ecart peut etre du hasard.
        tete, Mistral en second. **Cles posees et fournisseurs branches le
        2026-10-02 : 5 modeles** (2 NVIDIA, 3 Mistral), **Mistral valide
        par l'equipe pedagogique le 2026-10-02**
-4 ter. [ ] **Echeance par appel propre a SWE** : 30 s pour les deux benchs
-       aujourd'hui (`LLM_TIMEOUT_SECONDS`), alors que NVIDIA a repondu en
-       44,4 s sur 56k tokens et que le run `nemotron-3-ultra` a perdu un appel
-       sur l'echeance. Un champ du `Bench` (`constants.MBPP` / `constants.SWE`)
-       plutot qu'une constante globale ; MBPP garde 30 s (120 s pour 10
-       iterations)
+4 ter. [x] **Echeance par appel propre a SWE** — fait le 2026-10-02 (non
+       commite). La constante globale `LLM_TIMEOUT_SECONDS = 30` est
+       supprimee ; `Bench` porte `llm_timeout`, a cote des autres limites du
+       bench : **SWE 60 s**, MBPP 30 s (inchange). La boucle prend
+       `self.bench.llm_timeout`, toujours dans `min(…, temps restant -
+       marge)`. **Pourquoi 60 s** : NVIDIA a repondu en 44,4 s sur 56k tokens
+       (une fois sur trois) et la sonde est montee a 48 s, coupes a 30 s ;
+       5 tentatives a 60 s coutent au plus 300 s, un tiers des 900 s, avant
+       que le repli prenne le relais. **Effet de bord** : le client compare le
+       `Retry-After` d'un 429 a cette echeance ; en SWE, un 429 a 45 s devient
+       une attente de 45 s puis un nouvel essai, au lieu d'une erreur
+       permanente (verifie : MBPP → `Permanent`, SWE → `Transient` 45 s).
+       **Verifie** : 3 tests ajoutes (`tests/test_loop.py`), celui de SWE
+       echoue si l'on remet 30 s en dur ; 453 tests verts, `ruff` propre. Pas
+       de run SWE reel (outils non branches)
+   - [ ] Revoir la valeur apres les premiers vrais runs SWE : la latence
+         au-dela de 56k tokens n'est pas mesuree
 4 quater. [x] **`Makefile` : un defaut par benchmark** — fait le
        2026-10-02 (non commite). `URL` / `MODEL` (OpenRouter
        `nemotron-3-ultra-550b-a55b:free`, inutilisable) remplaces par
@@ -2002,7 +2015,7 @@ une part de l'ecart peut etre du hasard.
 
 ### Le banc d'essai `tests/`
 
-**440 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
+**453 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

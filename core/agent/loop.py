@@ -309,7 +309,7 @@ class Loop:
                     )
                 self.thought(
                     min(
-                        constants.LLM_TIMEOUT_SECONDS,
+                        self.bench.llm_timeout,
                         self.timeout_limit
                         - (time.time() - self.start_time)
                         - constants.MARGIN_EXECUTION_TIME,

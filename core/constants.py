@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from enum import Enum
 
 MARGIN_EXECUTION_TIME = 5
-LLM_TIMEOUT_SECONDS = 30
 LLM_MAX_RETRIES = 4
 ESTIMATED_CHARS_PER_TOKEN = 2.5
 LLM_STOP_SEQUENCE = [
@@ -27,7 +26,9 @@ class BenchName(Enum):
 
 @dataclass(frozen=True)
 class Bench:
-    """Hard limits of a benchmark and its default retry delay (s)."""
+    """Hard limits of a benchmark, its default retry delay (s) and the
+    longest an LLM call may take (s), always bounded by the time left.
+    """
 
     name: str
     input_max_token: int
@@ -35,6 +36,7 @@ class Bench:
     iterations: int
     timeout: int
     retry_after: int
+    llm_timeout: int
 
 
 SWE = Bench(
@@ -44,6 +46,7 @@ SWE = Bench(
     iterations=30,
     timeout=900,
     retry_after=10,
+    llm_timeout=60,
 )
 
 MBPP = Bench(
@@ -53,6 +56,7 @@ MBPP = Bench(
     iterations=10,
     timeout=120,
     retry_after=5,
+    llm_timeout=30,
 )
 
 SWE_PROMPT_EXEMPLE = r"""Task: Fix the issue described in the problem statement.
