@@ -1,0 +1,8 @@
+modele=openai/gpt-oss-120b
+provider=https://api.groq.com/openai/v1
+taches=benchmarks/mbpp/run6 (memes fichiers)
+code=81bfa3b + modifications non commitees
+exemple_mbpp=multiligne
+debut=2026-10-03T15:51:43+02:00
+note=gpt-oss sans sequence d arret (send_stop false, coupe locale a <end_code>), avec reprise de reasoning et comptage des tokens rejetes (2026-10-03); a comparer a run41 (meme modele, meme agent avec la sequence d arret), memes taches
+fin=2026-10-03T15:53:10+02:00

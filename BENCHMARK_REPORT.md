@@ -41,18 +41,23 @@ part of what is measured below:
 several lines, in a triple-quoted string, instead of a one-line
 `final_answer("def f(a): ...")` (ablation E).
 
-**Two client changes of 2026-10-03 came after every run of this report:**
+**Three client changes of 2026-10-03**, measured by run41 to run44 only
+(ablation F):
 
 - an empty `content` is no longer always retried: when the reasoning holds a
   complete code block, it is used as the answer (section 3.1 explains why
   this rescues only a minority of Groq's empty answers);
 - the tokens of a response the client rejects (empty `content`, missing
   `message`) are now counted, in the totals and in the step. **Before, they
-  were not**, so the token figures below omit them. Groq is the provider
-  concerned: nearly all its failures are such answers (section 3.1). Mistral
-  had no failure, NVIDIA's were HTTP 503 and timeouts, which carry no token
-  count, and OpenRouter's causes were not logged. **Groq's input and output
-  tokens are therefore understated.**
+  were not**, so the token figures of run5 to run40 omit them. Groq is the
+  provider concerned: nearly all its failures are such answers (section
+  3.1). Mistral had no failure, NVIDIA's were HTTP 503 and timeouts, which
+  carry no token count, and OpenRouter's causes were not logged. **Groq's
+  input and output tokens are therefore understated up to run40**;
+- Groq `gpt-oss-120b` no longer receives the stop sequence
+  (`"send_stop": false` in `configs/models.json`): the provider applied it to
+  the reasoning too and cut the answer before it was written (section 3.1).
+  The client cuts the answer at `<end_code>` itself.
 
 ### 1.2 How results are judged
 
@@ -89,7 +94,7 @@ are used for every model comparison; set C was used once.
 
 | Provider | Model | Free access | MBPP runs |
 |---|---|---|---|
-| Groq | `openai/gpt-oss-120b` | free tier, 8,000 tokens/min | run6, 7, 9, 10, 12, 13, 14, 27, 28, 31, 32; run39, 40 as the fallback |
+| Groq | `openai/gpt-oss-120b` | free tier, 8,000 tokens/min | run6, 7, 9, 10, 12, 13, 14, 27, 28, 31, 32, 41–44; run39, 40 as the fallback |
 | OpenRouter | `nvidia/nemotron-3-super-120b-a12b:free` | `:free` models, 50 requests/day per account | run5 |
 | OpenRouter | `minimax/minimax-m3:free` | idem (no longer free since 2026-10-01) | run8 |
 | OpenRouter | `qwen/qwen3.8-27b:free` | idem | run11 |
@@ -124,13 +129,16 @@ of 2026-10-03 (commit `e13feb3` or its content, with the loop fixes, the
 provider fallback and the multi-line MBPP example of ablation E).
 `nemotron-3-super` could not be rerun: NVIDIA retired it that morning
 (HTTP 410), and its 20 tasks went to the fallback model, Groq (the second
-Groq "current agent" row). Times are the agent's wall-clock time per task.
+Groq "current agent" row). The last Groq row is run43 + 44, with the client
+changes of ablation F: unlike all the others, its token counts are complete.
+Times are the agent's wall-clock time per task.
 
 | Model | Pass | Valid metrics | Iterations (mean) | Input tokens (mean) | Output tokens (mean) | Time per task (mean / max) | Total time |
 |---|---|---|---|---|---|---|---|
 | Groq `gpt-oss-120b` | **16/20** | 20/20 | 1.05 | 1,068 | 534 | **5.7 s** / 27.7 s | 114 s |
 | Groq `gpt-oss-120b`, current agent | **18/20** | 20/20 | 1.05 | 1,004 | 517 | 6.7 s / 23.0 s | 134 s |
 | Groq `gpt-oss-120b`, current agent, as the fallback | 16/20 | 20/20 | 0.95 | 942 | 548 | 5.4 s / 19.7 s | 108 s |
+| Groq `gpt-oss-120b`, current agent, no stop sequence | **18/20** | 20/20 | 1.00 | 941 | 537 | **1.6 s** / 3.8 s | **32 s** |
 | NVIDIA `nemotron-3-super` | 15/20 | 20/20 | 1.10 | 1,311 | 789 | 16.8 s / 79.9 s | 336 s |
 | NVIDIA `nemotron-3-ultra` | 14/20 | 19/20 | 1.35 | 1,659 | 414 | 34.9 s / 94.2 s | 697 s |
 | Mistral `codestral-2508` | 11/20 | 17/20 | 1.90 | 3,126 | 888 | 8.8 s / 17.3 s | 177 s |
@@ -265,7 +273,8 @@ A task is *lost* when 5 attempts in a row fail.
 | Provider / model | Runs | Tasks | Attempts | Retries | Availability | Response time (mean / median / max) | Tasks lost |
 |---|---|---|---|---|---|---|---|
 | Groq `gpt-oss-120b` | 6, 7, 9, 10, 12–14 | 70 | 146 | 60 | 59 % | **1.5 / 1.2 / 5.1 s** | 4 |
-| Groq `gpt-oss-120b`, with fallback | 27, 28, 31, 32, 39, 40 | 60 | 128 | 64 | 50 % | **1.5 / 1.3 / 3.5 s** | 0 (3 ↪) |
+| Groq `gpt-oss-120b`, with fallback | 27, 28, 31, 32, 39–42 | 80 | 164 | 82 | 50 % | **1.4 / 1.2 / 3.5 s** | 0 (4 ↪) |
+| Groq `gpt-oss-120b`, no stop sequence | 43, 44 | 20 | 21 | **0** | **100 %** | **1.5 / 1.3 / 3.8 s** | 0 |
 | OpenRouter `nemotron-3-super:free` | 5 | 10 | 29 | 13 | 55 % | 15.9 / 16.2 / 29.1 s | 0 |
 | OpenRouter `minimax-m3:free` | 8 | 10 | 29 | 1 | 97 % | 8.5 / 5.9 / 25.5 s | 0 |
 | OpenRouter `qwen3.8-27b:free` | 11 | 10 | 34 | 22 | 35 % | 11.3 / 9.5 / 27.0 s | 3 |
@@ -281,17 +290,21 @@ stderr):
 - **Groq**: all 27 logged retries of run12–14 are an HTTP 200 answer with an
   empty `content` field, the model having put its whole answer in `reasoning`.
   Fast when it answers, but four answers in ten are unusable. Same picture on
-  2026-10-03 (run27, 28, 31, 32, 39, 40): 59 of the 64 failures are an empty
-  `content`, 5 are HTTP 429 on the 8,000 tokens/min limit. Three tasks
-  reached 5 failures in a row and were finished by `ministral-14b-2512`
-  through the fallback (↪), where they would have been lost before; the
-  attempts above count Groq's requests only. **Why `content` is empty**: a
+  2026-10-03 (run27, 28, 31, 32, 39 to 42): 77 of the 82 failures are an
+  empty `content`, 5 are HTTP 429 on the 8,000 tokens/min limit. Four tasks
+  reached 5 failures in a row and went to `ministral-14b-2512` through the
+  fallback (↪), where they would have been lost before; the attempts above
+  count Groq's requests only. **Why `content` is empty**: a
   probe of 14 MBPP prompts on 2026-10-03 got 6 empty answers. In 4 of them
   the reasoning stops mid-sentence ("We must end code with ") exactly where
   the model was about to write `<end_code>`, the agent's stop sequence: the
   provider ends the response before the answer is written. One used up its
   1,500 output tokens reasoning, and only one held the whole answer in its
-  reasoning, the case the client now recovers (section 1.1);
+  reasoning, the case the client now recovers (section 1.1). The same probe
+  without `stop` got 1 empty answer out of 14, with its code in the
+  reasoning, and nothing written after `<end_code>` in the 13 others. **With
+  the stop sequence left out (run43, 44), Groq did not fail once in 21
+  attempts**;
 - **NVIDIA `nemotron-3-ultra`**: 18 × HTTP 503 "Service temporarily
   overloaded" and 6 × the 30 s deadline;
   **`nemotron-3-super`**: 4 × the 30 s deadline. NVIDIA retired it on
@@ -346,6 +359,8 @@ step where the agent's own asserts run without error and the accepted
 | Mistral `ministral-14b-2512`, current agent (run35, 36) | 14 | 0 | 13/14 | 0.07 | 1 | 1 |
 | Mistral `ministral-8b-2512`, current agent (run37, 38) | 15 | 0 | 15/15 | 0.00 | 0 | 2 |
 | Groq, current agent, as the fallback (run39, 40) | 18 | 0 | 18/18 | 0.00 | 0 | 2 |
+| Groq, current agent, rejected tokens counted (run41, 42) | 14 | 0 | 14/14 | 0.00 | 1 | 1 |
+| Groq, current agent, no stop sequence (run43, 44) | 19 | 0 | 18/19 | 0.05 | 1 | 1 |
 
 Blind submissions disappeared when the prompt started asking for the asserts
 and `final_answer()` in the same code block: since then `final_answer` only
@@ -375,6 +390,7 @@ All on MBPP, same task files, same model, one change at a time.
 | D | Input limit checked before sending + `SyntaxError` explained on refusal | Mistral `codestral-2508`, A + B | run19 + 20: **11/20**, 17/20 valid | run25 + 26: **17/20**, 20/20 valid |
 | E | MBPP example submits on several lines, in a triple-quoted string (prompt) | Mistral `codestral-2508`, A + B | run29 + 30: **16/20**, 7 one-line answers refused, 1.80 iterations and 2,174 input tokens per task | run33 + 34: **17/20**, 0 refused, 1.25 iterations and 1,317 input tokens per task |
 | E | idem | Groq `gpt-oss-120b`, A + B | run27 + 28: **17/20**, 3 of them finished by the fallback | run31 + 32: **18/20**, no fallback |
+| F | Stop sequence left out for `gpt-oss`, cut by the client (with the reasoning recovery and the rejected tokens counted) | Groq `gpt-oss-120b`, A + B | run41 + 42: **13/20**, 18 failed attempts out of 37, 1,637 input and 814 output tokens per task | run43 + 44: **18/20**, 0 failed out of 21, 941 input and 537 output tokens per task |
 
 - **A** cost 40 % more input for no gain in pass rate. Its value was to make
   the model run its tests: the one-iteration successes of the old prompt were
@@ -431,12 +447,49 @@ invalid Python:
 | 138 | **P** 1 | **P** 1 | F 3 | F 2 |
 | **Total** | **17/20** | **18/20** | **16/20** | **17/20** |
 
+- **F** first shows what the uncounted tokens hid. With the stop sequence
+  still sent and the rejected tokens now counted (run41 + 42), Groq falls
+  from 18/20 (run31 + 32) to 13/20: its empty answers now eat the
+  1,500-token output budget, and four tasks run out of it (MBPP 80, 247
+  and 168 before any usable answer, 252 at its second step). The reasoning recovery saved one answer
+  out of 18 (MBPP 451). Leaving the stop sequence out removes the cause:
+  run43 + 44 get no empty answer at all, pass 18/20 with complete token
+  counts, and take 1.6 s per task instead of 6.8 s. Only MBPP 462 (output
+  cap) and 400 (hidden test) fail, as for nearly every model.
+
+Ablation F, per task — same marks as section 2.1; ⟲ answer recovered from
+the reasoning:
+
+| MBPP task | stop sent, rejected tokens not counted (run31, 32) | stop sent, counted (run41, 42) | no stop sequence (run43, 44) |
+|---|---|---|---|
+| 127 | **P** 1 | **P** 1 | **P** 1 |
+| 80 | **P** 1 | F 0 | **P** 1 |
+| 252 | **P** 3 | F 1 | **P** 2 |
+| 251 | **P** 1 | **P** 1 | **P** 1 |
+| 264 | **P** 1 | **P** 1 | **P** 1 |
+| 94 | **P** 1 | **P** 1 | **P** 1 |
+| 305 | **P** 1 | F 1 | **P** 1 |
+| 247 | **P** 1 | F 0 | **P** 1 |
+| 457 | **P** 1 | **P** 1 | **P** 1 |
+| 65 | **P** 1 | **P** 1 | **P** 1 |
+| 451 | **P** 1 | **P** 1 ⟲ | **P** 1 |
+| 462 | F 0 | F 0 | F 0 |
+| 266 | **P** 1 | **P** 1 | **P** 1 |
+| 108 | **P** 1 | **P** 1 | **P** 1 |
+| 234 | **P** 1 | **P** 1 | **P** 1 |
+| 400 | F 1 † | F 1 † | F 1 † |
+| 431 | **P** 1 | **P** 1 | **P** 1 |
+| 168 | **P** 1 | F 0 ↪ | **P** 1 |
+| 71 | **P** 1 | **P** 1 | **P** 1 |
+| 138 | **P** 1 | **P** 1 | **P** 1 |
+| **Total** | **18/20** | **13/20** | **18/20** |
+
 Caveat: each task was run **once** per configuration. On 10 to 20 tasks, a
 difference of one or two tasks is within noise: `codestral` on the same agent
 and the same example scored 17/20 (run25 + 26) then 16/20 (run29 + 30), and
 Groq 18/20 (run31 + 32) then 16/20 (run39 + 40). Only
-B's blind submissions (2 → 0), C's MBPP 451, D's invalid metrics (3 → 0) and
-E's refused answers (7 → 0) are clear-cut.
+B's blind submissions (2 → 0), C's MBPP 451, D's invalid metrics (3 → 0),
+E's refused answers (7 → 0) and F's failed attempts (18 → 0) are clear-cut.
 
 SWE-bench ablation — *to be completed*.
 
@@ -444,13 +497,12 @@ SWE-bench ablation — *to be completed*.
 
 ### 6.1 MBPP (provisional)
 
-- **Groq `gpt-oss-120b`** has the best score (16/20; 18/20 and 16/20 on
-  the current agent) and by far the shortest answer time (1.2 to 1.3 s
-  median), but 41 to 50 % of its attempts fail (empty `content`, mostly cut
-  by the stop sequence), its token figures are understated (section 1.1),
-  and it cannot be used for SWE-bench (HTTP 413 above 8,000 tokens). On the
-  current agent its failures no longer cost tasks: the fallback finished the
-  three it would have lost.
+- **Groq `gpt-oss-120b` without the stop sequence** (run43, 44) gives the
+  best MBPP result of this report: 18/20, no failed attempt in 21, 1.6 s per
+  task, and complete token counts. Before, 41 to 50 % of its attempts failed
+  (empty `content`, mostly cut by the stop sequence) and its token figures
+  were understated (section 1.1). It cannot be used for SWE-bench (HTTP 413
+  above 8,000 tokens), and its free tier allows 8,000 tokens per minute.
 - **Mistral `codestral-2508`** went from 11/20 to 17/20 with the loop fixes,
   and held it on two further runs (16/20, then 17/20 with the multi-line
   example). With that example it needs 1.25 iterations per task instead of
@@ -485,7 +537,7 @@ files and which checker output is authoritative for each run.
 | Runs | Model |
 |---|---|
 | run5 | OpenRouter `nemotron-3-super:free` |
-| run6, run7, run9, run10, run12, run13, run14, run27, run28, run31, run32 | Groq `gpt-oss-120b` |
+| run6, run7, run9, run10, run12, run13, run14, run27, run28, run31, run32, run41–run44 | Groq `gpt-oss-120b` |
 | run39, run40 | requested NVIDIA `nemotron-3-super` (retired, HTTP 410); every task done by the fallback, Groq `gpt-oss-120b` |
 | run8 | OpenRouter `minimax-m3:free` |
 | run11 | OpenRouter `qwen3.8-27b:free` |

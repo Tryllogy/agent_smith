@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **493 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **500 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Fournisseurs SWE : il en manque un depuis le 2026-10-03.** NVIDIA a
@@ -43,13 +43,14 @@ metriques valides 17/20 → 20/20 (`run25`/`run26`). Le 2026-10-03,
 −39 % ; Groq 17/20 → 18/20. Puis **rejeu des autres sur l'agent actuel**
 (`run35` a `run40`) : `ministral-14b` et `ministral-8b` 15/20 → 13/20
 (taches perdues : raisonnement jusqu'au plafond de sortie, dans le bruit
-d'un tirage), `nemotron-3-super` impossible a rejouer (retire). Detail en
-P2.6.
+d'un tirage), `nemotron-3-super` impossible a rejouer (retire). Enfin
+**Groq sans sequence d'arret** (ablation F, `run43`/`run44`) : **18/20, aucun
+echec en 21 tentatives**, 1,6 s par tache, tokens complets. Detail en P2.6.
 
 **`BENCHMARK_REPORT.md` : partie MBPP ecrite** (2026-10-02, en anglais ;
 mis a jour le 2026-10-03 : ablation E, rejeu sur l'agent actuel, retrait de
-`nemotron-3-super`, tokens Groq sous-estimes), sur les 36 campagnes `run5` a
-`run40`,
+`nemotron-3-super`, tokens Groq sous-estimes, ablation F), sur les 40
+campagnes `run5` a `run44`,
 **versionnees dans `benchmarks/mbpp/`**
 avec leurs `solution.json`. Les sections SWE gardent la structure du sujet et
 attendent les outils (P2.6).
@@ -66,10 +67,13 @@ restants de la minute n'est plus envoyee (P2.3, « Limite de tokens par
 minute »).
 
 **Reponse vide : reprise depuis `reasoning`, et tokens des reponses rejetees
-comptes** (2026-10-03, non commite). Quand `content` est vide et que
+comptes** (2026-10-03, `81bfa3b`). Quand `content` est vide et que
 `reasoning` porte un bloc de code ferme, c'est la reponse. Les tokens d'une
 reponse rejetee par le client vont dans les totaux **et** dans l'etape : les
-totaux Groq publies jusqu'ici sont donc sous-estimes. Detail en P2.3.
+totaux Groq publies jusqu'a `run40` sont donc sous-estimes. **Puis la vraie
+cause corrigee** (2026-10-03, non commite) : Groq `gpt-oss-120b` ne recoit
+plus la sequence d'arret (`"send_stop": false`), que le fournisseur
+appliquait aussi au raisonnement. Detail en P2.3.
 
 **Sandbox manual dans le prompt, cote `Prompt`** (2026-10-03, `fb8f224`) :
 le manuel de ndi-tull (`sandbox/manual.py`) est insere tel quel par
@@ -275,9 +279,14 @@ et `nemotron-3-super` sur l'agent actuel (`run35` a `run40`, P2.6), qui
 revele le **retrait de `nemotron-3-super`** par NVIDIA : defaut SWE passe a
 `codestral-2508`, `nemotron-3-ultra` a sa place dans les listes de repli
 (`560a18f`). Puis la **reprise de `reasoning`** quand `content` est vide et
-le **comptage des tokens des reponses rejetees** (P2.3). **Non commite** :
-`core/` (6 fichiers), `BENCHMARK_REPORT.md`, `benchmarks/README.md`,
-`benchmarks/mbpp/run35` a `run40`, `TODO.md`.
+le **comptage des tokens des reponses rejetees** (P2.3), commites dans
+`81bfa3b`. Campagne Groq `run41`/`run42` : 13/20, les reponses vides mangent
+maintenant le budget de sortie. Sonde sans `stop` (1 reponse vide sur 14 au
+lieu de 6), d'ou **`send_stop: false` pour `gpt-oss`**, puis `run43`/`run44` :
+18/20, aucun echec (P2.3, P2.6, ablation F). **Non commite** :
+`configs/models.json`, `core/config_models.py`, `core/llm/client.py`,
+`BENCHMARK_REPORT.md`, `benchmarks/README.md`, `benchmarks/mbpp/run35` a
+`run44`, `TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -740,8 +749,8 @@ etait dans l'ordre des tests : tant que le delai n'etait verifie que sur le
 candidat **immediat**, une clef atteinte en sautant une morte passait sans
 controle — avec 4 clefs, deux n'etaient jamais examinees.
 
-**Reponse sans `content` : reprise depuis `reasoning` (2026-10-03, non
-commite).** Sonde du jour sur Groq `gpt-oss-120b`, 14 prompts MBPP avec le
+**Reponse sans `content` : reprise depuis `reasoning` (2026-10-03,
+`81bfa3b`).** Sonde du jour sur Groq `gpt-oss-120b`, 14 prompts MBPP avec le
 vrai payload (`stop: ["<end_code>"]`, `max_tokens: 1500`) : **6 reponses sans
 `content`**.
 
@@ -760,15 +769,22 @@ reasoning ») ; le texte repris devient le message assistant, `llm_output` ne
 le double pas. 10 tests (8 client, 2 boucle), mutations detectees. Rejoue sur
 les 6 reponses reelles : seule MBPP 108 est reprise.
 
-- [ ] **La vraie cause est la sequence d'arret** (4 cas sur 6) : en
+- [x] **La vraie cause est la sequence d'arret** (4 cas sur 6) : en
       raisonnant sur le format, le modele ecrit `<end_code>` dans son
-      raisonnement, et le fournisseur coupe avant la reponse. Piste : un
-      reglage par modele dans `models.json` pour ne pas envoyer `stop` a
-      `gpt-oss`, l'extraction ne gardant que le premier bloc. Risque : une
-      « Observation » inventee apres le code, donc des tokens de sortie. A
-      tester sur la meme sonde avant de **decider**
+      raisonnement, et le fournisseur coupe avant la reponse. **Corrige le
+      2026-10-03 (non commite)** : `ModelConfig.send_stop` (defaut `true`) ;
+      a `false`, `request_body()` n'envoie pas `stop` et `cut_at_stop()`
+      coupe le `content` a `<end_code>` cote client, comme l'aurait fait le
+      fournisseur (une coupe qui vide le `content` passe par la reprise de
+      `reasoning` ou le retry). Active pour Groq `openai/gpt-oss-120b`
+      seulement. **Sonde sans `stop`** (memes 14 prompts) : 1 reponse vide au
+      lieu de 6 (son code dans `reasoning`, donc repris), 13 avec code, 554
+      tokens de sortie en moyenne contre 556, **rien apres `<end_code>`,
+      aucune « Observation » inventee**. Campagne : P2.6, ablation F. 7 tests
+      (6 client, 1 sur le vrai `models.json`), 2 mutations detectees, 500
+      tests verts
 
-**Tokens des reponses rejetees (2026-10-03, non commite).** Une reponse
+**Tokens des reponses rejetees (2026-10-03, `81bfa3b`).** Une reponse
 HTTP 200 rejetee par le client (`content` vide sans code, `message` absent,
 schema invalide) avait ete facturee, mais ses tokens n'etaient comptes nulle
 part : la sonde a vu MBPP 462 bruler 1 500 tokens de sortie dans une reponse
@@ -2097,9 +2113,38 @@ en parallele.
 - [ ] **Decider du modele MBPP par defaut** : sur l'agent actuel,
       `codestral-2508` 17/20 (1,25 it., aucun echec en 152 tentatives)
       contre `ministral-14b-2512` 13/20, le defaut du `Makefile`. Seul ecart
-      entre modeles Mistral au-dela du bruit mesure
+      entre modeles Mistral au-dela du bruit mesure. **Depuis l'ablation F**,
+      Groq `gpt-oss-120b` sans sequence d'arret fait 18/20 sans un echec,
+      en 1,6 s par tache, mais plafonne a 8 000 tokens/min en gratuit
 - [ ] `META.txt` de `run39`/`run40` : nomme le modele demande ; une note
       dirait que Groq a repondu (le `README` des benchmarks le dit deja)
+
+#### Ablation F : sequence d'arret pour `gpt-oss` (2026-10-03, `run41` a `run44`)
+
+Memes 20 taches, Groq `gpt-oss-120b`. `run41`/`run42` sur `81bfa3b` (reprise
+de `reasoning`, tokens rejetes comptes, `stop` encore envoye) ; `run43`/`run44`
+sur le meme code + `send_stop: false`. `RESUME.json` porte un champ
+`from_reasoning` depuis `run41`.
+
+| | `run31`/`32` (avant) | `run41`/`42` (tokens comptes) | `run43`/`44` (sans `stop`) |
+|---|---|---|---|
+| PASS | 18/20 | **13/20** | **18/20** |
+| Tentatives / echecs | 39 / 17 | 37 / 18 | **21 / 0** |
+| Entree / sortie par tache | 1 004 / 517 (sous-estimes) | 1 637 / 814 | **941 / 537** (complets) |
+| Temps par tache | 6,7 s | 6,8 s | **1,6 s** |
+| Reprises depuis `reasoning` | — | 1 (MBPP 451) | 0 |
+
+- **`run41`/`run42` montre ce que cachaient les tokens non comptes** : les
+  reponses vides mangent le budget de 1 500 tokens de sortie, et 4 taches
+  (80, 252, 247, 168) l'epuisent, trois avant toute reponse utilisable,
+  la 252 a sa deuxieme etape. Le 18/20
+  de `run31`/`run32` reposait en partie sur des retries non factures
+- **Sans `stop`, la cause disparait** : aucune reponse vide, les 5 taches
+  perdues passent, et seules 462 (plafond) et 400 (test cache) echouent,
+  comme pour presque tous les modeles
+- [ ] OpenRouter `gpt-oss-20b:free` : meme famille, non mesure. Le sondage
+      NVIDIA du 2026-10-02 le classait deja « protocole incompatible, meme
+      sans `stop` » ; a ne regler qu'apres une sonde
 
 ---
 
@@ -2193,7 +2238,8 @@ en parallele.
        **Rejeu fait le 2026-10-03** (`run35` a `run40`) : les deux
        `ministral` a 13/20, `nemotron-3-super` retire. Reste a **decider** du
        modele MBPP par defaut (`codestral-2508` 17/20 contre `ministral-14b`
-       13/20 sur l'agent actuel, P2.6)
+       13/20 sur l'agent actuel, et Groq 18/20 sans echec depuis l'ablation
+       F, P2.6)
 4 sexies. [~] **`BENCHMARK_REPORT.md`** — partie MBPP ecrite et backing
        versionne (`0faae67`), ablation E ajoutee le 2026-10-03. Reste la partie SWE, des que les outils sont
        appelables : 5 modeles × 3 taches (`sympy__sympy-14711`,
@@ -2218,11 +2264,12 @@ en parallele.
        2026-10-03, doublons retires (P2.4). Reste a **convenir avec
        ndi-tull** de ce que le sandbox exposera pour que les CLI recuperent
        le manuel, puis a remplacer `manual=None` dans les deux CLI
-4 undecies. [~] **Reponses Groq sans `content`** — reprise depuis
-       `reasoning` et comptage des tokens rejetes faits le 2026-10-03 (P2.3).
-       Restent : **decider** de la sequence d'arret pour `gpt-oss` (vraie
-       cause, 4 cas sur 6), puis mesurer l'ensemble sur une campagne Groq de
-       20 taches (les totaux de tokens Groq publies sont sous-estimes)
+4 undecies. [x] **Reponses Groq sans `content`** — reprise depuis
+       `reasoning` et comptage des tokens rejetes (`81bfa3b`), puis
+       sequence d'arret retiree pour `gpt-oss` (`send_stop: false`, non
+       commite), le tout mesure le 2026-10-03 (ablation F) : Groq 18/20,
+       **0 echec en 21 tentatives** au lieu d'un sur deux. Reste ouvert :
+       OpenRouter `gpt-oss-20b:free`, non mesure (P2.6)
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer le manuel a `Prompt(manual=)` au lieu de `None` (le cote `Prompt`
@@ -2245,7 +2292,7 @@ en parallele.
 
 ### Le banc d'essai `tests/`
 
-**493 tests** (2026-10-03), gitignore, hors rendu — c'est un outil de travail,
+**500 tests** (2026-10-03), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

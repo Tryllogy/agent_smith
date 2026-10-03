@@ -73,13 +73,7 @@ class LLMClient:
             request: httpx.Response = httpx.post(
                 url=self.url,
                 headers={**header},
-                json={
-                    **self.model_config.extra_body,
-                    "model": self.model_name,
-                    "messages": messages,
-                    "stop": self.stop_sequence,
-                    "max_tokens": max_tokens,
-                },
+                json=self.request_body(messages, max_tokens),
                 timeout=timeout_max,
             )
             request.raise_for_status()
@@ -87,6 +81,35 @@ class LLMClient:
             thread_result["error"] = e
             return
         thread_result["request"] = request
+
+    def request_body(self, messages: list, max_tokens: int) -> dict:
+        """Return the JSON body: extra_body, then the loop-owned keys.
+
+        The stop sequence is left out when the model asks for it with
+        send_stop=False.
+        """
+        body: dict = {
+            **self.model_config.extra_body,
+            "model": self.model_name,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        if self.model_config.send_stop:
+            body["stop"] = self.stop_sequence
+        return body
+
+    def cut_at_stop(self, content: str) -> str:
+        """Return content up to its first stop sequence.
+
+        Applied only when the stop sequence was not sent: the client
+        does what the provider would have done, so the conversation
+        keeps nothing the model wrote after it.
+        """
+        if self.model_config.send_stop or not isinstance(content, str):
+            return content
+        for stop in self.stop_sequence or []:
+            content = content.split(stop, 1)[0]
+        return content
 
     def make_request(
         self,
@@ -175,7 +198,7 @@ class LLMClient:
                 status_code=request.status_code,
                 **consumed,
             )
-        content: str = self.provider.get_content(data)
+        content: str = self.cut_at_stop(self.provider.get_content(data))
         reasoning = self.provider.get_reasoning(data)
         content_from_reasoning: bool = False
         if content is None or content.strip() == "":
