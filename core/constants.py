@@ -207,7 +207,7 @@ final_answer(patch)
 ```<end_code>
 """
 
-MBPP_PROMPT_EXEMPLE = r"""Task:
+MBPP_PROMPT_EXEMPLE = r'''Task:
 task_definition: Return the smallest absolute value in a list of integers.
 function_definition: def smallest_abs(a):
 test_list: assert smallest_abs([3, -1, 5]) == 1
@@ -226,6 +226,7 @@ def smallest_abs(a):
 assert smallest_abs([3, -1, 5]) == 1, 'smallest_abs([3, -1, 5]) == 1'
 assert smallest_abs([-5, 2]) == 2, 'smallest_abs([-5, 2]) == 2'
 assert smallest_abs([-4, -9]) == 4, 'smallest_abs([-4, -9]) == 4'
-final_answer("def smallest_abs(a): return min(map(abs,a))")
+final_answer("""def smallest_abs(a):
+    return min(map(abs,a))""")
 ```<end_code>
-"""
+'''

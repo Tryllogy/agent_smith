@@ -1,0 +1,6 @@
+exit=0
+--- stdout
+
+--- stderr
+LLM retry 1 on step 1: Transient error from LLM provider: Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01m08171dne5dt7zpgr07yqxba` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 6811, Requested 1703. Please try again in 3.855s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing (HTTP 429); waiting 4.0s
+LLM retry 2 on step 1: Transient error from LLM provider: Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01m08171dne5dt7zpgr07yqxba` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 6270, Requested 1815. Please try again in 637.5ms. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing (HTTP 429); waiting 1.0s
