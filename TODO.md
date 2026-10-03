@@ -15,19 +15,22 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **475 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **493 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
-**Fournisseurs SWE : 5 modeles declares, le minimum du rapport.** NVIDIA Build
-(`nemotron-3-super`, `nemotron-3-ultra`) et Mistral (`codestral-2508`,
-`ministral-14b-2512`, `ministral-8b-2512`), tous passes par le vrai CLI SWE le
-2026-10-02. **Mistral valide par l'equipe pedagogique le 2026-10-02**
+**Fournisseurs SWE : il en manque un depuis le 2026-10-03.** NVIDIA a
+retire `nemotron-3-super` ce jour-la (HTTP 410, « end of life ») : restent 4
+modeles utilisables pour SWE, `nemotron-3-ultra` (NVIDIA) et `codestral-2508`,
+`ministral-14b-2512`, `ministral-8b-2512` (Mistral), tous passes par le vrai
+CLI SWE le 2026-10-02. Le sujet en demande **au moins 5** (*« at least 5
+models »*, ch. VI). **Mistral valide par l'equipe pedagogique le 2026-10-02**
 (credits mensuels offerts, sans carte ; le sujet le range d'ailleurs parmi
 les *« Cloud providers with free access »*, § V.6.1).
 
 **`Makefile` : un modele par defaut par benchmark** (2026-10-02,
-`e0a7737`) — MBPP `ministral-14b-2512` (Mistral), SWE
-`nvidia/nemotron-3-super-120b-a12b` (NVIDIA). **Seuls les modeles declares
+`e0a7737`) — MBPP `ministral-14b-2512` (Mistral), SWE `codestral-2508`
+(Mistral) depuis le 2026-10-03 (`560a18f`), a la place de `nemotron-3-super`
+retire. **Seuls les modeles declares
 dans `configs/models.json` sont acceptes** (`c7727cc`) : un modele payant
 non declare est refuse avant toute requete.
 
@@ -37,10 +40,16 @@ defauts de la boucle corriges et `codestral` rejoue : 11/20 → **17/20**,
 metriques valides 17/20 → 20/20 (`run25`/`run26`). Le 2026-10-03,
 **l'exemple MBPP passe en multiligne** (ablation E, `run27` a `run34`) :
 `codestral` 16/20 → 17/20, 7 refus `SyntaxError` → 0, entree par tache
-−39 % ; Groq 17/20 → 18/20. Detail en P2.6.
+−39 % ; Groq 17/20 → 18/20. Puis **rejeu des autres sur l'agent actuel**
+(`run35` a `run40`) : `ministral-14b` et `ministral-8b` 15/20 → 13/20
+(taches perdues : raisonnement jusqu'au plafond de sortie, dans le bruit
+d'un tirage), `nemotron-3-super` impossible a rejouer (retire). Detail en
+P2.6.
 
-**`BENCHMARK_REPORT.md` : partie MBPP ecrite** (2026-10-02, en anglais,
-ablation E ajoutee le 2026-10-03), sur les 30 campagnes `run5` a `run34`,
+**`BENCHMARK_REPORT.md` : partie MBPP ecrite** (2026-10-02, en anglais ;
+mis a jour le 2026-10-03 : ablation E, rejeu sur l'agent actuel, retrait de
+`nemotron-3-super`, tokens Groq sous-estimes), sur les 36 campagnes `run5` a
+`run40`,
 **versionnees dans `benchmarks/mbpp/`**
 avec leurs `solution.json`. Les sections SWE gardent la structure du sujet et
 attendent les outils (P2.6).
@@ -55,6 +64,12 @@ MBPP validees par la moulinette (P2.3, « Repli de provider »).
 (2026-10-02, `36e071b`) : une requete qui ne tiendrait pas dans les tokens
 restants de la minute n'est plus envoyee (P2.3, « Limite de tokens par
 minute »).
+
+**Reponse vide : reprise depuis `reasoning`, et tokens des reponses rejetees
+comptes** (2026-10-03, non commite). Quand `content` est vide et que
+`reasoning` porte un bloc de code ferme, c'est la reponse. Les tokens d'une
+reponse rejetee par le client vont dans les totaux **et** dans l'etape : les
+totaux Groq publies jusqu'ici sont donc sous-estimes. Detail en P2.3.
 
 **Sandbox manual dans le prompt, cote `Prompt`** (2026-10-03, `fb8f224`) :
 le manuel de ndi-tull (`sandbox/manual.py`) est insere tel quel par
@@ -77,6 +92,10 @@ namespace du sandbox, et Docker.
 > jamais tourne contre un vrai depot.
 
 **Dettes qui bloquent la mesure** (la 2 et la 3 sont reglees) :
+
+0. **Il manque un 5e modele SWE** (2026-10-03) : `nemotron-3-super` retire
+   par NVIDIA, 4 modeles restent pour un minimum de 5 (« Prochaines
+   actions », 4 bis)
 
 1. **Les outils MCP sont merges mais non conformes** : `origin/ndi-tull`
    (`9c8c4b2` → `64f06cc`) est rapatrie dans `thomas` le 2026-10-01
@@ -251,8 +270,14 @@ pedagogique, d'ou le defaut MBPP du `Makefile` sur `ministral-14b-2512`
 et doublons retires (P2.4, 4 decies), commite dans `fb8f224`. Puis
 **l'exemple MBPP passe en multiligne**, mesure contre l'ancien sur Groq et
 `codestral` (`run27` a `run34`, P2.4, P2.6, ablation E du rapport).
-**Non commite** : `core/constants.py`, `BENCHMARK_REPORT.md`,
-`benchmarks/README.md`, `benchmarks/mbpp/run27` a `run34`, `TODO.md`.
+Commite dans `e13feb3`. Puis le **rejeu** de `ministral-14b`, `ministral-8b`
+et `nemotron-3-super` sur l'agent actuel (`run35` a `run40`, P2.6), qui
+revele le **retrait de `nemotron-3-super`** par NVIDIA : defaut SWE passe a
+`codestral-2508`, `nemotron-3-ultra` a sa place dans les listes de repli
+(`560a18f`). Puis la **reprise de `reasoning`** quand `content` est vide et
+le **comptage des tokens des reponses rejetees** (P2.3). **Non commite** :
+`core/` (6 fichiers), `BENCHMARK_REPORT.md`, `benchmarks/README.md`,
+`benchmarks/mbpp/run35` a `run40`, `TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -714,6 +739,49 @@ le delai depasse le budget de la tache, la condamne, et recommence. Le piege
 etait dans l'ordre des tests : tant que le delai n'etait verifie que sur le
 candidat **immediat**, une clef atteinte en sautant une morte passait sans
 controle — avec 4 clefs, deux n'etaient jamais examinees.
+
+**Reponse sans `content` : reprise depuis `reasoning` (2026-10-03, non
+commite).** Sonde du jour sur Groq `gpt-oss-120b`, 14 prompts MBPP avec le
+vrai payload (`stop: ["<end_code>"]`, `max_tokens: 1500`) : **6 reponses sans
+`content`**.
+
+| Cas | Nombre | Ce que porte `reasoning` |
+|---|---|---|
+| reponse entiere dans `reasoning` | 1 (MBPP 108) | Thought + bloc de code + `final_answer` |
+| coupee par la sequence d'arret | 4 (94, 305, 457, 451) | reflexion arretee net : « We must end code with », « Use », « Ensure » |
+| plafond de sortie | 1 (462) | 1 500 tokens de reflexion, pas de code |
+
+Le client reprend donc `reasoning` **seulement s'il porte un bloc de code
+ferme** (`reasoning_holds_code()`, motif partage avec l'extraction dans
+`constants.CODE_BLOCK_PATTERN`) ; sinon, retry comme avant, avec un message
+plus precis (« …nor a code block in its reasoning »). La reprise est signalee
+sur stderr (« LLM content empty on step S: answer taken from the
+reasoning ») ; le texte repris devient le message assistant, `llm_output` ne
+le double pas. 10 tests (8 client, 2 boucle), mutations detectees. Rejoue sur
+les 6 reponses reelles : seule MBPP 108 est reprise.
+
+- [ ] **La vraie cause est la sequence d'arret** (4 cas sur 6) : en
+      raisonnant sur le format, le modele ecrit `<end_code>` dans son
+      raisonnement, et le fournisseur coupe avant la reponse. Piste : un
+      reglage par modele dans `models.json` pour ne pas envoyer `stop` a
+      `gpt-oss`, l'extraction ne gardant que le premier bloc. Risque : une
+      « Observation » inventee apres le code, donc des tokens de sortie. A
+      tester sur la meme sonde avant de **decider**
+
+**Tokens des reponses rejetees (2026-10-03, non commite).** Une reponse
+HTTP 200 rejetee par le client (`content` vide sans code, `message` absent,
+schema invalide) avait ete facturee, mais ses tokens n'etaient comptes nulle
+part : la sonde a vu MBPP 462 bruler 1 500 tokens de sortie dans une reponse
+vide. Les erreurs portent maintenant `input_tokens` / `output_tokens` (lus
+dans `usage`, 0 si absents ou non entiers), et la boucle les ajoute aux
+totaux **et a l'etape du tour** (`turn_input_tokens` /
+`turn_output_tokens`, remis a zero en fin d'etape et non plus a chaque
+essai) : les totaux restent la somme des etapes, comme le definit le schema.
+**Effet voulu** : les plafonds voient la vraie depense ; une reponse vide de
+1 500 tokens termine la tache sur « Output token limit exceeded » au lieu de
+relancer. Restent a 0, faute d'information : erreurs HTTP, delais depasses,
+erreurs dans le corps d'un 200 (OpenRouter). 8 tests, 3 mutations
+detectees, 493 tests verts.
 
 #### Repli de provider — ce que dit le sujet (releve du 2026-09-02)
 
@@ -1270,7 +1338,7 @@ prompt SWE (3 164 tokens), chacun en 3 variantes (sans reglage,
 
 | Resultat | Modeles |
 |---|---|
-| **retenus** | `nemotron-3-super-120b-a12b` (`enable_thinking: false`, 5-8 s), `nemotron-3-ultra-550b-a55b` (`thinking: false`, 7-19 s) |
+| **retenus** | `nemotron-3-super-120b-a12b` (`enable_thinking: false`, 5-8 s ; **retire par NVIDIA le 2026-10-03**, HTTP 410), `nemotron-3-ultra-550b-a55b` (`thinking: false`, 7-19 s) |
 | satures : plus de 120 s sur les 3 variantes | `deepseek-v4.1-flash`, `kimi-k3`, `glm-5.3`, `glm-5.3-flash`, `gemma-4-31b-it` |
 | sature : 503 « worker limit 212/32 », 82 s quand il repond | `poolside/laguna-xs-2.1` |
 | protocole incompatible : `content` vide, appels d'outils au format natif dans le raisonnement | `gpt-oss-20b` (meme avec `reasoning_effort: low`, meme sans `stop`), `meta/muse-glimmer-30b` |
@@ -1625,7 +1693,9 @@ que l'etape 2 reclamait.
 passes par le vrai CLI SWE, detail en P2.3 « Fournisseurs pour SWE » :
 `nvidia/nemotron-3-super-120b-a12b`, `nvidia/nemotron-3-ultra-550b-a55b`
 (NVIDIA), `codestral-2508`, `ministral-14b-2512`, `ministral-8b-2512`
-(Mistral, **valide le 2026-10-02**). Le releve de ce qui a ete ecarte
+(Mistral, **valide le 2026-10-02**). **Le 2026-10-03, NVIDIA retire
+`nemotron-3-super`** (entree supprimee de `models.json`, `560a18f`) : 4
+modeles, **il en faut un 5e**. Le releve de ce qui a ete ecarte
 (19 modeles NVIDIA sondes, Groq, Cerebras, Together, Gemini) est deja de la
 matiere pour la partie « Setup ».
 
@@ -1655,8 +1725,8 @@ cles d'API avant versionnage : aucune.
 - [~] Setup (modeles/providers, taches + justification) — MBPP fait, taches
       SWE a justifier
 - [~] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
-      — MBPP fait (6 modeles × 20 taches, plus Groq et `codestral` sur
-      l'agent du 2026-10-03), SWE vide
+      — MBPP fait (6 modeles × 20 taches, plus les 4 modeles encore
+      disponibles sur l'agent du 2026-10-03), SWE vide
 - [~] Fiabilite provider : temps de reponse moyen, retries, disponibilite —
       MBPP fait ; SWE : seules les latences a 56k tokens
 - [~] ≥ 2 metriques intermediaires : etape du 1er acces au fichier du patch final
@@ -1954,10 +2024,10 @@ cotes) : le correctif ne la previent pas, il permet d'en sortir au tour
 suivant. Premiere reussite de la **400** par un modele. **Un seul tirage** :
 une part de l'ecart peut etre du hasard.
 
-- [ ] Rejouer les 4 autres modeles avec les correctifs (seuls `codestral` et
-      Groq l'ont ete, le 2026-10-03, avec l'exemple multiligne en plus).
-      Attendu : peu d'effet, ils faisaient peu de refus (0 a 3) et
-      seulement 2 metriques INVALID a eux quatre
+- [x] Rejouer les 4 autres modeles avec les correctifs — fait le
+      2026-10-03 pour Groq et `codestral` (ablation E), puis les deux
+      `ministral` (ci-dessous). `nemotron-3-super` impossible (retire),
+      `nemotron-3-ultra` laisse de cote (deja ecarte)
 
 #### Ablation E : exemple MBPP multiligne (2026-10-03, `run27` a `run34`)
 
@@ -1999,6 +2069,37 @@ un champ `fallback`.
 - [ ] **Identifiant d'organisation Groq** (`org_…`) dans 4 logs de
       `run27`/`run28` (message du 429) : ce n'est pas une cle, mais aucun log
       deja versionne ne le contient. A masquer ou non avant le commit
+
+#### Rejeu sur l'agent actuel (2026-10-03, `run35` a `run40`)
+
+Memes 20 taches, agent `e13feb3` (correctifs, repli, exemple multiligne).
+Mistral en sequence (`ministral-14b` puis `ministral-8b`, meme cle), NVIDIA
+en parallele.
+
+| | Agent du 2026-10-02 | Agent actuel |
+|---|---|---|
+| `ministral-14b` (`run21`/`22` → `run35`/`36`) | 15/20, 20/20 valides | **13/20**, 20/20 valides, 1,05 it., 1 522 entree/tache, 9,7 s |
+| `ministral-8b` (`run23`/`24` → `run37`/`38`) | 15/20, 19/20 valides | **13/20**, 20/20 valides, 0,90 it., 1 179 entree/tache, 5,5 s |
+| `nemotron-3-super` (`run15`/`16` → `run39`/`40`) | 15/20 | **non mesure** : 20 × HTTP 410, les 20 taches faites par Groq via le repli (16/20) |
+
+- **Les deux `ministral` perdent 2 taches, sans rapport avec l'exemple** :
+  3 des 4 taches perdues (264 pour les deux, 305 pour 14b) finissent le
+  Thought au plafond de 1 500 tokens avant tout code (264 : formule apres
+  formule pour l'age du chien) ; la 4e (71, 8b) echoue au test cache.
+  Tous les `final_answer` sont multilignes, aucun invalide
+- **Bruit mesure** : Groq, meme agent, 18/20 (`run31`/`32`) puis 16/20
+  (`run39`/`40`). Un ecart de 2 taches ne separe pas deux modeles
+- **`nemotron-3-super` retire le 2026-10-03 a 09:00 UTC** (« has reached its
+  end of life »). Le 410 a declenche le repli des le 1er essai : aucune
+  tache perdue. Consequences traitees le jour meme (`560a18f`) : defaut SWE
+  → `codestral-2508`, entree retiree de `models.json`, `nemotron-3-ultra`
+  en dernier dans les deux listes de repli
+- [ ] **Decider du modele MBPP par defaut** : sur l'agent actuel,
+      `codestral-2508` 17/20 (1,25 it., aucun echec en 152 tentatives)
+      contre `ministral-14b-2512` 13/20, le defaut du `Makefile`. Seul ecart
+      entre modeles Mistral au-dela du bruit mesure
+- [ ] `META.txt` de `run39`/`run40` : nomme le modele demande ; une note
+      dirait que Groq a repondu (le `README` des benchmarks le dit deja)
 
 ---
 
@@ -2051,7 +2152,10 @@ un champ `fallback`.
        **Releve fait** (P2.3, « Fournisseurs pour SWE ») : NVIDIA Build en
        tete, Mistral en second. **Cles posees et fournisseurs branches le
        2026-10-02 : 5 modeles** (2 NVIDIA, 3 Mistral), **Mistral valide
-       par l'equipe pedagogique le 2026-10-02**
+       par l'equipe pedagogique le 2026-10-02**. **Le 2026-10-03, NVIDIA
+       retire `nemotron-3-super` : 4 modeles, il en faut un 5e** pour le
+       rapport (« at least 5 models »). A sonder : les nouveaux modeles du
+       catalogue NVIDIA, d'autres modeles Mistral
 4 ter. [x] **Echeance par appel propre a SWE** — fait le 2026-10-02
        (`11cae12`). La constante globale `LLM_TIMEOUT_SECONDS = 30` est
        supprimee ; `Bench` porte `llm_timeout`, a cote des autres limites du
@@ -2079,14 +2183,17 @@ un champ `fallback`.
        `$(or $(MODEL),$(MBPP_MODEL))` : `MODEL=` / `URL=` en ligne de commande
        restent prioritaires ; `make help` affiche les defauts. Verifie :
        `make -n` sur les deux cibles et une surcharge, `make mbpp` reel
-       (MBPP 80, PASSED / VALID, sous Groq avant le passage a Mistral)
+       (MBPP 80, PASSED / VALID, sous Groq avant le passage a Mistral).
+       **Le 2026-10-03, defaut SWE passe a `codestral-2508`** (Mistral,
+       `560a18f`), `nemotron-3-super` etant retire par NVIDIA
 4 quinquies. [~] **Campagne MBPP des 5 modeles** — faite (`run15` a
        `run24`), deux defauts de la boucle corriges (`c21b0ce`) et
        `codestral` rejoue (`run25`/`run26`, 17/20). **Exemple MBPP passe en
        multiligne et mesure** le 2026-10-03 (ablation E, `run27` a `run34`).
-       Reste : rejouer `ministral-14b`, `ministral-8b` et `nemotron-3-super`
-       (et `nemotron-3-ultra`, s'il n'est pas ecarte) sur l'agent actuel,
-       avant de figer le modele MBPP
+       **Rejeu fait le 2026-10-03** (`run35` a `run40`) : les deux
+       `ministral` a 13/20, `nemotron-3-super` retire. Reste a **decider** du
+       modele MBPP par defaut (`codestral-2508` 17/20 contre `ministral-14b`
+       13/20 sur l'agent actuel, P2.6)
 4 sexies. [~] **`BENCHMARK_REPORT.md`** — partie MBPP ecrite et backing
        versionne (`0faae67`), ablation E ajoutee le 2026-10-03. Reste la partie SWE, des que les outils sont
        appelables : 5 modeles × 3 taches (`sympy__sympy-14711`,
@@ -2097,7 +2204,8 @@ un champ `fallback`.
        (`19e17be`, P2.3, « Repli de provider »). Reste a **decider** des
        erreurs qui declenchent le repli, de l'ordre des listes, et du repli
        en milieu de tache (avertissement `Multiple model_names` de la
-       moulinette)
+       moulinette). Le 410 de `nemotron-3-super` (2026-10-03) a declenche
+       le repli des le 1er essai, comme voulu
 4 octies. [~] **Limite de tokens par minute de Mistral** — verifiee avant
        l'envoi (P2.3, `36e071b`). Reste a decider s'il faut aussi la limite
        par requete, Groq, ou un plafond mensuel compte par nous
@@ -2110,6 +2218,11 @@ un champ `fallback`.
        2026-10-03, doublons retires (P2.4). Reste a **convenir avec
        ndi-tull** de ce que le sandbox exposera pour que les CLI recuperent
        le manuel, puis a remplacer `manual=None` dans les deux CLI
+4 undecies. [~] **Reponses Groq sans `content`** — reprise depuis
+       `reasoning` et comptage des tokens rejetes faits le 2026-10-03 (P2.3).
+       Restent : **decider** de la sequence d'arret pour `gpt-oss` (vraie
+       cause, 4 cas sur 6), puis mesurer l'ensemble sur une campagne Groq de
+       20 taches (les totaux de tokens Groq publies sont sous-estimes)
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
    - passer le manuel a `Prompt(manual=)` au lieu de `None` (le cote `Prompt`
@@ -2132,7 +2245,7 @@ un champ `fallback`.
 
 ### Le banc d'essai `tests/`
 
-**475 tests** (2026-10-03), gitignore, hors rendu — c'est un outil de travail,
+**493 tests** (2026-10-03), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

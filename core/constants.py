@@ -10,6 +10,7 @@ LLM_STOP_SEQUENCE = [
 LLM_START_SEQUENCE = [
     "```python",
 ]
+CODE_BLOCK_PATTERN = r"```(?:python)? *\n(.*?)```"
 
 MODELS_CONFIG_FILE = "configs/models.json"
 FALLBACK_CONFIG_FILE = "configs/fallback.json"

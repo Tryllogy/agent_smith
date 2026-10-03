@@ -17,6 +17,7 @@ class LLMResponse(BaseModel):
     model_name: str
     finish_reason: str
     request_time_ms: float
+    content_from_reasoning: bool = False
 
 
 # ===== ProviderConfig ======

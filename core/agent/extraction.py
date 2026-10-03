@@ -1,6 +1,8 @@
 import ast
 import re
 
+from core import constants
+
 
 def extract_code_from_text(text: str) -> dict:
     """
@@ -12,9 +14,8 @@ def extract_code_from_text(text: str) -> dict:
         dict: The extracted code.
     """
     extracted_code: str = ""
-    code_block_pattern = r"```(?:python)? *\n(.*?)```"
 
-    code_blocks = re.findall(code_block_pattern, text, re.DOTALL)
+    code_blocks = re.findall(constants.CODE_BLOCK_PATTERN, text, re.DOTALL)
     if not code_blocks:
         return {
             "code": extracted_code.strip(),

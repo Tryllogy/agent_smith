@@ -1,0 +1,9 @@
+exit=0
+--- stdout
+
+--- stderr
+LLM fallback on step 1: Unexpected error from LLM provider: Client error '410 Gone' for url 'https://integrate.api.nvidia.com/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/410 (HTTP 410); switching to openai/gpt-oss-120b at https://api.groq.com/openai/v1/chat/completions
+LLM retry 2 on step 1: The LLM response does not contain the expected 'content' field. (HTTP 200); waiting 5.0s
+LLM retry 3 on step 1: The LLM response does not contain the expected 'content' field. (HTTP 200); waiting 5.0s
+LLM retry 4 on step 1: The LLM response does not contain the expected 'content' field. (HTTP 200); waiting 5.0s

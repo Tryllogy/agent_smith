@@ -1,0 +1,8 @@
+modele=ministral-14b-2512
+provider=https://api.mistral.ai/v1
+taches=benchmarks/mbpp/run6 (memes fichiers)
+code=e13feb3
+exemple_mbpp=multiligne
+debut=2026-10-03T14:36:19+02:00
+note=rejeu sur l'agent actuel (correctifs de la boucle, repli, exemple multiligne) du 2026-10-03; a comparer a run21 (meme modele, agent du 2026-10-02), memes taches
+fin=2026-10-03T14:39:17+02:00
