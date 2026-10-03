@@ -18,10 +18,20 @@ class LLMResponseError(Exception):
     other unexpected conditions.
     """
 
-    def __init__(self, message: str, status_code: int | None = None) -> None:
-        """Keep the HTTP status code, if any."""
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+    ) -> None:
+        """Keep the HTTP status code, if any, and the tokens billed for
+        the rejected response (0 when the provider reported none).
+        """
         super().__init__(message)
         self.status_code = status_code
+        self.input_tokens: int = input_tokens
+        self.output_tokens: int = output_tokens
 
 
 class TransientLLMResponseError(LLMResponseError):
@@ -36,9 +46,13 @@ class TransientLLMResponseError(LLMResponseError):
         message: str,
         status_code: int | None = None,
         retry_after: float | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> None:
-        """Keep the status code and the provider's retry delay (s)."""
-        super().__init__(message, status_code)
+        """Keep the status code, the provider's retry delay (s) and the
+        tokens billed for the rejected response.
+        """
+        super().__init__(message, status_code, input_tokens, output_tokens)
         self.retry_after: float | None = retry_after
 
 

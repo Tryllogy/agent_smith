@@ -29,7 +29,7 @@ Docker must be running, with the `python:3.11-slim` image available.
 
 ## Which verdict is authoritative
 
-- **run9 to run34**: the `reel` and `metrics` fields of `RESUME.json` are the
+- **run9 to run40**: the `reel` and `metrics` fields of `RESUME.json` are the
   checker's verdicts; its full output is in `logs/validate_XX.txt`.
 - **run5 to run8**: these runs were first checked by running `test_list`
   locally, and `RESUME.json` keeps that verdict. They were re-validated with
@@ -49,3 +49,8 @@ task switched to a fallback model, each switch being logged as `LLM fallback
 on step S: <cause>; switching to <model> at <url>`. `META.txt` has an
 `exemple_mbpp` field: `une-ligne` (one-line `final_answer` in the prompt's
 MBPP example) or `multiligne` (multi-line, ablation E of the report).
+
+`run39` and `run40` asked for NVIDIA `nemotron-3-super`, retired that
+morning: every task got HTTP 410 and was done by the fallback model, Groq
+`gpt-oss-120b`. `META.txt` names the requested model; the `model_name` of
+each step names the model that answered.

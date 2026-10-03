@@ -1,5 +1,6 @@
 import json
 import math
+import re
 import threading
 import time
 
@@ -165,20 +166,29 @@ class LLMClient:
             )
             if error:
                 raise error from e
+        consumed: dict = self.consumed_tokens(data)
         message: dict = self.provider.get_message(data)
         if message is None:
             raise errors.PermanentLLMResponseError(
                 "The LLM response does not contain the expected"
                 + " 'message' field.",
                 status_code=request.status_code,
+                **consumed,
             )
         content: str = self.provider.get_content(data)
+        reasoning = self.provider.get_reasoning(data)
+        content_from_reasoning: bool = False
         if content is None or content.strip() == "":
-            raise errors.TransientLLMResponseError(
-                "The LLM response does not contain the expected"
-                + " 'content' field.",
-                status_code=request.status_code,
-            )
+            if not self.reasoning_holds_code(reasoning):
+                raise errors.TransientLLMResponseError(
+                    "The LLM response does not contain the expected"
+                    + " 'content' field, nor a code block in its"
+                    + " reasoning.",
+                    status_code=request.status_code,
+                    **consumed,
+                )
+            content, reasoning = reasoning, None
+            content_from_reasoning = True
         if self.provider.get_usage(data) is None:
             raise errors.PermanentLLMResponseError(
                 "The LLM response does not contain the expected"
@@ -189,19 +199,50 @@ class LLMClient:
             model: str | None = self.provider.get_model(data)
             return LLMResponse(
                 content=content,
-                reasoning=self.provider.get_reasoning(data),
+                reasoning=reasoning,
                 input_tokens=self.provider.get_input_tokens(data),
                 output_tokens=self.provider.get_output_tokens(data),
                 model_name=model if model != "" else self.model_name,
                 finish_reason=self.provider.get_finish_reason(data),
                 request_time_ms=request_time_ms,
+                content_from_reasoning=content_from_reasoning,
             )
         except ValidationError as e:
             raise errors.PermanentLLMResponseError(
                 "The LLM response does not match the expected"
                 + f" schema: {e}",
                 status_code=request.status_code,
+                **consumed,
             ) from e
+
+    def consumed_tokens(self, data: dict) -> dict:
+        """Return the tokens the provider billed for this response.
+
+        Kept on the error when the response is rejected: the tokens were
+        spent all the same. A count that is not an integer counts as 0.
+        """
+        input_tokens = self.provider.get_input_tokens(data)
+        output_tokens = self.provider.get_output_tokens(data)
+        return {
+            "input_tokens": input_tokens
+            if isinstance(input_tokens, int)
+            else 0,
+            "output_tokens": output_tokens
+            if isinstance(output_tokens, int)
+            else 0,
+        }
+
+    @staticmethod
+    def reasoning_holds_code(reasoning) -> bool:
+        """Return True if reasoning is text holding a complete code block.
+
+        A reasoning model sometimes writes its whole answer in the
+        reasoning and leaves content empty: the answer is then usable.
+        Without a closed code block, the reasoning is only thinking.
+        """
+        return isinstance(reasoning, str) and bool(
+            re.search(constants.CODE_BLOCK_PATTERN, reasoning, re.DOTALL)
+        )
 
     @staticmethod
     def estimate_cost(messages: list, max_tokens: int) -> int:

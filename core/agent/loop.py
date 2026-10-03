@@ -55,8 +55,8 @@ class Loop:
         self.sandbox_output: str = ""
         self.request_time_ms: float = 0.0
         self.llm_output: str = ""
-        self.last_usage_input: int = 0
-        self.last_usage_output: int = 0
+        self.turn_input_tokens: int = 0
+        self.turn_output_tokens: int = 0
         self.last_prompt_tokens: int = 0
         self.last_prompt_chars: int = 0
         if config_sandbox is None:
@@ -84,11 +84,16 @@ class Loop:
         self.request_time_ms = llm_response.request_time_ms
         self.usage_input += llm_response.input_tokens
         self.usage_output += llm_response.output_tokens
-        self.last_usage_input = llm_response.input_tokens
-        self.last_usage_output = llm_response.output_tokens
+        self.turn_input_tokens += llm_response.input_tokens
+        self.turn_output_tokens += llm_response.output_tokens
         self.last_prompt_tokens = llm_response.input_tokens
         self.last_prompt_chars = self.prompt_chars()
         self.finish_reason: str = llm_response.finish_reason
+        if llm_response.content_from_reasoning:
+            sys.stderr.write(
+                f"LLM content empty on step {self.iteration + 1}:"
+                " answer taken from the reasoning\n"
+            )
         self.thoughts.append(text)
         reason: str = llm_response.reasoning if llm_response.reasoning else ""
         self.reasoning.append(reason)
@@ -283,14 +288,14 @@ class Loop:
         self.retries: int = 0
         self.backend_retries: int = 0
         self.turn_requests = 0
+        self.turn_input_tokens = 0
+        self.turn_output_tokens = 0
         self.last_llm_error = ""
         while self.iteration < self.iteration_limit:
             self.sandbox_input = ""
             self.sandbox_output = ""
             self.llm_output = ""
             self.request_time_ms = 0.0
-            self.last_usage_input = 0
-            self.last_usage_output = 0
             try:
                 if (
                     time.time()
@@ -317,6 +322,7 @@ class Loop:
                     max_tokens=max_tokens,
                 )
             except errors.TransientLLMResponseError as e:
+                self.count_rejected_tokens(e)
                 self.retries += 1
                 self.backend_retries += 1
                 self.last_llm_error = self.describe_llm_error(e)
@@ -345,6 +351,7 @@ class Loop:
                 time.sleep(self.retry_after)
                 continue
             except errors.PermanentLLMResponseError as e:
+                self.count_rejected_tokens(e)
                 if self.fall_back(self.describe_llm_error(e)):
                     self.retries += 1
                     self.last_llm_error = self.describe_llm_error(e)
@@ -378,8 +385,22 @@ class Loop:
             self.retries = 0
             self.backend_retries = 0
             self.turn_requests = 0
+            self.turn_input_tokens = 0
+            self.turn_output_tokens = 0
             self.last_llm_error = ""
         return self.make_solution_output(error="Iteration limit exceeded")
+
+    def count_rejected_tokens(self, error: errors.LLMResponseError) -> None:
+        """Count the tokens of a response the client rejected.
+
+        The provider billed them: they go into the totals and into the
+        turn's step, so the totals stay the sum of the steps and the
+        token guards see what was really spent.
+        """
+        self.usage_input += error.input_tokens
+        self.usage_output += error.output_tokens
+        self.turn_input_tokens += error.input_tokens
+        self.turn_output_tokens += error.output_tokens
 
     @staticmethod
     def describe_llm_error(error: errors.LLMResponseError) -> str:
@@ -448,8 +469,8 @@ class Loop:
         """Build the StepMetrics of the current turn."""
         step_metric: dict = {
             "step": self.iteration + 1,
-            "input_tokens": self.last_usage_input,
-            "output_tokens": self.last_usage_output,
+            "input_tokens": self.turn_input_tokens,
+            "output_tokens": self.turn_output_tokens,
             "request_time_ms": self.request_time_ms,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
             "api_url": self.client.url,
