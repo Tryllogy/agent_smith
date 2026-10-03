@@ -29,7 +29,7 @@ Docker must be running, with the `python:3.11-slim` image available.
 
 ## Which verdict is authoritative
 
-- **run9 to run26**: the `reel` and `metrics` fields of `RESUME.json` are the
+- **run9 to run34**: the `reel` and `metrics` fields of `RESUME.json` are the
   checker's verdicts; its full output is in `logs/validate_XX.txt`.
 - **run5 to run8**: these runs were first checked by running `test_list`
   locally, and `RESUME.json` keeps that verdict. They were re-validated with
@@ -43,3 +43,9 @@ The log files of run5 to run8 come from an earlier campaign script:
 `validate_XX.txt`. From run9 on, the agent's stdout and stderr are
 in `logs/agent_XX.log`; since run12, every LLM retry is logged there with its
 cause (`LLM retry N on step S: <cause>; waiting X.Xs`).
+
+From run27 on, `RESUME.json` also has a `fallback` field: how many times the
+task switched to a fallback model, each switch being logged as `LLM fallback
+on step S: <cause>; switching to <model> at <url>`. `META.txt` has an
+`exemple_mbpp` field: `une-ligne` (one-line `final_answer` in the prompt's
+MBPP example) or `multiligne` (multi-line, ablation E of the report).

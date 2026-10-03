@@ -1,0 +1,8 @@
+modele=codestral-2508
+provider=https://api.mistral.ai/v1
+taches=benchmarks/mbpp/run6 (memes fichiers)
+code=fb8f224 + modifications non commitees
+exemple_mbpp=multiligne
+debut=2026-10-03T14:02:37+02:00
+note=ablation de l'exemple MBPP (final_answer d'une ligne contre multiligne) du 2026-10-03; a comparer a run25 (meme modele, meme exemple) et run29/run33, memes taches
+fin=2026-10-03T14:04:27+02:00

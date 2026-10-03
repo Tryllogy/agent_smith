@@ -1,0 +1,9 @@
+exit=0
+--- stdout
+
+--- stderr
+LLM retry 1 on step 1: The LLM response does not contain the expected 'content' field. (HTTP 200); waiting 5.0s
+LLM retry 2 on step 1: The LLM response does not contain the expected 'content' field. (HTTP 200); waiting 5.0s
+LLM retry 3 on step 1: The LLM response does not contain the expected 'content' field. (HTTP 200); waiting 5.0s
+LLM retry 4 on step 1: The LLM response does not contain the expected 'content' field. (HTTP 200); waiting 5.0s
+LLM fallback on step 1: The LLM response does not contain the expected 'content' field. (HTTP 200); switching to ministral-14b-2512 at https://api.mistral.ai/v1/chat/completions

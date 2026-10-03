@@ -15,7 +15,7 @@
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **474 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **475 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Fournisseurs SWE : 5 modeles declares, le minimum du rapport.** NVIDIA Build
@@ -34,10 +34,14 @@ non declare est refuse avant toute requete.
 **MBPP : 4 modeles a 15-17/20, au niveau de Groq (16/20).** Campagne des 5
 modeles sur les 20 taches de reference (`run15` a `run24`), puis deux
 defauts de la boucle corriges et `codestral` rejoue : 11/20 → **17/20**,
-metriques valides 17/20 → 20/20 (`run25`/`run26`). Detail en P2.6.
+metriques valides 17/20 → 20/20 (`run25`/`run26`). Le 2026-10-03,
+**l'exemple MBPP passe en multiligne** (ablation E, `run27` a `run34`) :
+`codestral` 16/20 → 17/20, 7 refus `SyntaxError` → 0, entree par tache
+−39 % ; Groq 17/20 → 18/20. Detail en P2.6.
 
-**`BENCHMARK_REPORT.md` : partie MBPP ecrite** (2026-10-02, en anglais), sur
-les 22 campagnes `run5` a `run26`, **versionnees dans `benchmarks/mbpp/`**
+**`BENCHMARK_REPORT.md` : partie MBPP ecrite** (2026-10-02, en anglais,
+ablation E ajoutee le 2026-10-03), sur les 30 campagnes `run5` a `run34`,
+**versionnees dans `benchmarks/mbpp/`**
 avec leurs `solution.json`. Les sections SWE gardent la structure du sujet et
 attendent les outils (P2.6).
 
@@ -52,7 +56,7 @@ MBPP validees par la moulinette (P2.3, « Repli de provider »).
 restants de la minute n'est plus envoyee (P2.3, « Limite de tokens par
 minute »).
 
-**Sandbox manual dans le prompt, cote `Prompt`** (2026-10-03, non commite) :
+**Sandbox manual dans le prompt, cote `Prompt`** (2026-10-03, `fb8f224`) :
 le manuel de ndi-tull (`sandbox/manual.py`) est insere tel quel par
 `Prompt(manual=)`, et ce qu'il dit deja n'est plus repete par nos consignes.
 **Les deux CLI passent encore `manual=None`** : `render_manual()` attend le
@@ -244,8 +248,11 @@ pedagogique, d'ou le defaut MBPP du `Makefile` sur `ministral-14b-2512`
 
 **2026-10-03** : merge d'`origin/ndi-tull` (`c4cff46`), qui apporte
 `sandbox/manual.py` et les transports MCP. **Manuel insere dans le prompt**
-et doublons retires (P2.4, 4 decies). **Non commite** :
-`core/agent/prompt.py`, `agent_mbpp/cli.py`, `agent_swebench/cli.py`.
+et doublons retires (P2.4, 4 decies), commite dans `fb8f224`. Puis
+**l'exemple MBPP passe en multiligne**, mesure contre l'ancien sur Groq et
+`codestral` (`run27` a `run34`, P2.4, P2.6, ablation E du rapport).
+**Non commite** : `core/constants.py`, `BENCHMARK_REPORT.md`,
+`benchmarks/README.md`, `benchmarks/mbpp/run27` a `run34`, `TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -1393,7 +1400,7 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       des 5 nouveaux modeles explorent sans reciter, `ministral-8b` ecrit un
       correctif de memoire des le tour 2
 - [~] **Injection du sandbox manual** — cote `Prompt`, faite le 2026-10-03
-      (non commite). `Prompt(tools=list)` devient `Prompt(manual=str)` : le
+      (`fb8f224`). `Prompt(tools=list)` devient `Prompt(manual=str)` : le
       texte de `render_manual` est insere **tel quel**, avant les imports
       autorises, et omis s'il est vide. **Doublons retires** : avec un
       manuel, le prompt ne repete plus ce que le manuel dit deja — la regle
@@ -1419,12 +1426,12 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
         see »*, plus general que notre *« A tool call alone prints
         NOTHING »*, adosse a un echec constate. Verifier au premier run avec
         outils que les appels nus ne reviennent pas
-- [~] **Exemple MBPP** : coquilles corrigees (`Obvservation`, virgule du second
+- [x] **Exemple MBPP** : coquilles corrigees (`Obvservation`, virgule du second
       `assert` passee apres le saut de ligne, cloture ``` ``` ``` recollee,
       indentation du corps). **Le piege principal est corrige** (constate le
       2026-10-01) : `final_answer("def smallest_abs(a): return min(map(abs,a))")`
-      tient sur une ligne. **Reste :**
-- [ ] **Ce `final_answer` d'une ligne est imite a tort par `codestral-2508`**
+      tient sur une ligne. **Puis passe en multiligne le 2026-10-03 :**
+- [x] **Ce `final_answer` d'une ligne est imite a tort par `codestral-2508`**
       (2026-10-02). Sur une fonction a boucles, il colle tout avec des `;`
       (`final_answer("def lps(s): n = len(s); for i in ...")`), une
       `SyntaxError` : 9 refus de la boucle sur 20 taches, en `run19`/`run20`
@@ -1437,6 +1444,14 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       les modeles — le format d'une ligne avait ete choisi contre le piege des
       `\n` litteraux (`run5`, MBPP 94). A remesurer sur au moins Groq et
       `codestral` si on le change
+  - **Tranche le 2026-10-03 : exemple passe en multiligne.** Il finit par
+    `final_answer("""def smallest_abs(a):` / `    return min(map(abs,a))""")`,
+    sur deux lignes ; la constante est delimitee par `r'''...'''`, puisqu'elle
+    contient desormais `"""`. Mesure contre l'ancien sur le meme agent (P2.6,
+    « Ablation E ») : `codestral` ne fait plus aucun refus `SyntaxError` (7 → 0),
+    et le piege des `\n` litteraux n'est pas revenu (0 reponse invalide sur
+    42). Test ajoute : l'exemple soumet, sur plusieurs lignes, le code qu'il
+    vient de tester (echoue sur l'ancien exemple) ; 475 tests verts
 - [x] **Prompts et relances corriges (2026-10-01, `9c4754a`)**, mesures le
       meme jour en `run9`/`run10` (voir P2.6) :
   - exemple MBPP : les `assert` sont suivis de `print('all tests passed')`,
@@ -1640,7 +1655,8 @@ cles d'API avant versionnage : aucune.
 - [~] Setup (modeles/providers, taches + justification) — MBPP fait, taches
       SWE a justifier
 - [~] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
-      — MBPP fait (6 modeles × 20 taches), SWE vide
+      — MBPP fait (6 modeles × 20 taches, plus Groq et `codestral` sur
+      l'agent du 2026-10-03), SWE vide
 - [~] Fiabilite provider : temps de reponse moyen, retries, disponibilite —
       MBPP fait ; SWE : seules les latences a 56k tokens
 - [~] ≥ 2 metriques intermediaires : etape du 1er acces au fichier du patch final
@@ -1649,7 +1665,7 @@ cles d'API avant versionnage : aucune.
       — la discipline est mesuree sur MBPP ; les deux autres n'existent que
       sur SWE
 - [~] **Etude d'ablation** avant/apres un changement, memes taches, meme modele
-      — 4 sur MBPP. Le sujet ne dit pas qu'elle doit porter sur SWE ; en
+      — 5 sur MBPP (E le 2026-10-03). Le sujet ne dit pas qu'elle doit porter sur SWE ; en
       faire une sur SWE reste plus sur
 - [~] Conclusions justifiees par les donnees + les `solution.json` de backing
       **presents dans le repo** — conclusions MBPP provisoires ; backing MBPP
@@ -1744,7 +1760,7 @@ millisecondes**). Traite en P2.3.
 > **Traces perdues.** `cache/run1..4` n'existent plus : `cache/` est gitignore,
 > rien n'a jamais ete commite. Les chiffres ci-dessus sont tout ce qu'il reste —
 > suffisant au recit, pas a une verification. **Fait le 2026-10-02 pour
-> `run5` a `run26` : `benchmarks/mbpp/`.** Le sujet exige les fichiers de
+> `run5` a `run26` (`run27` a `run34` le 2026-10-03) : `benchmarks/mbpp/`.** Le sujet exige les fichiers de
 > backing dans le repo.
 
 - [ ] Rejouer 59 et 413 en quota epuise pour verifier le nombre de requetes
@@ -1938,9 +1954,51 @@ cotes) : le correctif ne la previent pas, il permet d'en sortir au tour
 suivant. Premiere reussite de la **400** par un modele. **Un seul tirage** :
 une part de l'ecart peut etre du hasard.
 
-- [ ] Rejouer les 4 autres modeles avec les correctifs (seul `codestral` l'a
-      ete). Attendu : peu d'effet, ils faisaient peu de refus (0 a 3) et
+- [ ] Rejouer les 4 autres modeles avec les correctifs (seuls `codestral` et
+      Groq l'ont ete, le 2026-10-03, avec l'exemple multiligne en plus).
+      Attendu : peu d'effet, ils faisaient peu de refus (0 a 3) et
       seulement 2 metriques INVALID a eux quatre
+
+#### Ablation E : exemple MBPP multiligne (2026-10-03, `run27` a `run34`)
+
+**Protocole.** Memes 20 taches (`run6` + `run7`), meme agent (`fb8f224`,
+avec les correctifs de la boucle et le repli). D'abord l'ancien exemple
+(`run27`/`run28` Groq, `run29`/`run30` `codestral`), **puis** le nouveau
+(`run31` a `run34`) : `core/constants.py` n'a ete modifie qu'entre les deux,
+pour qu'aucune tache ne tourne sur un melange. La reference Groq existante
+(`run13`/`run14`) datait d'avant les correctifs, d'ou le rejeu de l'ancien
+exemple sur les deux modeles. `META.txt` porte `exemple_mbpp=`, `RESUME.json`
+un champ `fallback`.
+
+| | Groq une ligne | Groq multiligne | `codestral` une ligne | `codestral` multiligne |
+|---|---|---|---|---|
+| PASS | 17/20 (dont 3 par le repli) | **18/20** | 16/20 | **17/20** |
+| Metriques valides | 20/20 | 20/20 | 20/20 | 20/20 |
+| Refus `SyntaxError` | 0 | 0 | 7 (7 taches) | **0** |
+| `final_answer` multilignes | 13 sur 22 | 21 sur 21 | 10 sur 31 | 21 sur 21 |
+| Iterations (total) | 22 | 21 | 36 | **25** |
+| Entree par tache | 1 132 | 1 004 | 2 174 | **1 317** |
+| Sortie par tache | 636 | 517 | 741 | 524 |
+| Discipline = 0 | 17/18 | 18/19 | 9/16 | **17/17** |
+
+- **Net sur `codestral`** : les 7 taches refusees (127, 94, 305, 247, 65,
+  400, 71) passent sans refus, −31 % d'iterations, −39 % d'entree
+- **Le taux de reussite reste dans le bruit** : `codestral`, meme agent, meme
+  exemple, a fait 17/20 (`run25`/`run26`) puis 16/20 (`run29`/`run30`)
+- **Groq inchange** a une tache pres (MBPP 252, echouee avant sur le plafond
+  de sortie). Echecs communs aux deux versions : 462 (plafonds), 400 (test
+  cache, Groq), 108 et 138 (plafond de sortie, `codestral`)
+- **Le repli a servi pour de vrai** : 3 taches Groq de `run27`/`run28` ont
+  recu 5 reponses HTTP 200 sans `content` et ont ete finies par
+  `ministral-14b-2512` (avant le repli, elles etaient perdues : `run13`/`run14`
+  perdait la 80 ainsi). 47 des 52 echecs Groq du jour sont ce `content` vide,
+  5 des 429 sur la limite de 8 000 tokens/min
+- Methode des chiffres : les scripts du rapport, reverifies sur les lignes
+  deja publiees (`run13`/`run14`, `run19`/`run20`, `run25`/`run26`,
+  identiques au chiffre pres)
+- [ ] **Identifiant d'organisation Groq** (`org_…`) dans 4 logs de
+      `run27`/`run28` (message du 429) : ce n'est pas une cle, mais aucun log
+      deja versionne ne le contient. A masquer ou non avant le commit
 
 ---
 
@@ -2024,11 +2082,13 @@ une part de l'ecart peut etre du hasard.
        (MBPP 80, PASSED / VALID, sous Groq avant le passage a Mistral)
 4 quinquies. [~] **Campagne MBPP des 5 modeles** — faite (`run15` a
        `run24`), deux defauts de la boucle corriges (`c21b0ce`) et
-       `codestral` rejoue (`run25`/`run26`, 17/20). Restent : **decider** de
-       l'exemple MBPP d'une ligne (P2.4), rejouer les 4 autres modeles avec
-       les correctifs
+       `codestral` rejoue (`run25`/`run26`, 17/20). **Exemple MBPP passe en
+       multiligne et mesure** le 2026-10-03 (ablation E, `run27` a `run34`).
+       Reste : rejouer `ministral-14b`, `ministral-8b` et `nemotron-3-super`
+       (et `nemotron-3-ultra`, s'il n'est pas ecarte) sur l'agent actuel,
+       avant de figer le modele MBPP
 4 sexies. [~] **`BENCHMARK_REPORT.md`** — partie MBPP ecrite et backing
-       versionne (`0faae67`). Reste la partie SWE, des que les outils sont
+       versionne (`0faae67`), ablation E ajoutee le 2026-10-03. Reste la partie SWE, des que les outils sont
        appelables : 5 modeles × 3 taches (`sympy__sympy-14711`,
        `sympy__sympy-13480`, `pydata__xarray-4629`), les deux metriques
        propres a SWE, et de preference une ablation SWE. **Chaque nouvelle
@@ -2072,7 +2132,7 @@ une part de l'ecart peut etre du hasard.
 
 ### Le banc d'essai `tests/`
 
-**474 tests** (2026-10-03), gitignore, hors rendu — c'est un outil de travail,
+**475 tests** (2026-10-03), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

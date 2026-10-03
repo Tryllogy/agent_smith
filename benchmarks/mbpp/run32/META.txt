@@ -1,0 +1,8 @@
+modele=openai/gpt-oss-120b
+provider=https://api.groq.com/openai/v1
+taches=benchmarks/mbpp/run7 (memes fichiers)
+code=fb8f224 + modifications non commitees
+exemple_mbpp=multiligne
+debut=2026-10-03T14:04:47+02:00
+note=ablation de l'exemple MBPP (final_answer d'une ligne contre multiligne) du 2026-10-03; a comparer a run13 (meme modele, code 4c8d206) et run28/run32, memes taches
+fin=2026-10-03T14:07:14+02:00
