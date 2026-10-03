@@ -10,17 +10,17 @@
         },
         {
             "provider": "nvidia",
-            "model": "nvidia/nemotron-3-super-120b-a12b"
+            "model": "nvidia/nemotron-3-ultra-550b-a55b"
         }
     ],
     "swebench": [
         {
-            "provider": "nvidia",
-            "model": "nvidia/nemotron-3-super-120b-a12b"
-        },
-        {
             "provider": "mistral",
             "model": "ministral-14b-2512"
+        },
+        {
+            "provider": "nvidia",
+            "model": "nvidia/nemotron-3-ultra-550b-a55b"
         }
     ]
 }
