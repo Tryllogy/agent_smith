@@ -83,7 +83,9 @@
             }
         },
         "models": {
-            "openai/gpt-oss-120b": {}
+            "openai/gpt-oss-120b": {
+                "send_stop": false
+            }
         }
     },
     "nvidia": {

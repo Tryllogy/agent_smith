@@ -29,7 +29,7 @@ Docker must be running, with the `python:3.11-slim` image available.
 
 ## Which verdict is authoritative
 
-- **run9 to run40**: the `reel` and `metrics` fields of `RESUME.json` are the
+- **run9 to run44**: the `reel` and `metrics` fields of `RESUME.json` are the
   checker's verdicts; its full output is in `logs/validate_XX.txt`.
 - **run5 to run8**: these runs were first checked by running `test_list`
   locally, and `RESUME.json` keeps that verdict. They were re-validated with
@@ -54,3 +54,8 @@ MBPP example) or `multiligne` (multi-line, ablation E of the report).
 morning: every task got HTTP 410 and was done by the fallback model, Groq
 `gpt-oss-120b`. `META.txt` names the requested model; the `model_name` of
 each step names the model that answered.
+
+From run41 on, `RESUME.json` has a `from_reasoning` field: how many answers
+the client took from the reasoning because `content` was empty (logged as
+`LLM content empty on step S: answer taken from the reasoning`). The token
+totals of run41 on include the rejected responses; earlier ones do not.

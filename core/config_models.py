@@ -98,12 +98,15 @@ class ModelConfig(BaseModel):
     """Per-model settings declared under "models" in configs/models.json.
 
     extra="forbid" turns a typo into a startup error instead of a
-    silently ignored key.
+    silently ignored key. send_stop=False keeps the stop sequence out of
+    the request, for a model whose provider also applies it to the
+    reasoning: the client then cuts the content at the stop itself.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     extra_body: dict = Field(default_factory=dict)
+    send_stop: bool = True
 
     @field_validator("extra_body")
     @classmethod

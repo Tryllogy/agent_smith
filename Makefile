@@ -1,7 +1,7 @@
 PYTHON_VERSION := 3.10
 UV             := uv
 CACHE_DIR      := cache
-MBPP_MODEL     := ministral-14b-2512
+MBPP_MODEL     := codestral-2508
 MBPP_URL       := https://api.mistral.ai/v1
 SWE_MODEL      := codestral-2508
 SWE_URL        := https://api.mistral.ai/v1
