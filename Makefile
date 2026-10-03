@@ -3,8 +3,8 @@ UV             := uv
 CACHE_DIR      := cache
 MBPP_MODEL     := ministral-14b-2512
 MBPP_URL       := https://api.mistral.ai/v1
-SWE_MODEL      := nvidia/nemotron-3-super-120b-a12b
-SWE_URL        := https://integrate.api.nvidia.com/v1
+SWE_MODEL      := codestral-2508
+SWE_URL        := https://api.mistral.ai/v1
 .DEFAULT_GOAL := help
 
 .PHONY: help setup install dev sandbox sandbox-mbpp sandbox-swebench \

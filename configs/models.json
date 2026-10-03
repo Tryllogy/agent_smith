@@ -117,13 +117,6 @@
             }
         },
         "models": {
-            "nvidia/nemotron-3-super-120b-a12b": {
-                "extra_body": {
-                    "chat_template_kwargs": {
-                        "enable_thinking": false
-                    }
-                }
-            },
             "nvidia/nemotron-3-ultra-550b-a55b": {
                 "extra_body": {
                     "chat_template_kwargs": {
