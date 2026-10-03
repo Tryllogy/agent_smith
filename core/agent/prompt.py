@@ -15,25 +15,28 @@ class Prompt:
         self,
         bench: Bench,
         task: dict,
-        tools: list = None,
+        manual: str = None,
         allowed_imports: list = None,
     ) -> None:
         """Build the initial conversation for task on bench.
 
-        tools and allowed_imports are listed in the system turn.
+        manual is the sandbox manual, already rendered from the connected
+        MCP server: it goes into the system turn as is, and is left out
+        when empty. When it is there, the lines it already covers (print()
+        of tool calls, final_answer and get_patch descriptions) are not
+        repeated. allowed_imports are listed in the system turn.
         Raises ValueError for an unsupported benchmark.
         """
-        self.tools: list = tools
+        self.manual: str = manual
         self.allowed_imports: list = allowed_imports
         self.allowed_imports_str: str = (
             "".join([f"- {imp}\n" for imp in self.allowed_imports])
             if self.allowed_imports
             else "None"
         )
-        self.tools_section: str = (
-            "Here are the tools you have access to, callable as Python"
-            " functions:\n" + "".join([f"- {tool}\n" for tool in self.tools])
-            if self.tools
+        self.manual_section: str = (
+            f"\n{self.manual.strip()}\n\n"
+            if self.manual and self.manual.strip()
             else ""
         )
         if bench.name == BenchName.SWE.value:
@@ -64,12 +67,21 @@ class Prompt:
             f"repo: {repo}"
         )
         final_answer_str: str = (
-            "get_patch() -> str:"
+            ""
+            if self.manual_section
+            else "get_patch() -> str:"
             " get_patch() returns the git patch retrieved.\n"
             "final_answer(patch: str) -> None:"
             " This function is used to return the final answer.\n"
+        ) + (
             "Call get_patch() first, check the patch is not empty,"
             " then pass it to final_answer().\n"
+        )
+        print_rule: str = (
+            ""
+            if self.manual_section
+            else " A tool call alone prints NOTHING: wrap every tool call in"
+            " print() or you will get an empty observation."
         )
         self.prompt: list = [
             {
@@ -94,13 +106,12 @@ class Prompt:
                 f"{final_answer_str}\n"
                 "You will be generating code and must"
                 " finish with <end_code> to indicate the end of your code.\n"
-                f"{self.tools_section}"
+                f"{self.manual_section}"
                 "Here are the allowed imports you can use:\n"
                 f"{self.allowed_imports_str}\n"
                 "It is FORBIDDEN to git commit or make a patch empty."
                 " ONLY make 1 and ONLY 1 code block per step."
-                " A tool call alone prints NOTHING: wrap every tool call in"
-                " print() or you will get an empty observation.\n"
+                f"{print_rule}\n"
                 "read_file() prefixes each line with '<line_number>: '."
                 " These prefixes are NOT part of the file content: never"
                 " include them in the old_str of edit_file(), which matches"
@@ -139,6 +150,9 @@ class Prompt:
             f"test_list: {tests_str}"
         )
         final_answer_str: str = (
+            ""
+            if self.manual_section
+            else " Here is the format of the final answer:\n"
             "final_answer(code: str) -> None:"
             " This function is used"
             " to return the final answer."
@@ -167,7 +181,6 @@ class Prompt:
                 " finish with <end_code> to indicate the end of your code."
                 " Code inside final_answer MUST BE the EXACT code that"
                 " solves the task."
-                " Here is the format of the final answer:\n"
                 f"{final_answer_str}\n"
                 "Validate your function with the asserts of test_list."
                 " test_list is only a sample: your function is also graded"
@@ -176,7 +189,7 @@ class Prompt:
                 " final_answer() in the same code block, right after the"
                 " asserts: it only runs if they all pass, and a failing"
                 " assert is shown to you instead.\n"
-                f"{self.tools_section}"
+                f"{self.manual_section}"
                 "Here are the allowed imports you can use:\n"
                 f"{self.allowed_imports_str}\n"
                 "Here is an example:\n"

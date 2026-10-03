@@ -36,12 +36,12 @@ class AgentSWEBENCH:
         self.output_file: str = output_file
 
         sandbox: SandboxConfig = SandboxConfig()
-        tools = None
+        manual = None
 
         prompt: Prompt = Prompt(
             bench=SWE,
             task=self.task,
-            tools=tools,
+            manual=manual,
             allowed_imports=sandbox.authorized_imports,
         )
 

@@ -11,11 +11,11 @@
 
 ---
 
-## Etat actuel — 2026-10-02
+## Etat actuel — 2026-10-03
 
 **Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
 extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **453 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
+modeles. **474 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 `mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
 
 **Fournisseurs SWE : 5 modeles declares, le minimum du rapport.** NVIDIA Build
@@ -25,8 +25,8 @@ modeles. **453 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
 (credits mensuels offerts, sans carte ; le sujet le range d'ailleurs parmi
 les *« Cloud providers with free access »*, § V.6.1).
 
-**`Makefile` : un modele par defaut par benchmark** (2026-10-02, non
-commite) — MBPP `ministral-14b-2512` (Mistral), SWE
+**`Makefile` : un modele par defaut par benchmark** (2026-10-02,
+`e0a7737`) — MBPP `ministral-14b-2512` (Mistral), SWE
 `nvidia/nemotron-3-super-120b-a12b` (NVIDIA). **Seuls les modeles declares
 dans `configs/models.json` sont acceptes** (`c7727cc`) : un modele payant
 non declare est refuse avant toute requete.
@@ -48,15 +48,25 @@ liste par benchmark), puis echoue proprement. Verifie en reel sur deux taches
 MBPP validees par la moulinette (P2.3, « Repli de provider »).
 
 **Limite de tokens par minute de Mistral respectee avant l'envoi**
-(2026-10-02, non commite) : une requete qui ne tiendrait pas dans les tokens
+(2026-10-02, `36e071b`) : une requete qui ne tiendrait pas dans les tokens
 restants de la minute n'est plus envoyee (P2.3, « Limite de tokens par
 minute »).
+
+**Sandbox manual dans le prompt, cote `Prompt`** (2026-10-03, non commite) :
+le manuel de ndi-tull (`sandbox/manual.py`) est insere tel quel par
+`Prompt(manual=)`, et ce qu'il dit deja n'est plus repete par nos consignes.
+**Les deux CLI passent encore `manual=None`** : `render_manual()` attend le
+client MCP connecte, qui n'existe pas encore (P1.4). Detail en P2.4.
 
 **Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
 existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
 debloque la boucle. Les 9 outils sont **merges dans `thomas`** depuis le
 2026-10-01 (`70207ab`), mais leurs signatures ne suivent pas le § V.5 (voir la
-revue ci-dessous). Restent le CLI/REPL, le manual, le client MCP et Docker.
+revue ci-dessous). Le **manuel** (`sandbox/manual.py`, `2b4ddb3`) et les
+**transports** stdio et HTTP du client MCP (`49b7d9a`) sont dans `thomas`
+depuis le 2026-10-03 (`c4cff46`). Restent le CLI/REPL, le client MCP lui-meme
+(`sandbox/mcp_client/client.py` est vide), les wrappers des outils dans le
+namespace du sandbox, et Docker.
 
 > **Le chemin critique est cote P1.** Sans client MCP et sans Docker, ni
 > SWE-bench ni le rapport de benchmark ne peuvent avancer. Le prompt SWE n'a
@@ -229,8 +239,13 @@ acceptes** (`c7727cc`) : OpenRouter avait servi `openai/gpt-4o-mini`, payant,
 sur un compte sans credit (P2.5 bis). Relecture du sujet sur le payant
 (P2.3, « Ce que dit le sujet du payant »). **Mistral valide** par l'equipe
 pedagogique, d'ou le defaut MBPP du `Makefile` sur `ministral-14b-2512`
-(`e0a7737`). Puis **l'echeance par appel propre a SWE** (60 s, 4 ter).
-**Non commite** : `core/agent/loop.py`, `core/constants.py`.
+(`e0a7737`). Puis **l'echeance par appel propre a SWE** (60 s, 4 ter,
+`11cae12`).
+
+**2026-10-03** : merge d'`origin/ndi-tull` (`c4cff46`), qui apporte
+`sandbox/manual.py` et les transports MCP. **Manuel insere dans le prompt**
+et doublons retires (P2.4, 4 decies). **Non commite** :
+`core/agent/prompt.py`, `agent_mbpp/cli.py`, `agent_swebench/cli.py`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -250,12 +265,12 @@ pedagogique, d'ou le defaut MBPP du `Makefile` sur `ministral-14b-2512`
 
 | Ecrit | Encore vide |
 |---|---|
-| `core/` : `models.py`, `config_models.py`, `errors.py`, `constants.py`, `api_key.py`, `agent_cli_helper.py` | `sandbox/cli.py`, `manual.py`, `security/limits.py` |
-| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | tout `sandbox/mcp_client/` |
+| `core/` : `models.py`, `config_models.py`, `errors.py`, `constants.py`, `api_key.py`, `agent_cli_helper.py` | `sandbox/cli.py`, `security/limits.py` |
+| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | `sandbox/mcp_client/client.py` |
 | `core/llm/` : `client.py`, `provider.py` | |
 | `mcp_tools/` + les 2 `mcp_tools_*.py` racine (merges le 2026-10-01, **signatures non conformes**) | |
 | `agent_mbpp/`, `agent_swebench/` (sauf `docker.py`) | `agent_swebench/docker.py` |
-| `sandbox/executor.py`, `configs/models.json` | `sandbox_template.json` |
+| `sandbox/executor.py`, `sandbox/manual.py`, `sandbox/mcp_client/transports.py`, `configs/models.json` | `sandbox_template.json` |
 | `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | `BENCHMARK_REPORT.md`, `README.md` |
 
 Trois modules supprimes, avec leur raison : **`usage.py`** (le suivi d'usage vit
@@ -270,10 +285,10 @@ core/          + models.py  + config_models.py  + errors.py  + constants.py
                + api_key.py  + agent_cli_helper.py
   agent/       + loop.py  + extraction.py  + prompt.py
   llm/         + client.py  + provider.py
-sandbox/       . cli.py  + executor.py  . manual.py
+sandbox/       . cli.py  + executor.py  + manual.py
   security/    + imports.py  + filesystem.py  + builtins.py  + network.py
                + ast_guard.py  . limits.py
-  mcp_client/  . client.py  . transports.py
+  mcp_client/  . client.py  + transports.py
 mcp_tools/     . tools_fs.py  . tools_search.py  . tools_exec.py
 agent_mbpp/    + __main__.py  + cli.py
 agent_swebench/+ __main__.py  + cli.py  . docker.py
@@ -357,8 +372,9 @@ FS), `resource` (`RLIMIT_AS`/`RLIMIT_CPU`), `signal`, `multiprocessing`
 `mcp.server.fastmcp` n'existe plus, verifie le 2026-10-01). Client (les **deux**
 transports sont obligatoires) : `ClientSession`, `StdioServerParameters`,
 `mcp.client.stdio.stdio_client`, `mcp.client.streamable_http.streamablehttp_client`.
-C'est `list_tools()` qui alimente la generation du manuel. *(verifier les
-signatures selon la version installee)*
+C'est `list_tools()` qui alimente la generation du manuel. **Verifie le
+2026-10-03** : en `mcp` 2.0.0, `Tool.input_schema` est en snake_case, ce que
+lit `manual.py`, et le client HTTP s'appelle `streamable_http_client`.
 
 Dans le container SWE-bench (optionnel) : `jedi` (`find_references`), `ruff`
 (verification apres `edit_file`), `tree`.
@@ -426,20 +442,32 @@ hallucine ses observations.
 - [ ] Serveur : transports stdio **et** HTTP streamable
 - [ ] Client integre dans le sandbox, decouverte dynamique, tools + resources +
       prompts, wrappers generes depuis les schemas
-- [ ] Generation dynamique du **sandbox manual** depuis les schemas du serveur
+- [x] Generation dynamique du **sandbox manual** depuis les schemas du serveur
+      — `sandbox/manual.py` (ndi-tull, `2b4ddb3`). Verifie le 2026-10-03 sur
+      les deux vrais serveurs : 9 outils cote SWE (signature, puis docstring),
+      aucun cote MBPP
 
 ```
 prompt (manuel)      <- decouverte <- serveur MCP
 namespace du sandbox -> wrapper    -> client MCP -> serveur -> outil
 ```
 
-Deux maillons sur cinq sont vides : `sandbox/mcp_client/` et la generation du
-manuel. `mcp_tools/` est merge (signatures a caler, voir la revue en tete).
+Un maillon sur cinq reste vide depuis le 2026-10-03 : le client MCP
+(`sandbox/mcp_client/client.py`). Le manuel et les transports sont arrives.
+`mcp_tools/` est merge (signatures a caler, voir la revue en tete).
 Le namespace d'`executor.py:32` ne contient toujours que `final_answer` :
 **aucun outil n'est encore appelable depuis le sandbox**.
 
-- [ ] Le manuel contient le **contrat** (nom, description, types), **jamais le
-      code** : l'implementation peut changer sous le modele
+- [x] Le manuel contient le **contrat** (nom, description, types), **jamais le
+      code** : l'implementation peut changer sous le modele. Verifie le
+      2026-10-03 : signature typee, puis la docstring de l'outil
+- [ ] **A transmettre a ndi-tull** (constate le 2026-10-03, rien touche) :
+  - avec le serveur MBPP, qui n'a aucun outil, le manuel annonce *« the
+    tools below »* sans rien en dessous
+  - le manuel annonce `run_command(command, timeout, cwd, raw)`, notre
+    exemple SWE ecrit `workdir`, comme le sujet (§ V.5). Une fois le manuel
+    branche, le modele lira deux signatures contradictoires : c'est la
+    signature de l'outil qu'il faut caler (voir la revue en tete)
 - [ ] Une liste d'outils **ecrite en dur** passerait nos 3 taches et
       **echouerait a l'evaluation** (*"The system will be tested with an unknown
       MCP server"*). La decouverte n'est pas un confort, c'est la condition de la
@@ -449,10 +477,12 @@ Le namespace d'`executor.py:32` ne contient toujours que `final_answer` :
       pour de vrai dans un ancien exemple, ou le modele redefinissait
       `get_patch()` et fabriquait son propre diff (cf. P1.7)
 
-**Interface avec P2 :** le manuel est le livrable que consomme `Prompt(tools=)`.
-Tant qu'il n'existe pas, les deux CLI passent `tools=None` et le prompt affiche
-litteralement "None". **Le format rendu est l'interface** — liste de chaines ? de
-dicts ? deja mise en forme ? P2 insere, il ne compose pas.
+**Interface avec P2 : tranchee le 2026-10-03.** `render_manual(client)` rend
+**un texte deja mis en forme**, que `Prompt(manual=)` insere tel quel : P2
+insere, il ne compose pas. Reste a convenir **comment l'agent le recupere** :
+`render_manual` attend le client connecte, et ce client vit dans le sandbox
+(§ IV : *« The sandbox wraps the MCP client »*). D'ici la, les deux CLI
+passent `manual=None`.
 
 ### P1.5 — Les 9 outils obligatoires
 
@@ -1362,11 +1392,33 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       appelables. Premier indice le 2026-10-02 (P2.3, « Runs reels ») : 4
       des 5 nouveaux modeles explorent sans reciter, `ministral-8b` ecrit un
       correctif de memoire des le tour 2
-- [~] **Injection du sandbox manual** : le slot existe (`Prompt(tools=)`) mais les
-      **deux** CLI passent `tools=None`. Depuis le 2026-10-01, sans outils la
-      section est **omise** (elle affichait litteralement "None"). Cote SWE le
-      prompt decrit toujours une methode fondee sur 9 outils dont il ne donne
-      pas la liste. Attend P1.4
+- [~] **Injection du sandbox manual** — cote `Prompt`, faite le 2026-10-03
+      (non commite). `Prompt(tools=list)` devient `Prompt(manual=str)` : le
+      texte de `render_manual` est insere **tel quel**, avant les imports
+      autorises, et omis s'il est vide. **Doublons retires** : avec un
+      manuel, le prompt ne repete plus ce que le manuel dit deja — la regle
+      `print()` des appels d'outils (SWE), la description de `final_answer`
+      (les deux benchs) et celle de `get_patch` (SWE). **Sans manuel, ces
+      lignes restent** : le prompt est alors identique octet pour octet a
+      celui d'avant (compare a celui de `HEAD`). Gardees, car propres au
+      bench : *« Call get_patch() first, check the patch is not empty… »*,
+      *« Code inside final_answer MUST BE the EXACT code… »*, et la regle des
+      prefixes de `read_file` (1er motif d'echec d'`edit_file`)
+  - **Cout mesure** avec les manuels reels : MBPP +230 caracteres
+    (~60 a 90 tokens par tour), SWE +5 412 (~1 350 a 2 170 tokens par
+    tour, soit 40k a 65k sur les 300k en 30 tours)
+  - **Verifie** : 21 tests ajoutes et 1 remplace (`tests/test_prompt.py`),
+    dont un qui lance le vrai `mcp_tools_swebench.py` avec les transports et
+    `render_manual` de ndi-tull, et retrouve la signature des 9 outils dans
+    le prompt SWE ; en desactivant l'insertion, 6 tests echouent, en
+    desactivant le retrait des doublons, 7 ; 474 tests verts, `ruff` propre
+  - [ ] **Brancher le manuel dans les deux CLI** : attend le client MCP
+        (P1.4). Les outils ne sont de toute facon pas appelables d'ici la
+  - [ ] **Nuance a mesurer** : pour `print()`, le manuel dit *« A bare
+        expression's value is discarded, so print() whatever you need to
+        see »*, plus general que notre *« A tool call alone prints
+        NOTHING »*, adosse a un echec constate. Verifier au premier run avec
+        outils que les appels nus ne reviennent pas
 - [~] **Exemple MBPP** : coquilles corrigees (`Obvservation`, virgule du second
       `assert` passee apres le saut de ligne, cloture ``` ``` ``` recollee,
       indentation du corps). **Le piege principal est corrige** (constate le
@@ -1942,8 +1994,8 @@ une part de l'ecart peut etre du hasard.
        tete, Mistral en second. **Cles posees et fournisseurs branches le
        2026-10-02 : 5 modeles** (2 NVIDIA, 3 Mistral), **Mistral valide
        par l'equipe pedagogique le 2026-10-02**
-4 ter. [x] **Echeance par appel propre a SWE** — fait le 2026-10-02 (non
-       commite). La constante globale `LLM_TIMEOUT_SECONDS = 30` est
+4 ter. [x] **Echeance par appel propre a SWE** — fait le 2026-10-02
+       (`11cae12`). La constante globale `LLM_TIMEOUT_SECONDS = 30` est
        supprimee ; `Bench` porte `llm_timeout`, a cote des autres limites du
        bench : **SWE 60 s**, MBPP 30 s (inchange). La boucle prend
        `self.bench.llm_timeout`, toujours dans `min(…, temps restant -
@@ -1960,7 +2012,7 @@ une part de l'ecart peut etre du hasard.
    - [ ] Revoir la valeur apres les premiers vrais runs SWE : la latence
          au-dela de 56k tokens n'est pas mesuree
 4 quater. [x] **`Makefile` : un defaut par benchmark** — fait le
-       2026-10-02 (non commite). `URL` / `MODEL` (OpenRouter
+       2026-10-02 (`e0a7737`). `URL` / `MODEL` (OpenRouter
        `nemotron-3-ultra-550b-a55b:free`, inutilisable) remplaces par
        `MBPP_MODEL` / `MBPP_URL` = **`ministral-14b-2512`** sur Mistral
        (15/20, le plus rapide, 0 retry ; Groq le temps que Mistral soit
@@ -1994,9 +2046,14 @@ une part de l'ecart peut etre du hasard.
        le sujet du payant »). Restent : le test `:free` pour OpenRouter, et
        **demander a l'equipe pedagogique comment les scripts d'examen
        choisissent `--model-name`**
+4 decies. [~] **Sandbox manual dans le prompt** — cote `Prompt`, fait le
+       2026-10-03, doublons retires (P2.4). Reste a **convenir avec
+       ndi-tull** de ce que le sandbox exposera pour que les CLI recuperent
+       le manuel, puis a remplacer `manual=None` dans les deux CLI
 5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
        restera cote P2 :
-   - passer la liste des outils a `Prompt` au lieu de `tools=None`
+   - passer le manuel a `Prompt(manual=)` au lieu de `None` (le cote `Prompt`
+     est pret depuis le 2026-10-03, 4 decies)
    - decrire `run_tests` dans le prompt MBPP et **remplacer ou composer avec** la
      consigne actuelle ("use the assert to VALIDATE your code") : aujourd'hui le
      modele valide par `assert` et fait 8/10, il ne sait pas que l'outil existe
@@ -2015,7 +2072,7 @@ une part de l'ecart peut etre du hasard.
 
 ### Le banc d'essai `tests/`
 
-**453 tests** (2026-10-02), gitignore, hors rendu — c'est un outil de travail,
+**474 tests** (2026-10-03), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 
@@ -2047,7 +2104,9 @@ ce fichier, les deux passaient inapercus.
 - Format `sandbox_input` / `sandbox_output` : c'est l'interface entre les deux
   moities du projet.
 - Le **sandbox manual** est produit par P1 et consomme par P2 : **le format rendu
-  est l'interface**, P2 insere dans `Prompt(tools=)`, il ne compose pas.
+  est l'interface**, P2 insere dans `Prompt(manual=)`, il ne compose pas.
+  **Tranche le 2026-10-03** : un texte deja mis en forme (`render_manual`).
+  Reste a convenir de la facon dont l'agent le recupere du sandbox.
 - **Aucune consigne du prompt ne doit supposer qu'un outil precis existe** : le
   sujet teste avec un serveur MCP inconnu. D'ou l'`assert` garde comme repli MBPP.
 - **`run_tests` MBPP** : exige par le § V.3 mais non specifie. P1 choisit la
