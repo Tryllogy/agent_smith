@@ -21,7 +21,6 @@ FALLBACK_CONFIG_FILE = "configs/fallback.json"
 
 MBPP_MCP_SERVER = "mcp_tools_mbpp.py"
 SWE_MCP_SERVER = "mcp_tools_swebench.py"
-SWE_REPO_ROOT = "/testbed"
 
 PATCH_MARKERS = ("diff --git", "--- a/", "+++ b/", "@@")
 

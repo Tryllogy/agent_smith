@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 
+from agent_swebench.docker import TaskContainer
 from core import constants
 from core.agent import Loop
 from core.agent.prompt import Prompt
@@ -10,8 +11,6 @@ from core.agent_cli_helper import (
     get_provider_and_model_config,
     get_task_from_file,
     make_llm_client,
-    remove_file,
-    write_temp_file,
 )
 from core.constants import SWE
 from core.llm.client import LLMClient
@@ -36,9 +35,11 @@ class AgentSWEBENCH:
         """Load the task, then build the LLM client, tools, prompt and loop.
 
         Raises on any configuration error (task file, models.json,
-        API keys) or if the MCP tool server cannot start: no request is
-        made here. The server is started last, once the configuration is
-        known to be valid.
+        API keys), or if the task's Docker container or the MCP tool
+        server cannot start: no request is made here. Both are started
+        last, once the configuration is known to be valid: the container
+        holds the repository at /testbed, the server's file tools work on
+        a host copy of it and its commands run inside the container.
         """
         self.task: dict = get_task_from_file(task_file, SWEBenchTaskInput)
         self.output_file: str = output_file
@@ -63,17 +64,20 @@ class AgentSWEBENCH:
         )
 
         self.mcp_client: MCPClient | None = None
-        self.eval_script_file: str | None = write_temp_file(
-            self.task["eval_script"], suffix=".sh"
+        self.container: TaskContainer = TaskContainer(
+            SWEBenchTaskInput.model_validate(self.task)
         )
         try:
+            self.container.start()
             self.mcp_client = connect_mcp_server(
                 constants.SWE_MCP_SERVER,
                 [
                     "--repo-root",
-                    constants.SWE_REPO_ROOT,
+                    str(self.container.repo),
+                    "--container",
+                    self.container.name,
                     "--eval-script",
-                    self.eval_script_file,
+                    str(self.container.eval_script),
                 ],
                 call_timeout=SWE.timeout,
             )
@@ -95,19 +99,18 @@ class AgentSWEBENCH:
             raise
 
     def close(self) -> None:
-        """Stop the tool server and remove the eval script copy."""
+        """Stop the tool server, then remove the container and its copy."""
         if self.mcp_client is not None:
             self.mcp_client.close()
             self.mcp_client = None
-        remove_file(self.eval_script_file)
-        self.eval_script_file = None
+        self.container.stop()
 
     def run(self) -> SolutionOutput:
         """Run the loop and write its SolutionOutput to the output file.
 
         An unexpected exception inside the loop is reported in the
         output, with the steps already recorded, instead of propagating.
-        The tool server is stopped in every case.
+        The tool server and the container are removed in every case.
         """
         try:
             try:
