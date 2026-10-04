@@ -17,8 +17,10 @@
 lancent leur serveur MCP en stdio, inserent le manuel dans le prompt et
 passent le client a la boucle (2026-10-04, P2.5 « Branchement MCP »).
 **Le prompt MBPP valide par `run_tests(code)` et non plus par des `assert`**
-(2026-10-04, non commite, P2.4) ; l'outil prend le code en argument et
-l'execute dans le sandbox (`e7faba0`). **529 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
+(2026-10-04, `5dfa7f9`, P2.4) ; l'outil prend le code en argument et
+l'execute dans le sandbox (`e7faba0`). **Un bloc mal forme est execute
+quand meme, et le modele est prevenu de la facon dont il a ete lu**
+(2026-10-04, non commite, P2.2). **543 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
 fichiers de ndi-tull non formates (`mcp_tools/*`, `sandbox/manual.py`,
 `sandbox/mcp_client/client.py`, `wrappers.py`).
 
@@ -122,9 +124,11 @@ puis sur `ca8f0ad`.
       `sandbox/cli.py` est vide. `sandbox_template.json` fait 0 octet
       (§ V.2.1, et `exam_sandbox.sh` passera tres probablement par la)
 - [ ] **Docker** : `agent_swebench/docker.py` vide (P1.6)
-- [ ] **Retours exiges par le § V.1 : 3 cas sur 5 manquent.** Aucun bloc → ✓.
-      Bloc mal forme interprete quand meme → ✗ (un bloc python sans fermeture
-      rend « No code block found »). Timeout avec sortie partielle → ✗ (la
+- [ ] **Retours exiges par le § V.1 : 3 cas sur 5 manquent** (4 au moment de
+      la revue, le decompte « 3 » ecrit alors etait faux). Aucun bloc → ✓.
+      Bloc mal forme interprete quand meme → ✓ **depuis le 2026-10-04**
+      (P2.2 ; avant, un bloc python sans fermeture rendait « No code block
+      found »). Timeout avec sortie partielle → ✗ (la
       sortie est perdue, meme avec le broker). Sortie tronquee → ✗ (aucune
       troncature : un `read_file` de 2 000 lignes rend 21 685 caracteres).
       Erreur de syntaxe ou de lint apres `edit_file` → ✗
@@ -140,9 +144,12 @@ puis sur `ca8f0ad`.
 
 **A trancher :**
 
-- [ ] **Extraction a un seul format** (P2.2) : le § V.1 dit *should* pour
+- [x] **Extraction a un seul format** (P2.2) : le § V.1 dit *should* pour
       XML, JSON/Hermes et ReAct. L'argument 2 de la decision du 2026-08-12
-      est caduc : `LLM_STOP_SEQUENCE` ne contient plus que `<end_code>`
+      est caduc : `LLM_STOP_SEQUENCE` ne contient plus que `<end_code>`.
+      **Tranche le 2026-10-04 : on ne les fait pas** (voir P2.2). Reste
+      obligatoire, lui : le « bloc malforme interprete quand meme » (§ V.1,
+      *must*)
 - [ ] **`get_patch` fait `git add -A`** (`mcp_tools/tools_exec.py`) :
       scripts de repro ecrits dans le depot et fichiers de test crees par
       l'`eval_script` entreraient dans le patch, qui risque de ne plus
@@ -365,10 +372,11 @@ route. `BENCHMARK_REPORT.md` et ce TODO mis a jour (commite dans
 `01ab8ba`). Puis **`run_tests(code)`**, execute dans le sandbox (`e7faba0`),
 et **le prompt MBPP sans `assert`** : validation par `run_tests`, agent MBPP
 obligatoirement branche (P2.4). Campagne `run55` a `run64` (ablation G,
-81/100 contre 75/100). **Non commite** : `agent_mbpp/cli.py`,
-`core/agent/loop.py`, `core/agent/prompt.py`, `core/constants.py`,
-`BENCHMARK_REPORT.md`, `benchmarks/README.md`, `benchmarks/mbpp/run55` a
-`run64`, `TODO.md`.
+81/100 contre 75/100), le tout commite dans `5dfa7f9`. XML, JSON/Hermes et
+ReAct definitivement ecartes (P2.2). Puis le **bloc mal forme interprete
+quand meme** (P2.2), qui corrige au passage l'appariement des blocs.
+**Non commite** : `core/agent/extraction.py`, `core/agent/loop.py`,
+`core/constants.py`, `TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -553,9 +561,13 @@ Ce n'est **pas** un trou de securite, c'est ce qui rend le projet realisable :
 *Souvent oublie, explicitement exige.* Aucun echec silencieux, sinon le LLM
 hallucine ses observations.
 
-- [ ] aucun bloc trouve / bloc malforme interprete quand meme (dire comment) /
+- [~] aucun bloc trouve / bloc malforme interprete quand meme (dire comment) /
       timeout atteint (renvoyer la sortie partielle) / sortie tronquee (le dire) /
       edit ayant casse la syntaxe ou le lint
+  - [x] aucun bloc trouve, et **bloc malforme** (2026-10-04) : faits cote P2,
+        dans l'extraction et la boucle (P2.2)
+  - [ ] sortie partielle au timeout, troncature, verification apres
+        `edit_file` : restent cote P1 (sandbox et outils)
 
 ### P1.3 — CLI sandbox
 
@@ -792,11 +804,12 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
 
 ### P2.2 — Extraction de code *(faite)*
 
-Blocs ` ```python ... ``` ` + `<end_code>`. Retour a 3 cles : `code`, `found`,
-`format` (`"python"` si le bloc parse, `""` sinon, `None` si aucun bloc).
-Validation par `ast.parse` sans exception : une sortie tronquee ressort en
-`found=True` / `format=""`, le code invalide est conserve pour etre renvoye au
-modele en observation.
+Blocs ` ```python ... ``` ` + `<end_code>`. Retour a 4 cles : `code`, `found`,
+`error` (`"None"` si le bloc parse, le message de `SyntaxError` sinon,
+`"No code block found"` sans bloc) et `note` (depuis le 2026-10-04 : comment
+un bloc mal forme a ete lu, `""` sinon). Validation par `ast.parse` sans
+exception : une sortie tronquee ressort en `found=True` avec son erreur, le
+code invalide est conserve pour etre renvoye au modele en observation.
 
 **Decision du 2026-08-12 : un seul format supporte.** XML `<invoke>`, JSON/Hermes
 et ReAct sont **abandonnes, pas reportes**. Quatre raisons :
@@ -812,6 +825,56 @@ et ReAct sont **abandonnes, pas reportes**. Quatre raisons :
 
 → Consequence traitee : `LLM_START_SEQUENCE` / `LLM_STOP_SEQUENCE` ne contiennent
 plus que ` ```python ` et `<end_code>`.
+
+**Confirme le 2026-10-04 : XML, JSON/Hermes et ReAct ne seront pas faits.**
+Le sujet ne les impose pas : l'obligation du § V.1 est *« Your system must:
+… Extract LLM-generated Python code from the model responses »*, et
+l'encadre sur les formats dit *should* (*« your extraction layer should
+handle different output formats »*, *« Non-Python formats should be
+converted »*), la ou le meme paragraphe ecrit *must* pour les retours au
+modele. Rien dans les limites strictes ni dans les criteres de reussite du
+chapitre VI. **Argument 2 ci-dessus caduc** : `</tool_call>` et `<invoke>`
+ne sont plus dans `LLM_STOP_SEQUENCE`. **Ce qu'on defend en soutenance** :
+
+- le prompt impose un format unique, montre par l'exemple ; un format non
+  reconnu revient au modele en observation (« No code block found… »), qui
+  corrige au tour suivant
+- 81/100 en MBPP avec ce seul format, sur 5 modeles de 3 fournisseurs
+  (`run55` a `run64`, P2.6)
+- `Action:` (ReAct) matchait n'importe ou dans la prose et faisait tomber
+  des reponses valides (argument 3)
+
+Hors perimetre de l'estimation d'avancement de P2. **A ne pas confondre**
+avec le cas *« A code block was malformed but was interpreted anyway
+(explain how) »*, obligatoire (*must*, § V.1) et pas encore fait :
+- [x] **Bloc mal forme interprete quand meme** (2026-10-04, non commite).
+      Trois cas, chacun signale en tete de l'observation (`Observation:
+      Note: …`) par `Loop.add_observation()`, par ou passent desormais
+      toutes les observations :
+  - bloc sans fermeture : tout ce qui suit la ligne d'ouverture, jusqu'a
+    `<end_code>`, est execute (*« Your code block had no closing ```:
+    everything after its opening line was run as Python »*) ; un bloc vide
+    reste « No code block found »
+  - bloc etiquete autrement (` ```py `, ` ```bash `…) : le premier est
+    execute comme du Python (*« Your code block was tagged 'py' instead of
+    python »*)
+  - plusieurs blocs Python : seul le premier tourne, **comme avant mais
+    plus en silence** (*« Your answer had 2 code blocks: only the first one
+    was run »*)
+
+  **Bug corrige au passage** : un bloc ` ```text ` avant le bloc Python
+  etait mal apparie par `CODE_BLOCK_PATTERN` (la fermeture du premier avec
+  l'ouverture du second) et c'est le texte vide entre les deux qui tournait.
+  Les blocs sont maintenant lus un par un (`FENCED_BLOCK_PATTERN`) ;
+  `CODE_BLOCK_PATTERN` reste pour la reprise depuis `reasoning` du client.
+  **Verifie** : 9 tests d'extraction, 3 de la boucle, 2 nouveaux
+  echantillons (`13_unclosed_block`, `14_other_language_tag`) ; snapshots
+  regeneres, seule la cle `note` change (non vide pour
+  `04_two_fenced_blocks`) ; sans la note dans l'observation, 2 tests
+  echouent ; 543 tests verts. **Rejeu** sur les campagnes : 40 des 86
+  etapes « No code block found » auraient ete lues comme blocs non fermes,
+  mais ce sont surtout des reponses coupees par le plafond de sortie, ou la
+  boucle s'arrete avant l'extraction : gain reel non mesure
 
 ### P2.3 — Couche LLM *(faite)*
 
@@ -2597,7 +2660,7 @@ plus tard, sur `e7faba0` + le prompt MBPP sans `assert` (non commite).
 
 ### Le banc d'essai `tests/`
 
-**529 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
+**543 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

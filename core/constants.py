@@ -11,6 +11,9 @@ LLM_START_SEQUENCE = [
     "```python",
 ]
 CODE_BLOCK_PATTERN = r"```(?:python)? *\n(.*?)```"
+FENCED_BLOCK_PATTERN = r"```(\w*) *\n(.*?)```"
+PYTHON_BLOCK_TAGS = ("", "python")
+OPEN_BLOCK_PATTERN = r"```(\w*) *\n"
 
 MODELS_CONFIG_FILE = "configs/models.json"
 FALLBACK_CONFIG_FILE = "configs/fallback.json"

@@ -139,13 +139,9 @@ class Loop:
         if not self.code["found"]:
             self.sandbox_input = ""
             self.sandbox_output = ""
-            self.prompt.add_message(
-                {
-                    "role": "user",
-                    "content": f"Observation: {self.code['error']}."
-                    " Write your code in one ```python block,"
-                    " then <end_code>.",
-                }
+            self.add_observation(
+                f"{self.code['error']}."
+                " Write your code in one ```python block, then <end_code>."
             )
             return False
         self.sandbox_input: str = self.code["code"]
@@ -165,14 +161,12 @@ class Loop:
                 self.solution = answer
                 self.success = True
                 return True
-            self.prompt.add_message(
-                {"role": "user", "content": f"Observation: {refusal}"}
-            )
+            self.add_observation(refusal)
             return False
         elif error is None and not is_final:
             if self.sandbox_output.strip() == "":
                 content: str = (
-                    "Observation: The code ran without error but did not"
+                    "The code ran without error but did not"
                     " produce any output: only what you print() appears"
                     " here."
                 )
@@ -183,22 +177,32 @@ class Loop:
                     )
             elif self.bench == constants.MBPP:
                 content: str = (
-                    f"Observation: {self.sandbox_output}\n"
+                    f"{self.sandbox_output}\n"
                     "No final_answer() captured. If your checks passed,"
                     " call final_answer() in your next step."
                 )
             else:
                 content: str = (
-                    f"Observation: {self.sandbox_output}\n"
+                    f"{self.sandbox_output}\n"
                     "No final_answer() captured yet: call"
                     " final_answer(get_patch()) once the fix is verified."
                 )
-            self.prompt.add_message({"role": "user", "content": content})
+            self.add_observation(content)
             return False
-        self.prompt.add_message(
-            {"role": "user", "content": f"Observation: {self.sandbox_output}"}
-        )
+        self.add_observation(self.sandbox_output)
         return False
+
+    def add_observation(self, body: str) -> None:
+        """Send body to the LLM as the observation of the turn.
+
+        When the code block was malformed but run anyway, the observation
+        starts by saying how it was read.
+        """
+        note: str = self.code.get("note", "")
+        prefix: str = f"Note: {note}.\n" if note else ""
+        self.prompt.add_message(
+            {"role": "user", "content": f"Observation: {prefix}{body}"}
+        )
 
     def check_final_answer(self, answer) -> str | None:
         """Return why the final answer is refused, or None if it is valid.
