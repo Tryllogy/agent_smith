@@ -24,7 +24,7 @@ def search_code(pattern: str, file_pattern: str) -> str:
         if not path.is_file():
             continue
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 lines = f.readlines()
         except (UnicodeDecodeError, OSError):
             continue
@@ -63,7 +63,7 @@ def search_function_or_class_definition_in_code(
         if not path.is_file():
             continue
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 lines = f.readlines()
         except (UnicodeDecodeError, OSError):
             continue
@@ -107,7 +107,7 @@ def find_references(name: str, file_pattern: str) -> str:
         if not path.is_file():
             continue
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 lines = f.readlines()
         except (UnicodeDecodeError, OSError):
             continue

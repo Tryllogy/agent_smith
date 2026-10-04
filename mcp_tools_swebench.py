@@ -1,9 +1,12 @@
 from mcp.server import MCPServer
-from mcp_tools.tools_fs import read_file, edit_file, list_files
-from mcp_tools.tools_exec import run_command, run_tests, get_patch
-from mcp_tools.tools_search import search_code, find_references
-from mcp_tools.tools_search import search_function_or_class_definition_in_code
 
+from mcp_tools.tools_exec import get_patch, run_command, run_tests
+from mcp_tools.tools_fs import edit_file, list_files, read_file
+from mcp_tools.tools_search import (
+    find_references,
+    search_code,
+    search_function_or_class_definition_in_code,
+)
 
 mcp = MCPServer("swebench-tools")
 mcp.add_tool(read_file)

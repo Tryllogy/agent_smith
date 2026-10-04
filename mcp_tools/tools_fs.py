@@ -17,7 +17,7 @@ def read_file(filepath: str, start_line: int, end_line: int) -> str:
     Returns:
         The selected lines as a single string, one per line.
     """
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         lines = f.readlines()
 
     selected = lines[start_line - 1:end_line]
@@ -45,14 +45,17 @@ def edit_file(filepath: str, old_str: str, new_str: str) -> str:
         A confirmation message, or an error if `old_str` is missing or
         not unique.
     """
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         content = f.read()
 
     count = content.count(old_str)
     if count == 0:
         return f"Error: old_str not found in {filepath}"
     if count > 1:
-        return f"Error: old_str is not unique in {filepath} ({count} occurrences)"
+        return (
+            f"Error: old_str is not unique in {filepath} "
+            f"({count} occurrences)"
+        )
 
     new_content = content.replace(old_str, new_str)
     with open(filepath, "w") as f:
