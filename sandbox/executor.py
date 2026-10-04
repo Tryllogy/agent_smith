@@ -26,6 +26,30 @@ DRAIN_SECONDS = 0.5
 TIMEOUT = "Timeout after {}s"
 DIED = "No result (process died)"
 
+# Largest stdout, stderr or tool result handed back for one entry.
+# Past this the output is cut and the model is told, so a flood of text
+# cannot blow the token budget or hide the useful lines.
+MAX_OUTPUT = 20000
+
+
+class QueueWriter(io.TextIOBase):
+    """A text stream that forwards each write to the parent at once.
+
+    Buffering the output in the child and sending it only at the end
+    would lose everything when the child is killed on a timeout. Sending
+    each chunk as it is written lets the parent keep the partial output
+    and hand it back, as the subject requires for a timeout.
+    """
+
+    def __init__(self, requests, tag):
+        self._requests = requests
+        self._tag = tag
+
+    def write(self, text):
+        if text:
+            self._requests.put((self._tag, text))
+        return len(text)
+
 
 class FinalAnswer(Exception):
     def __init__(self, value):
@@ -81,11 +105,16 @@ def compile_entry(code, interactive):
     return compile(code, "<sandbox>", "exec")
 
 
-def run_one(code, ns, interactive):
-    """Run one entry in the persistent namespace and describe the outcome."""
+def run_one(code, ns, interactive, requests):
+    """Run one entry, streaming its output, and report the outcome.
+
+    stdout and stderr are streamed to the parent through `requests` as
+    they are written; only the outcome (error, is_final, answer) comes
+    back here.
+    """
     error, is_final, answer = None, False, None
-    out = io.StringIO()
-    err = io.StringIO()
+    out = QueueWriter(requests, "out")
+    err = QueueWriter(requests, "err")
     with redirect_stdout(out), redirect_stderr(err):
         try:
             check_code(code)
@@ -96,7 +125,7 @@ def run_one(code, ns, interactive):
             raise
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
-    return (out.getvalue(), err.getvalue(), error, is_final, answer)
+    return (error, is_final, answer)
 
 
 def worker(jobs, requests, answers, config: SandboxConfig, specs):
@@ -125,7 +154,7 @@ def worker(jobs, requests, answers, config: SandboxConfig, specs):
         if job is None:
             return
         code, interactive = job
-        requests.put(("result", run_one(code, ns, interactive)))
+        requests.put(("result", run_one(code, ns, interactive, requests)))
 
 
 def serve(p, requests, answers, client, timeout):
@@ -146,15 +175,17 @@ def serve(p, requests, answers, client, timeout):
         timeout: Seconds of sandboxed execution allowed.
 
     Returns:
-        The child's (stdout, stderr, error, is_final, answer), or the
-        tuple describing a timeout or a crash.
+        The child's (stdout, stderr, error, is_final, answer). On a
+        timeout or a crash, the output collected so far is still
+        returned, so the model sees what ran before it stopped.
     """
     deadline = time.monotonic() + timeout
+    output = _Output()
 
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return ("", "", TIMEOUT.format(timeout), False, None)
+            return output.finish(TIMEOUT.format(timeout), False, None)
 
         try:
             message = requests.get(timeout=min(remaining, POLL_SECONDS))
@@ -164,10 +195,15 @@ def serve(p, requests, answers, client, timeout):
             try:
                 message = requests.get(timeout=DRAIN_SECONDS)
             except queue.Empty:
-                return ("", "", DIED, False, None)
+                return output.finish(DIED, False, None)
 
-        if message[0] == "result":
-            return message[1]
+        tag = message[0]
+        if tag in ("out", "err"):
+            output.add(tag, message[1])
+            continue
+        if tag == "result":
+            error, is_final, answer = message[1]
+            return output.finish(error, is_final, answer)
 
         _, name, arguments = message
         started = time.monotonic()
@@ -175,12 +211,52 @@ def serve(p, requests, answers, client, timeout):
             answers.put((False, f"no MCP server connected for '{name}'"))
         else:
             try:
-                answers.put((True, client.call_tool(name, arguments)))
+                text = client.call_tool(name, arguments)
+                answers.put((True, _cap_tool(text)))
             except MCPError as exc:
                 answers.put((False, str(exc)))
             except Exception as exc:
                 answers.put((False, f"{type(exc).__name__}: {exc}"))
         deadline += time.monotonic() - started
+
+
+def _cap_tool(text):
+    """Cut an over-long tool result and say so, for the model to read."""
+    if len(text) <= MAX_OUTPUT:
+        return text
+    return (text[:MAX_OUTPUT]
+            + f"\n... tool output truncated at {MAX_OUTPUT} characters")
+
+
+class _Output:
+    """Collects the child's stdout and stderr, capped at MAX_OUTPUT each.
+
+    Past the cap the stream is cut and a note is appended, so the model
+    is told rather than left with a silently shortened observation.
+    """
+
+    def __init__(self):
+        self._chunks = {"out": [], "err": []}
+        self._size = {"out": 0, "err": 0}
+        self._cut = {"out": False, "err": False}
+
+    def add(self, tag, text):
+        room = MAX_OUTPUT - self._size[tag]
+        if room > 0:
+            self._chunks[tag].append(text[:room])
+        self._size[tag] += len(text)
+        if self._size[tag] > MAX_OUTPUT:
+            self._cut[tag] = True
+
+    def _text(self, tag, stream):
+        body = "".join(self._chunks[tag])
+        if self._cut[tag]:
+            body += f"\n... {stream} truncated at {MAX_OUTPUT} characters"
+        return body
+
+    def finish(self, error, is_final, answer):
+        return (self._text("out", "stdout"), self._text("err", "stderr"),
+                error, is_final, answer)
 
 
 def stop(p):
