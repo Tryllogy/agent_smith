@@ -24,9 +24,13 @@ quand meme, et le modele est prevenu de la facon dont il a ete lu**
 anciennes observations elaguees** (`3538fcf`, P2.1), **exemple SWE aligne
 sur les vrais outils** (`1462032`) **puis raccourci** (`2e8dcb0`, P2.4) :
 prompt SWE ~4 700 → ~2 900 tokens. **Docker merge (`2610650`) et branche
-dans l'agent SWE** (non commite, P2.5) : **premier vrai run SWE** le
-2026-10-04 (`sympy__sympy-14711`, `codestral`), chaine complete mais tache
-non resolue (P2.6). **564 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
+dans l'agent SWE** (`6a933b9`, P2.5). **Sandbox persistant** : un seul
+processus par tache, variables gardees d'un tour a l'autre, et le timeout
+configure du sandbox enfin respecte (`84338df`, P2.1). **Premiers vrais
+runs SWE** le 2026-10-04 (P2.6) : `sympy__sympy-14711` non resolue,
+**`sympy__sympy-13480` resolue** en 4 iterations (rejouee a la main : 45
+tests passent ; la moulinette ne peut pas valider SWE sur nos postes, Docker
+rootless). **570 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
 fichiers de ndi-tull non formates (`mcp_tools/*`, `sandbox/manual.py`,
 `sandbox/mcp_client/client.py`, `wrappers.py`).
 
@@ -171,7 +175,19 @@ puis sur `ca8f0ad`.
 - [ ] **`get_patch` fait `git add -A`** (`mcp_tools/tools_exec.py`) :
       scripts de repro ecrits dans le depot et fichiers de test crees par
       l'`eval_script` entreraient dans le patch, qui risque de ne plus
-      s'appliquer a la validation
+      s'appliquer a la validation. **Constate le 2026-10-04**
+      (`sympy__sympy-13480`) : le patch embarque un changement de mode
+      `100755 → 100644` sur `tests/test_hyperbolic.py`, parce que
+      `core.fileMode=false` n'est passe qu'au `diff`, pas au `add`. Il s'est
+      applique sans erreur, mais n'a rien a faire dans le patch. Correctif
+      possible : `git -c core.fileMode=false add -A` (P1)
+- [ ] **La moulinette ne peut pas valider SWE sur nos postes** (2026-10-04) :
+      `failed to Lchown "/tmp/patch.diff" for UID 103977 … invalid argument`.
+      Elle copie le patch dans le conteneur avec notre UID, que le Docker
+      rootless ne sait pas faire correspondre. Probleme d'environnement, pas
+      du patch. Contournement utilise : conteneur neuf, `git apply -v` et
+      `eval_script` passes par l'entree standard (P2.6). Pour le rapport :
+      une machine avec un Docker classique, ou ce rejeu documente comme tel
 - [ ] **`read_file` exige `start_line` et `end_line`** : `read_file(path)`
       leve `TypeError`, un tour perdu. Des valeurs par defaut resteraient
       conformes
@@ -403,9 +419,10 @@ Docker, CLI `sandbox`, sandbox persistant, `ast_guard` durci. **Docker
 branche dans l'agent SWE** (P2.5) et **premier vrai run SWE** (P2.6). 660
 copies d'`eval_script` laissees dans `/tmp` par l'ancien helper
 `write_temp_file` (tests qui construisaient un agent SWE sans le fermer)
-supprimees ; le helper n'existe plus. **Non commite** :
-`agent_swebench/cli.py`, `core/agent_cli_helper.py`, `core/constants.py`,
-`TODO.md`.
+supprimees ; le helper n'existe plus. Le tout commite dans `6a933b9`.
+Puis le **sandbox persistant** et le **timeout configure respecte** (P2.1,
+`84338df`), et un **deuxieme run SWE**, sur `sympy__sympy-13480`, resolu
+(P2.6). **Non commite** : `TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -879,6 +896,32 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
   l'exemple SWE court (P2.4)
 - [ ] Regler `observation_max_chars` et `full_observations` sur les
       premiers vrais runs SWE (le cout par tour n'est pas mesure)
+
+- [x] **Sandbox persistant** (2026-10-04, `84338df`). `Loop.run()` ouvre un
+      `Sandbox` (classe de ndi-tull) pour toute la tache et le ferme a la
+      fin, quelle que soit la sortie ; les etapes sont dans `run_steps()`.
+      Les variables, fonctions et imports d'un tour restent au suivant — les
+      *« persistent variables between steps »* du sujet (§ III.1). Une
+      phrase des deux prompts le dit au modele. Apres un timeout ou un
+      crash, le sandbox redemarre et l'observation dit que les variables
+      sont perdues. **La verification du `final_answer` MBPP reste dans un
+      sandbox neuf** (`execute()`) : la moulinette execute la reponse seule.
+      Effets : un processus par tache au lieu d'un par tour ; la limite de
+      512 Mo vaut pour toute la tache. `Sandbox.run()` a gagne un parametre
+      `timeout` (fichier de ndi-tull, compatible avec l'existant). 4 tests
+      avec le vrai sandbox (variable gardee, fermeture, redemarrage annonce,
+      reponse verifiee seule) ; revenir a un sandbox neuf par tour fait
+      echouer le test de persistance. En reel : MBPP 127 et 305 PASSED, un
+      run SWE complet sur `sympy__sympy-14711`
+- [x] **Le timeout configure du sandbox est respecte** (2026-10-04,
+      `84338df`). La boucle passait au sandbox le temps restant de la tache
+      **a la place** de `max_execution_time_seconds` : un bloc pouvait tourner
+      ~115 s en MBPP et ~895 s en SWE, alors que le § V.2.3 dit *« Terminate
+      code exceeding the configured timeout »*. Desormais
+      `min(max_execution_time_seconds, temps restant)`. Le temps des outils
+      MCP reste rendu a l'echeance : un `run_tests()` SWE de plusieurs
+      minutes n'est pas coupe a 30 s. 2 tests ; l'ancien calcul fait echouer
+      celui du delai configure
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -2633,11 +2676,38 @@ dans `cache/swebench_solution_docker.json` (hors depot).
 - [ ] Message d'erreur d'`edit_file` plus utile (montrer les lignes
       proches, rappeler de relire) et/ou detection par la boucle d'une
       action repetee a l'identique
-- [ ] **Decider du sandbox persistant** : la boucle cree un processus neuf
-      a chaque tour (`execute()`) ; la classe `Sandbox` de ndi-tull garde
-      les variables d'un tour a l'autre, ce que promet le sujet
-      (*« persistent variables between steps »*). Touche aussi MBPP
+- [x] **Decider du sandbox persistant** — **fait le 2026-10-04** (P2.1,
+      `84338df`). Rejoue sur la meme tache : chaine complete, 30 iterations,
+      227k tokens d'entree, toujours non resolue (editions successives de
+      `Vector.__init__`, jamais de `run_tests()`), et le modele n'a jamais
+      reutilise une variable d'un tour a l'autre (chaque etape est un
+      `print(...)`)
 - [ ] Les 3 taches conseillees × 5 modeles pour le rapport
+
+#### Deuxieme vrai run SWE (2026-10-04, `sympy__sympy-13480`, `codestral-2508`)
+
+Sur l'agent actuel (Docker, MCP, sandbox persistant). Tache dumpee par la
+moulinette (`dump swebench --task_id sympy__sympy-13480`). Sorties dans
+`cache/` (hors depot).
+
+- **Resolue** : succes annonce en **4 iterations**, 15 176 tokens d'entree,
+  420 de sortie, 18,4 s de boucle (1 min 40 avec le pull de l'image).
+  Deroule : `search_code` sans resultat, `read_file` autour de la ligne 590
+  de `hyperbolic.py` (donnee par la trace de l'enonce), `edit_file`
+  `cotm` → `cothm`, reproduction sans erreur, `get_patch()` puis
+  `final_answer`
+- **Soumis sans `run_tests()`**, sur la seule foi de la reproduction
+  (discipline de soumission a surveiller)
+- **Patch** : le bon correctif, plus un changement de mode parasite sur un
+  fichier de test (revue du 2026-10-04, `get_patch`)
+- **Validation** : la moulinette echoue sur le `lchown` du Docker rootless
+  (revue du 2026-10-04). **Rejeu a la main** : conteneur neuf de l'image,
+  `git apply -v` (les deux fichiers « Applied cleanly »), `eval_script` :
+  `test_coth ok`, `test_coth_series ok`, `test_coth_rewrite ok`,
+  **45 passed**. Pas le verdict officiel (la moulinette note des tests
+  precis), mais toute la suite du fichier passe
+- Metriques validees par la moulinette (4/30 iterations, 15k/300k, 420/10k,
+  18 s/900 s)
 
 ---
 
@@ -2791,7 +2861,7 @@ dans `cache/swebench_solution_docker.json` (hors depot).
 
 ### Le banc d'essai `tests/`
 
-**564 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
+**570 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 
