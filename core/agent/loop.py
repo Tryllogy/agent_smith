@@ -64,6 +64,9 @@ class Loop:
         self.turn_output_tokens: int = 0
         self.last_prompt_tokens: int = 0
         self.last_prompt_chars: int = 0
+        self.elided_chars: int = 0
+        self.observation_indices: list[tuple[int, int]] = []
+        self.elided_indices: set[int] = set()
         if config_sandbox is None:
             self.config_sandbox: SandboxConfig = SandboxConfig()
         else:
@@ -93,6 +96,7 @@ class Loop:
         self.turn_output_tokens += llm_response.output_tokens
         self.last_prompt_tokens = llm_response.input_tokens
         self.last_prompt_chars = self.prompt_chars()
+        self.elided_chars = 0
         self.finish_reason: str = llm_response.finish_reason
         if llm_response.content_from_reasoning:
             sys.stderr.write(
@@ -116,8 +120,11 @@ class Loop:
         The provider counted the previous prompt exactly: only the
         messages added since are estimated, at ESTIMATED_CHARS_PER_TOKEN,
         chosen below the ratios measured so the estimate errs high.
+        Characters elided since are not deducted, for the same reason.
         """
-        added_chars: int = self.prompt_chars() - self.last_prompt_chars
+        added_chars: int = (
+            self.prompt_chars() - self.last_prompt_chars + self.elided_chars
+        )
         return self.last_prompt_tokens + math.ceil(
             added_chars / constants.ESTIMATED_CHARS_PER_TOKEN
         )
@@ -153,6 +160,7 @@ class Loop:
         self.sandbox_output: str = (
             stdout + stderr + error if error else stdout + stderr
         )
+        shown: str = self.truncate_output(self.sandbox_output)
         if error is None and is_final:
             refusal: str | None = self.check_final_answer(answer)
             if refusal is None and self.bench == constants.MBPP:
@@ -177,32 +185,82 @@ class Loop:
                     )
             elif self.bench == constants.MBPP:
                 content: str = (
-                    f"{self.sandbox_output}\n"
+                    f"{shown}\n"
                     "No final_answer() captured. If your checks passed,"
                     " call final_answer() in your next step."
                 )
             else:
                 content: str = (
-                    f"{self.sandbox_output}\n"
+                    f"{shown}\n"
                     "No final_answer() captured yet: call"
                     " final_answer(get_patch()) once the fix is verified."
                 )
             self.add_observation(content)
             return False
-        self.add_observation(self.sandbox_output)
+        self.add_observation(shown)
         return False
+
+    def truncate_output(self, output: str) -> str:
+        """Return output cut to the bench's observation_max_chars.
+
+        The head and the tail are kept, since errors and test summaries
+        come last, and the cut is stated with what to do about it.
+        """
+        limit: int = self.bench.observation_max_chars
+        if len(output) <= limit:
+            return output
+        head: int = int(limit * constants.TRUNCATED_HEAD_SHARE)
+        tail: int = limit - head
+        return (
+            f"{output[:head]}\n[Output truncated: {len(output)} characters,"
+            f" only the first {head} and the last {tail} are shown. Print a"
+            " smaller part (for instance a narrower read_file range) to see"
+            f" the rest.]\n{output[-tail:]}"
+        )
 
     def add_observation(self, body: str) -> None:
         """Send body to the LLM as the observation of the turn.
 
         When the code block was malformed but run anyway, the observation
-        starts by saying how it was read.
+        starts by saying how it was read. Older observations are then
+        elided past the bench's full_observations.
         """
         note: str = self.code.get("note", "")
         prefix: str = f"Note: {note}.\n" if note else ""
         self.prompt.add_message(
             {"role": "user", "content": f"Observation: {prefix}{body}"}
         )
+        self.observation_indices.append(
+            (len(self.prompt.prompt) - 1, self.iteration + 1)
+        )
+        self.elide_old_observations()
+
+    def elide_old_observations(self) -> None:
+        """Replace observations older than full_observations by a stub.
+
+        The whole conversation is resent on every turn: an observation
+        kept forever is paid on every later request. The model's own
+        messages stay whole, and the stub says how to get the output back.
+        An observation shorter than its stub is left as it is.
+        """
+        keep: int | None = self.bench.full_observations
+        if keep is None or len(self.observation_indices) <= keep:
+            return
+        for index, step in self.observation_indices[:-keep]:
+            if index in self.elided_indices:
+                continue
+            message: dict = self.prompt.prompt[index]
+            content: str = message["content"]
+            stub: str = (
+                f"Observation: [Output of step {step} elided to save"
+                f" tokens ({len(content)} characters). Run the code again"
+                " if you need it.]"
+            )
+            self.elided_indices.add(index)
+            if len(stub) >= len(content):
+                continue
+            self.elided_chars += len(content) - len(stub)
+            message["content"] = stub
 
     def check_final_answer(self, answer) -> str | None:
         """Return why the final answer is refused, or None if it is valid.

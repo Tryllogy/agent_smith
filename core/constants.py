@@ -13,6 +13,7 @@ LLM_START_SEQUENCE = [
 CODE_BLOCK_PATTERN = r"```(?:python)? *\n(.*?)```"
 FENCED_BLOCK_PATTERN = r"```(\w*) *\n(.*?)```"
 PYTHON_BLOCK_TAGS = ("", "python")
+TRUNCATED_HEAD_SHARE = 0.7
 OPEN_BLOCK_PATTERN = r"```(\w*) *\n"
 
 MODELS_CONFIG_FILE = "configs/models.json"
@@ -36,6 +37,12 @@ class BenchName(Enum):
 class Bench:
     """Hard limits of a benchmark, its default retry delay (s) and the
     longest an LLM call may take (s), always bounded by the time left.
+
+    observation_max_chars caps what one observation shows the LLM: the
+    whole conversation is resent on every turn, against a cumulative
+    input limit. full_observations is how many of the latest observations
+    stay whole in the conversation, older ones being elided; None keeps
+    them all.
     """
 
     name: str
@@ -45,6 +52,8 @@ class Bench:
     timeout: int
     retry_after: int
     llm_timeout: int
+    observation_max_chars: int = 10000
+    full_observations: int | None = None
 
 
 SWE = Bench(
@@ -55,6 +64,8 @@ SWE = Bench(
     timeout=900,
     retry_after=10,
     llm_timeout=60,
+    observation_max_chars=10000,
+    full_observations=3,
 )
 
 MBPP = Bench(
@@ -65,6 +76,8 @@ MBPP = Bench(
     timeout=120,
     retry_after=5,
     llm_timeout=30,
+    observation_max_chars=2000,
+    full_observations=None,
 )
 
 SWE_PROMPT_EXEMPLE = r"""Task: Fix the issue described in the problem statement.
