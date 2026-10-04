@@ -15,6 +15,11 @@ CODE_BLOCK_PATTERN = r"```(?:python)? *\n(.*?)```"
 MODELS_CONFIG_FILE = "configs/models.json"
 FALLBACK_CONFIG_FILE = "configs/fallback.json"
 
+MBPP_MCP_SERVER = "mcp_tools_mbpp.py"
+SWE_MCP_SERVER = "mcp_tools_swebench.py"
+SWE_REPO_ROOT = "/testbed"
+SCRATCH_DIR = "/tmp/agent"
+
 PATCH_MARKERS = ("diff --git", "--- a/", "+++ b/", "@@")
 
 
@@ -227,7 +232,7 @@ def smallest_abs(a):
 assert smallest_abs([3, -1, 5]) == 1, 'smallest_abs([3, -1, 5]) == 1'
 assert smallest_abs([-5, 2]) == 2, 'smallest_abs([-5, 2]) == 2'
 assert smallest_abs([-4, -9]) == 4, 'smallest_abs([-4, -9]) == 4'
-final_answer("""def smallest_abs(a):
+final_answer(r"""def smallest_abs(a):
     return min(map(abs,a))""")
 ```<end_code>
 '''

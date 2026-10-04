@@ -11,12 +11,23 @@
 
 ---
 
-## Etat actuel — 2026-10-03
+## Etat actuel — 2026-10-04
 
-**Cote P2 (tchemin) : tout ce qui pouvait etre fait sans MCP l'est.** Boucle,
-extraction, couche LLM, provider, prompts MBPP et SWE, les deux CLI, la config
-modeles. **500 tests verts.** `ruff check` : 0 cote P2, **9 erreurs dans
-`mcp_tools/`** depuis le merge (code P1, 8 corrigeables par `--fix`).
+**Cote P2 (tchemin) : la boucle appelle les outils MCP.** Les deux CLI
+lancent leur serveur MCP en stdio, inserent le manuel dans le prompt et
+passent le client a la boucle (2026-10-04, non commite, P2.5 « Branchement
+MCP »). L'exemple MBPP soumet en `final_answer(r"""...""")` (P2.4).
+**519 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
+fichiers de ndi-tull non formates (`mcp_tools/*`, `sandbox/manual.py`,
+`sandbox/mcp_client/client.py`, `wrappers.py`).
+
+**Merge d'`origin/ndi-tull` le 2026-10-04 (`ca8f0ad`)** : client MCP
+synchrone (`sandbox/mcp_client/client.py`), wrappers dans le namespace
+(`wrappers.py`), broker parent/enfant dans `executor.py` (plus de faux
+timeout au-dela de 64 Ko), les 9 signatures calees sur le § V.5, `run_tests`
+MBPP (`mcp_tools/tools_mbpp.py`), options des serveurs
+(`mcp_tools/config.py` : `--repo-root`, `--eval-script`, `--task-file`,
+transport HTTP). Merge sans conflit, 500 tests verts apres merge.
 
 **Fournisseurs SWE : il en manque un depuis le 2026-10-03.** NVIDIA a
 retire `nemotron-3-super` ce jour-la (HTTP 410, « end of life ») : restent 4
@@ -27,92 +38,127 @@ models »*, ch. VI). **Mistral valide par l'equipe pedagogique le 2026-10-02**
 (credits mensuels offerts, sans carte ; le sujet le range d'ailleurs parmi
 les *« Cloud providers with free access »*, § V.6.1).
 
-**`Makefile` : un modele par defaut par benchmark** (2026-10-02,
-`e0a7737`) — MBPP `ministral-14b-2512` (Mistral), SWE `codestral-2508`
-(Mistral) depuis le 2026-10-03 (`560a18f`), a la place de `nemotron-3-super`
-retire. **Seuls les modeles declares
-dans `configs/models.json` sont acceptes** (`c7727cc`) : un modele payant
-non declare est refuse avant toute requete.
+**`Makefile` : un modele par defaut par benchmark**, `codestral-2508`
+(Mistral) pour les deux : SWE depuis `560a18f`, MBPP depuis `3156144`
+(2026-10-03, a la place de `ministral-14b-2512`). **Seuls les modeles
+declares dans `configs/models.json` sont acceptes** (`c7727cc`) : un modele
+payant non declare est refuse avant toute requete.
 
-**MBPP : 4 modeles a 15-17/20, au niveau de Groq (16/20).** Campagne des 5
-modeles sur les 20 taches de reference (`run15` a `run24`), puis deux
-defauts de la boucle corriges et `codestral` rejoue : 11/20 → **17/20**,
-metriques valides 17/20 → 20/20 (`run25`/`run26`). Le 2026-10-03,
-**l'exemple MBPP passe en multiligne** (ablation E, `run27` a `run34`) :
-`codestral` 16/20 → 17/20, 7 refus `SyntaxError` → 0, entree par tache
-−39 % ; Groq 17/20 → 18/20. Puis **rejeu des autres sur l'agent actuel**
-(`run35` a `run40`) : `ministral-14b` et `ministral-8b` 15/20 → 13/20
-(taches perdues : raisonnement jusqu'au plafond de sortie, dans le bruit
-d'un tirage), `nemotron-3-super` impossible a rejouer (retire). Enfin
-**Groq sans sequence d'arret** (ablation F, `run43`/`run44`) : **18/20, aucun
-echec en 21 tentatives**, 1,6 s par tache, tokens complets. Detail en P2.6.
+**MBPP : campagne des 5 modeles sur l'agent branche MCP** (2026-10-04,
+`run45` a `run54`, memes 20 taches) : Groq 18/20, `nemotron-3-ultra` 16/20,
+`codestral` 15/20, `ministral-14b` 14/20, `ministral-8b` 12/20, metriques
+100/100 valides, ecarts dans le bruit d'un tirage. **`run_tests()` n'est
+appele dans aucune des 100 taches**, alors que le manuel coute ~100 tokens
+par tour ; le `r"""` de l'exemple est repris dans 103 `final_answer` sur 104
+(0 sur 101 avant). Detail en P2.6.
 
-**`BENCHMARK_REPORT.md` : partie MBPP ecrite** (2026-10-02, en anglais ;
-mis a jour le 2026-10-03 : ablation E, rejeu sur l'agent actuel, retrait de
-`nemotron-3-super`, tokens Groq sous-estimes, ablation F), sur les 40
-campagnes `run5` a `run44`,
-**versionnees dans `benchmarks/mbpp/`**
-avec leurs `solution.json`. Les sections SWE gardent la structure du sujet et
-attendent les outils (P2.6).
+**`BENCHMARK_REPORT.md` : partie MBPP a jour au 2026-10-04** (en anglais),
+sur les 50 campagnes `run5` a `run54`, **versionnees dans
+`benchmarks/mbpp/`** avec leurs `solution.json`. Les sections SWE gardent la
+structure du sujet et attendent Docker (P2.6).
+
+**Docker de la machine : rootless** (constate le 2026-10-04). Le compte
+n'est pas dans le groupe `docker` : le SDK Python `docker` (moulinette, et le
+futur `agent_swebench/docker.py`) vise `/var/run/docker.sock` et se fait
+refuser. Il faut `DOCKER_HOST=unix:///run/user/$UID/docker.sock`. Le daemon
+rootless n'avait pas `python:3.11-slim` : **toute validation MBPP sortait
+FAILED sans aucune erreur affichee**. Image tiree, `run45` a `run54`
+revalides (P2.6).
 
 **Repli entre fournisseurs : fait** (2026-10-02, `19e17be`). Une erreur
 permanente, ou 5 transients de suite sur le meme modele, ne terminent plus la
 tache : elle continue sur le modele suivant de `configs/fallback.json` (une
-liste par benchmark), puis echoue proprement. Verifie en reel sur deux taches
-MBPP validees par la moulinette (P2.3, « Repli de provider »).
+liste par benchmark), puis echoue proprement (P2.3, « Repli de provider »).
 
 **Limite de tokens par minute de Mistral respectee avant l'envoi**
-(2026-10-02, `36e071b`) : une requete qui ne tiendrait pas dans les tokens
-restants de la minute n'est plus envoyee (P2.3, « Limite de tokens par
-minute »).
+(2026-10-02, `36e071b`, P2.3).
 
-**Reponse vide : reprise depuis `reasoning`, et tokens des reponses rejetees
-comptes** (2026-10-03, `81bfa3b`). Quand `content` est vide et que
-`reasoning` porte un bloc de code ferme, c'est la reponse. Les tokens d'une
-reponse rejetee par le client vont dans les totaux **et** dans l'etape : les
-totaux Groq publies jusqu'a `run40` sont donc sous-estimes. **Puis la vraie
-cause corrigee** (2026-10-03, non commite) : Groq `gpt-oss-120b` ne recoit
-plus la sequence d'arret (`"send_stop": false`), que le fournisseur
-appliquait aussi au raisonnement. Detail en P2.3.
+**Reponse vide : reprise depuis `reasoning`, tokens des reponses rejetees
+comptes** (`81bfa3b`), **et sequence d'arret retiree pour Groq
+`gpt-oss-120b`** (`"send_stop": false`, `3156144`). Detail en P2.3.
 
-**Sandbox manual dans le prompt, cote `Prompt`** (2026-10-03, `fb8f224`) :
-le manuel de ndi-tull (`sandbox/manual.py`) est insere tel quel par
-`Prompt(manual=)`, et ce qu'il dit deja n'est plus repete par nos consignes.
-**Les deux CLI passent encore `manual=None`** : `render_manual()` attend le
-client MCP connecte, qui n'existe pas encore (P1.4). Detail en P2.4.
+> **Le chemin critique est cote P1** : Docker (rien n'existe), la securite du
+> sandbox (evasion toujours ouverte) et le CLI `sandbox` (vide). Le prompt SWE
+> n'a toujours jamais tourne contre un vrai depot.
 
-**Cote P1 (ndi-tull) : demarre.** L'executeur et cinq modules de securite
-existent, le sandbox execute du code et remonte `final_answer` — c'est ce qui a
-debloque la boucle. Les 9 outils sont **merges dans `thomas`** depuis le
-2026-10-01 (`70207ab`), mais leurs signatures ne suivent pas le § V.5 (voir la
-revue ci-dessous). Le **manuel** (`sandbox/manual.py`, `2b4ddb3`) et les
-**transports** stdio et HTTP du client MCP (`49b7d9a`) sont dans `thomas`
-depuis le 2026-10-03 (`c4cff46`). Restent le CLI/REPL, le client MCP lui-meme
-(`sandbox/mcp_client/client.py` est vide), les wrappers des outils dans le
-namespace du sandbox, et Docker.
-
-> **Le chemin critique est cote P1.** Sans client MCP et sans Docker, ni
-> SWE-bench ni le rapport de benchmark ne peuvent avancer. Le prompt SWE n'a
-> jamais tourne contre un vrai depot.
-
-**Dettes qui bloquent la mesure** (la 2 et la 3 sont reglees) :
+**Dettes qui bloquent la mesure** :
 
 0. **Il manque un 5e modele SWE** (2026-10-03) : `nemotron-3-super` retire
    par NVIDIA, 4 modeles restent pour un minimum de 5 (« Prochaines
    actions », 4 bis)
+1. **Docker** : `agent_swebench/docker.py` est vide, aucune tache SWE
+   possible (P1.6). Les outils, eux, sont conformes et appelables depuis le
+   2026-10-04
+2. ~~Le modele par defaut du `Makefile` est inutilisable~~ — reglee le
+   2026-10-02 (« Prochaines actions », 4 quater)
+3. ~~L'echeance de 30 s par appel est trop courte pour SWE~~ — reglee le
+   2026-10-02 (« Prochaines actions », 4 ter)
 
-1. **Les outils MCP sont merges mais non conformes** : `origin/ndi-tull`
-   (`9c8c4b2` → `64f06cc`) est rapatrie dans `thomas` le 2026-10-01
-   (`70207ab`). Les signatures restent a caler sur le § V.5 avant de brancher
-   quoi que ce soit dessus (voir la revue).
-2. ~~**Le modele par defaut du `Makefile` (`MODEL :=`) est inutilisable.**~~
-   **Reglee le 2026-10-02** : `nemotron-3-ultra-550b-a55b:free` (OpenRouter,
-   27 a 40 s par reponse) remplace par un defaut par benchmark, voir
-   « Prochaines actions », 4 quater
-3. ~~**L'echeance de 30 s par appel est trop courte pour SWE.**~~
-   **Reglee le 2026-10-02** : l'echeance depend du benchmark
-   (`Bench.llm_timeout`), 60 s pour SWE, 30 s pour MBPP. Voir « Prochaines
-   actions », 4 ter
+### Revue du 2026-10-04 (sujet, TODO et code relus ; merge et branchement verifies a l'execution)
+
+Verifie sur l'etat fusionne (`thomas` + `origin/ndi-tull`) avant le merge,
+puis sur `ca8f0ad`.
+
+**Bloquants (criteres eliminatoires du sujet) :**
+
+- [ ] **Evasion du sandbox, toujours ouverte apres le merge** :
+      `import random; random._os.system(...)` lance une commande shell,
+      `typing.sys.modules['builtins'].open('/etc/hostname')` lit le fichier,
+      `typing.sys.modules['_socket']` est accessible. `ast_guard.py:10` ne
+      bloque que les `__x` ; `_os` et `typing.sys` passent. **Nouveau chemin
+      depuis le branchement** : `run_tests` MBPP execute le fichier candidat
+      avec `python`, hors sandbox (`mcp_tools/tools_mbpp.py`) — un fichier
+      ecrit dans `/tmp/agent` par le code du modele s'execute sans aucune
+      restriction
+- [ ] **`uv run sandbox` plante** (`ImportError: cannot import name 'main'`) :
+      `sandbox/cli.py` est vide. `sandbox_template.json` fait 0 octet
+      (§ V.2.1, et `exam_sandbox.sh` passera tres probablement par la)
+- [ ] **Docker** : `agent_swebench/docker.py` vide (P1.6)
+- [ ] **Retours exiges par le § V.1 : 3 cas sur 5 manquent.** Aucun bloc → ✓.
+      Bloc mal forme interprete quand meme → ✗ (un bloc python sans fermeture
+      rend « No code block found »). Timeout avec sortie partielle → ✗ (la
+      sortie est perdue, meme avec le broker). Sortie tronquee → ✗ (aucune
+      troncature : un `read_file` de 2 000 lignes rend 21 685 caracteres).
+      Erreur de syntaxe ou de lint apres `edit_file` → ✗
+
+**Risque absent jusqu'ici — le budget d'entree SWE est cumule :**
+
+- [ ] Prompt SWE + manuel reel ≈ 16 000 caracteres ≈ 4 700 tokens. Tout
+      l'historique etant renvoye a chaque tour, 30 tours coutent ~141k des
+      300k **sans aucune observation**. Avec ~1,5k tokens ajoutes par tour
+      (estimation, pas une mesure), le plafond tombe vers le **17e tour**. A
+      prevoir : troncature des observations, elagage des anciennes, exemple
+      SWE allege (~2,5k tokens)
+
+**A trancher :**
+
+- [ ] **Extraction a un seul format** (P2.2) : le § V.1 dit *should* pour
+      XML, JSON/Hermes et ReAct. L'argument 2 de la decision du 2026-08-12
+      est caduc : `LLM_STOP_SEQUENCE` ne contient plus que `<end_code>`
+- [ ] **`get_patch` fait `git add -A`** (`mcp_tools/tools_exec.py`) :
+      scripts de repro ecrits dans le depot et fichiers de test crees par
+      l'`eval_script` entreraient dans le patch, qui risque de ne plus
+      s'appliquer a la validation
+- [ ] **`read_file` exige `start_line` et `end_line`** : `read_file(path)`
+      leve `TypeError`, un tour perdu. Des valeurs par defaut resteraient
+      conformes
+- [ ] **`run_tests` MBPP** : la description vue par le modele ne dit pas
+      ou ecrire le candidat (`--solution-file`). 0 appel sur 100 taches
+      (P2.6)
+- [ ] **Exemple SWE decale des vraies sorties** : `run_command` rend
+      `exit code: 0 / --- stdout ---`, l'exemple montre `stdout: …
+      exit_code: 0` (`constants.py`) ; `edit_file` rend `Edited X: 1
+      replacement`, l'exemple `X:92 edited (1 replacement)`
+- [ ] **Echeance des appels d'outils** : bornee par la duree du bench
+      (`call_timeout` = 120 s ou 900 s), pas par le temps restant de la tache
+- [ ] Groq `gpt-oss-120b` a fait un appel d'outil **natif** (HTTP 400 « Tool
+      choice is none, but model called a tool », `run45`, MBPP 94), apparu
+      avec le manuel qui parle de « tools ». Permanent, donc repli. A
+      surveiller
+
+**Rendu :**
+
+- [ ] `en.subject.pdf` (2,2 Mo) est versionne, comme `moulinette.zip`
 
 ### Revue du 2026-10-01 (sujet relu en entier, code relu, tout verifie a l'execution)
 
@@ -152,16 +198,21 @@ namespace du sandbox, et Docker.
 - [ ] **Evasion du sandbox** : `random._os`, `typing.sys.modules['os']`,
       `typing.sys.modules['builtins'].open('/etc/hostname')` et `_socket`
       passent tous. `ast_guard` ne bloque que les `__x` ; `typing.sys` est un
-      attribut **public**, il faut filtrer les attributs des modules importes
-- [ ] **Sortie > 64 Ko = faux timeout** : interblocage `Queue` / `join`
+      attribut **public**, il faut filtrer les attributs des modules importes.
+      **Toujours ouverte le 2026-10-04** apres le merge (revue du jour)
+- [x] **Sortie > 64 Ko = faux timeout** : interblocage `Queue` / `join`
       (`executor.py:57-71`), l'enfant attend que le parent lise, le parent
-      attend que l'enfant finisse. Et aucune troncature (exigee, V.1)
+      attend que l'enfant finisse. **Regle par le broker de ndi-tull**
+      (`331543a`, merge `ca8f0ad`) : 200 000 caracteres reviennent entiers,
+      verifie le 2026-10-04. Reste : aucune troncature (exigee, V.1)
 - [ ] **Timeout = sortie partielle perdue** (`StringIO` dans l'enfant tue) ;
       le sujet exige de la renvoyer
 - [ ] `sandbox_template.json` fait 0 octet : `uv run sandbox
       sandbox_template.json` plantera au parsing
-- [ ] **Signatures des outils `ndi-tull` non conformes au § V.5** — critere
-      eliminatoire (*"All mandatory tools pass independent tests"*) :
+- [x] **Signatures des outils `ndi-tull` non conformes au § V.5** — critere
+      eliminatoire (*"All mandatory tools pass independent tests"*). **Calees
+      par ndi-tull le 2026-10-04** (`9bc28dd`, merge `ca8f0ad`), sauf le
+      `git add -A` de `get_patch` (revue du 2026-10-04). Etat avant :
 
 | Outil | Sujet | `mcp_tools/` (merge `70207ab`) |
 |---|---|---|
@@ -175,6 +226,14 @@ namespace du sandbox, et Docker.
   de **notre** exemple SWE ne marcheront pas. Les recherches partent de
   `Path(".")`, pas de `/testbed`. Le serveur MBPP n'expose aucun outil (le
   § V.3.2 exige `run_tests`).
+
+  **Depuis `9bc28dd`** : `find_references(name, filepath, line)`,
+  `search_function_or_class_definition_in_code(name)`,
+  `run_command(command, workdir, timeout)` passe par un shell, `run_tests()`
+  lance l'`eval_script` donne par `--eval-script`, `get_patch()` utilise
+  `core.fileMode=false` (toujours apres `git add -A`), les recherches partent
+  de `--repo-root` (`/testbed` s'il existe). Le serveur MBPP expose
+  `run_tests`.
 
 **Risque de planning — les quotas gratuits face a SWE :**
 
@@ -283,10 +342,20 @@ le **comptage des tokens des reponses rejetees** (P2.3), commites dans
 `81bfa3b`. Campagne Groq `run41`/`run42` : 13/20, les reponses vides mangent
 maintenant le budget de sortie. Sonde sans `stop` (1 reponse vide sur 14 au
 lieu de 6), d'ou **`send_stop: false` pour `gpt-oss`**, puis `run43`/`run44` :
-18/20, aucun echec (P2.3, P2.6, ablation F). **Non commite** :
-`configs/models.json`, `core/config_models.py`, `core/llm/client.py`,
-`BENCHMARK_REPORT.md`, `benchmarks/README.md`, `benchmarks/mbpp/run35` a
-`run44`, `TODO.md`.
+18/20, aucun echec (P2.3, P2.6, ablation F). Le tout commite dans
+`3156144`, avec le defaut MBPP du `Makefile` passe a `codestral-2508`.
+
+**2026-10-04** : revue complete (sujet, TODO, code des deux branches, tout
+verifie a l'execution ; voir « Revue du 2026-10-04 »). **Merge
+d'`origin/ndi-tull`** (`ca8f0ad`, sans conflit) : client MCP, wrappers,
+broker, signatures calees, `run_tests` MBPP. Puis **branchement MCP des deux
+CLI** (P2.5) et **exemple MBPP en `r"""`** apres l'echec de MBPP 396 sur un
+`\1` (P2.4). Campagne des 5 modeles sur ce nouvel agent (`run45` a `run54`,
+P2.6), Docker rootless et image de validation manquante decouverts en
+route. `BENCHMARK_REPORT.md` et ce TODO mis a jour. **Non commite** :
+`agent_mbpp/cli.py`, `agent_swebench/cli.py`, `core/agent/loop.py`,
+`core/agent_cli_helper.py`, `core/constants.py`, `BENCHMARK_REPORT.md`,
+`benchmarks/README.md`, `benchmarks/mbpp/run45` a `run54`, `TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -304,15 +373,17 @@ lieu de 6), d'ou **`send_stop: false` pour `gpt-oss`**, puis `run43`/`run44` :
 
 ### Qui a du code
 
+Etat au 2026-10-04 (apres le merge `ca8f0ad`) :
+
 | Ecrit | Encore vide |
 |---|---|
 | `core/` : `models.py`, `config_models.py`, `errors.py`, `constants.py`, `api_key.py`, `agent_cli_helper.py` | `sandbox/cli.py`, `security/limits.py` |
-| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | `sandbox/mcp_client/client.py` |
-| `core/llm/` : `client.py`, `provider.py` | |
-| `mcp_tools/` + les 2 `mcp_tools_*.py` racine (merges le 2026-10-01, **signatures non conformes**) | |
-| `agent_mbpp/`, `agent_swebench/` (sauf `docker.py`) | `agent_swebench/docker.py` |
-| `sandbox/executor.py`, `sandbox/manual.py`, `sandbox/mcp_client/transports.py`, `configs/models.json` | `sandbox_template.json` |
-| `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` | `BENCHMARK_REPORT.md`, `README.md` |
+| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | `agent_swebench/docker.py` |
+| `core/llm/` : `client.py`, `provider.py`, `fallback.py` | `sandbox_template.json` |
+| `mcp_tools/` (`tools_fs`, `tools_search`, `tools_exec`, `tools_mbpp`, `config`) + les 2 `mcp_tools_*.py` racine, signatures conformes depuis `9bc28dd` | `README.md` |
+| `agent_mbpp/`, `agent_swebench/` (sauf `docker.py`), branches sur MCP le 2026-10-04 | |
+| `sandbox/executor.py`, `sandbox/manual.py`, `sandbox/mcp_client/` (`client.py`, `wrappers.py`, `transports.py`), `configs/` | |
+| `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` ; `BENCHMARK_REPORT.md` (partie MBPP) | |
 
 Trois modules supprimes, avec leur raison : **`usage.py`** (le suivi d'usage vit
 dans `Loop`, un module separe aurait duplique l'etat sans proprietaire),
@@ -329,12 +400,13 @@ core/          + models.py  + config_models.py  + errors.py  + constants.py
 sandbox/       . cli.py  + executor.py  + manual.py
   security/    + imports.py  + filesystem.py  + builtins.py  + network.py
                + ast_guard.py  . limits.py
-  mcp_client/  . client.py  + transports.py
-mcp_tools/     . tools_fs.py  . tools_search.py  . tools_exec.py
+  mcp_client/  + client.py  + wrappers.py  + transports.py
+mcp_tools/     + tools_fs.py  + tools_search.py  + tools_exec.py
+               + tools_mbpp.py  + config.py
 agent_mbpp/    + __main__.py  + cli.py
 agent_swebench/+ __main__.py  + cli.py  . docker.py
-configs/       + models.json
-tests/         + banc d'essai local, gitignore, hors rendu (295 tests)
+configs/       + models.json  + fallback.json
+tests/         + banc d'essai local, gitignore, hors rendu (519 tests)
 ```
 
 ### Deux fichiers de models Pydantic — le critere est « qui possede le schema »
@@ -480,9 +552,14 @@ hallucine ses observations.
 
 ### P1.4 — MCP
 
-- [ ] Serveur : transports stdio **et** HTTP streamable
-- [ ] Client integre dans le sandbox, decouverte dynamique, tools + resources +
-      prompts, wrappers generes depuis les schemas
+- [x] Serveur : transports stdio **et** HTTP streamable (`--transport`,
+      `mcp_tools/config.py`, `f929b15`)
+- [x] Client integre dans le sandbox, decouverte dynamique, tools + resources +
+      prompts, wrappers generes depuis les schemas (`client.py`, `wrappers.py`,
+      ndi-tull, merge `ca8f0ad` le 2026-10-04). Le code du modele tourne dans
+      un processus enfant ; ses appels d'outils remontent au parent, qui tient
+      le client (broker d'`executor.py`), et le temps passe dans un outil est
+      rendu a l'echeance du sandbox
 - [x] Generation dynamique du **sandbox manual** depuis les schemas du serveur
       — `sandbox/manual.py` (ndi-tull, `2b4ddb3`). Verifie le 2026-10-03 sur
       les deux vrais serveurs : 9 outils cote SWE (signature, puis docstring),
@@ -493,16 +570,18 @@ prompt (manuel)      <- decouverte <- serveur MCP
 namespace du sandbox -> wrapper    -> client MCP -> serveur -> outil
 ```
 
-Un maillon sur cinq reste vide depuis le 2026-10-03 : le client MCP
-(`sandbox/mcp_client/client.py`). Le manuel et les transports sont arrives.
-`mcp_tools/` est merge (signatures a caler, voir la revue en tete).
-Le namespace d'`executor.py:32` ne contient toujours que `final_answer` :
-**aucun outil n'est encore appelable depuis le sandbox**.
+**Chaine complete depuis le 2026-10-04** : client, wrappers et outils
+merges (`ca8f0ad`), puis branches dans les deux CLI (P2.5, « Branchement
+MCP »). Verifie le meme jour : connexion au serveur SWE en 0,8 s, 9 outils
+listes, `read_file`, `run_command`, `find_references`… appeles depuis le
+sandbox.
 
 - [x] Le manuel contient le **contrat** (nom, description, types), **jamais le
       code** : l'implementation peut changer sous le modele. Verifie le
       2026-10-03 : signature typee, puis la docstring de l'outil
-- [ ] **A transmettre a ndi-tull** (constate le 2026-10-03, rien touche) :
+- [x] **A transmettre a ndi-tull** (constate le 2026-10-03) — **regle le
+      2026-10-04** : le serveur MBPP expose `run_tests`, et `run_command`
+      prend `workdir` comme le sujet :
   - avec le serveur MBPP, qui n'a aucun outil, le manuel annonce *« the
     tools below »* sans rien en dessous
   - le manuel annonce `run_command(command, timeout, cwd, raw)`, notre
@@ -520,38 +599,43 @@ Le namespace d'`executor.py:32` ne contient toujours que `final_answer` :
 
 **Interface avec P2 : tranchee le 2026-10-03.** `render_manual(client)` rend
 **un texte deja mis en forme**, que `Prompt(manual=)` insere tel quel : P2
-insere, il ne compose pas. Reste a convenir **comment l'agent le recupere** :
-`render_manual` attend le client connecte, et ce client vit dans le sandbox
-(§ IV : *« The sandbox wraps the MCP client »*). D'ici la, les deux CLI
-passent `manual=None`.
+insere, il ne compose pas. **Recuperation tranchee le 2026-10-04** : la CLI
+de l'agent lance le serveur (`connect_mcp_server()`), rend le manuel avec
+`render_manual(client)` et passe le meme client a la boucle, qui le donne a
+`execute(..., client=)`.
 
 ### P1.5 — Les 9 outils obligatoires
 
 *Testes independamment de la boucle.*
 
-- [~] **FS** : `read_file(filepath, start_line, end_line)` (format `cat -n` :
+- [x] **FS** : `read_file(filepath, start_line, end_line)` (format `cat -n` :
       `"<line>: <content>"`), `edit_file(filepath, old_str, new_str)`
       (remplacement exact), `list_files(directory, pattern)`
-- [~] **Recherche** (format commun `/abs/path.py:<line> <content>`) :
+- [x] **Recherche** (format commun `/abs/path.py:<line> <content>`) :
       `search_code`, `search_function_or_class_definition_in_code`,
       `find_references`
 - [~] **Execution** : `run_tests()` (lance l'`eval_script`), `get_patch()` (git
       diff unifie), `run_command(command, workdir)`
 
-  `[~]` sur les trois : ecrits et merges, mais **3 signatures sur 9 sont
-  incompatibles** (`find_references`, `search_function_or_class_definition_in_code`,
-  `run_command`) et le **comportement** de `run_tests` (lance `pytest`, pas
-  l'`eval_script`) et de `get_patch` (sans `core.fileMode=false`) s'ecarte du
-  sujet. Tableau dans la revue en tete. `run_tests()` reste appelable sans
-  argument ; les 5 autres ont la bonne signature.
-- [~] `mcp_tools_mbpp.py` et `mcp_tools_swebench.py` a la **racine** (merges) :
-      le serveur SWE enregistre les 9 outils, le serveur MBPP **aucun**
+  **Signatures et comportements cales sur le § V.5 le 2026-10-04**
+  (`9bc28dd`). Restent (revue du 2026-10-04) : le `git add -A` de
+  `get_patch`, `read_file` sans valeurs par defaut, aucune troncature des
+  sorties, aucune verification apres `edit_file`. Rien n'a tourne contre un
+  vrai conteneur SWE.
+- [x] `mcp_tools_mbpp.py` et `mcp_tools_swebench.py` a la **racine** : le
+      serveur SWE enregistre les 9 outils, le serveur MBPP `run_tests`
 
 La logique va dans `mcp_tools/` (`tools_fs`, `tools_search`, `tools_exec`) ; les
 2 fichiers racine ne sont que des points d'entree fins, l'emplacement etant
 impose.
 
-- [ ] **`run_tests` MBPP** — exige par le § V.3 point 2, souvent oublie parce que
+- [~] **`run_tests` MBPP** — ecrit par ndi-tull (`mcp_tools/tools_mbpp.py`,
+      2026-10-04) : contrat par fichier, le modele ecrit son candidat dans
+      `--solution-file`, l'outil le passe contre les `test_list` de
+      `--task-file`. **Deux problemes** : il execute le candidat avec `python`
+      **hors sandbox**, et sa description ne dit pas ou ecrire le fichier (0
+      appel sur 100 taches, P2.6). Ancienne note :
+      exige par le § V.3 point 2, souvent oublie parce que
       les 9 outils sont annonces "in the context of SWE-bench". **Aucune
       signature ni format imposes**, donc liberte de conception et charge de la
       defendre. **A trancher avec P2** : le `run_tests()` du § V.5.3 lance
@@ -570,8 +654,18 @@ impose.
   - **(b) sandbox sur l'hote, serveur MCP faisant le pont par `docker exec`** :
     l'image reste intacte, mais chaque outil devient un aller-retour
 - [ ] Pull / run de l'image, montage de `${TESTBED_PATH}` si necessaire
-- [ ] `git -c core.fileMode=false diff` pour `get_patch()`
+- [~] `git -c core.fileMode=false diff` pour `get_patch()` — fait, mais apres
+      `git add -A` (revue du 2026-10-04)
 - [ ] **Cleanup des containers** apres execution (exige)
+- [ ] **Docker est rootless sur nos postes** (2026-10-04) : le SDK Python
+      `docker` a besoin de `DOCKER_HOST=unix:///run/user/$UID/docker.sock`,
+      sinon `PermissionError` sur `/var/run/docker.sock`
+- [ ] Le branchement P2 du 2026-10-04 lance le serveur SWE **sur l'hote**
+      avec `--repo-root /testbed` et l'`eval_script` dans un fichier
+      temporaire (`agent_swebench/cli.py`). A revoir selon (a) ou (b) : en
+      (a), le serveur et l'`eval_script` doivent vivre dans le conteneur.
+      **Sans Docker, ne pas lancer l'agent SWE** : `run_command` executerait
+      ce que demande le modele sur la machine
 
 ### P1.7 — Tests de securite
 
@@ -1503,8 +1597,9 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
     `render_manual` de ndi-tull, et retrouve la signature des 9 outils dans
     le prompt SWE ; en desactivant l'insertion, 6 tests echouent, en
     desactivant le retrait des doublons, 7 ; 474 tests verts, `ruff` propre
-  - [ ] **Brancher le manuel dans les deux CLI** : attend le client MCP
-        (P1.4). Les outils ne sont de toute facon pas appelables d'ici la
+  - [x] **Brancher le manuel dans les deux CLI** — fait le 2026-10-04 (P2.5,
+        « Branchement MCP »). Mesure : MBPP +439 caracteres (~100 tokens au
+        premier tour, 888 → 983 pour Groq, 859 → 959 chez Mistral)
   - [ ] **Nuance a mesurer** : pour `print()`, le manuel dit *« A bare
         expression's value is discarded, so print() whatever you need to
         see »*, plus general que notre *« A tool call alone prints
@@ -1536,6 +1631,20 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
     et le piege des `\n` litteraux n'est pas revenu (0 reponse invalide sur
     42). Test ajoute : l'exemple soumet, sur plusieurs lignes, le code qu'il
     vient de tester (echoue sur l'ancien exemple) ; 475 tests verts
+- [x] **`final_answer(r"""...""")` dans l'exemple MBPP** (2026-10-04, non
+      commite). Constate sur MBPP 396 (`codestral-2508`, premier run branche
+      MCP) : le modele teste `r'^(.).*\1$'`, puis recopie le code dans
+      `final_answer("""...""")`, chaine non brute ou `\1` devient le
+      caractere `\x01`. Les tests visibles passent, la boucle accepte, le test
+      cache echoue. Meme piege pour `\b`, `\n`, `\t`. L'exemple soumet
+      desormais en `r"""` ; le refus `SyntaxError` de la boucle conseille aussi
+      `final_answer(r"""...""")`. Test ajoute (echoue si l'on remet `"""`).
+      **Mesure** (`run45` a `run54`, P2.6) : 103 `final_answer` sur 104 en
+      `r"""` (0 sur 101 avant). Effet sur le score non isole : la campagne
+      change aussi le branchement MCP
+- [ ] Un modele peut encore ecrire `"""` sans `r` : la boucle ne le detecte
+      pas. Piste : verifier que la fonction soumise est celle qui vient d'etre
+      testee
 - [x] **Prompts et relances corriges (2026-10-01, `9c4754a`)**, mesures le
       meme jour en `run9`/`run10` (voir P2.6) :
   - exemple MBPP : les `assert` sont suivis de `print('all tests passed')`,
@@ -1599,9 +1708,49 @@ sur toutes les taches mesurees.
 le helper lit l'environnement et les fichiers, les CLI cablent les objets.
 
 - [ ] `final_answer(get_patch())` est enseigne dans le prompt mais **non teste en
-      execution** : `get_patch()` est un outil MCP de P1.5, pas encore branche.
-      Jusqu'au 2026-10-01 la boucle l'aurait de toute facon **refuse**
-      (`ast.parse` sur un diff) — corrige, voir la revue en tete
+      execution** : `get_patch()` est appelable depuis le 2026-10-04, mais
+      aucun conteneur SWE n'existe (P1.6). Jusqu'au 2026-10-01 la boucle
+      l'aurait de toute facon **refuse** (`ast.parse` sur un diff) — corrige,
+      voir la revue du 2026-10-01
+
+#### Branchement MCP (2026-10-04, non commite)
+
+Les deux agents lancent leur serveur MCP, mettent son manuel dans le prompt
+et passent le client a la boucle. En cinq pieces :
+
+- `core/constants.py` : `MBPP_MCP_SERVER`, `SWE_MCP_SERVER`,
+  `SWE_REPO_ROOT = "/testbed"`, `SCRATCH_DIR = "/tmp/agent"`
+- `core/agent_cli_helper.py` : `connect_mcp_server(script, args,
+  call_timeout)` lance le serveur en stdio avec l'interpreteur de l'agent ;
+  echec de demarrage ou de handshake → `RuntimeError`. Plus
+  `write_temp_file()` et `remove_file()`
+- `core/agent/loop.py` : parametre `mcp_client`, transmis a
+  `execute(..., client=)` ; `None` laisse `final_answer` seul dans le sandbox
+- `agent_mbpp/cli.py` : serveur lance avec `--task-file` et un candidat
+  propre au run (`/tmp/agent/solution_<pid>.py`, pour qu'un run ne lise pas
+  celui d'un autre) ; `/tmp/agent` cree s'il manque. **Sans serveur, l'agent
+  continue sur ses `assert`** (avertissement sur stderr)
+- `agent_swebench/cli.py` : l'`eval_script` est ecrit dans un fichier
+  temporaire hors des dossiers du sandbox, serveur lance avec
+  `--repo-root /testbed --eval-script <fichier>`. **Sans serveur, echec au
+  demarrage** (`solution.json` en echec)
+
+Le serveur est lance **en dernier**, une fois la config validee : un modele
+non declare n'en demarre aucun. `close()` arrete le serveur et supprime les
+fichiers temporaires ; `run()` l'appelle dans tous les cas. L'echeance de
+chaque appel d'outil est la duree du bench (120 s ou 900 s).
+
+**Verifie** : 11 tests ajoutes (9 dans `tests/test_agent_cli.py` avec les
+vrais serveurs, 2 dans `tests/test_loop.py`), les tests de construction
+tournent sans serveur ; retirer le client de la boucle, de la CLI MBPP ou de
+la CLI SWE fait echouer un test a chaque fois. 518 tests verts, `ruff`
+propre. Run reel MBPP 396 : manuel dans `system_prompt`, aucun serveur
+restant, `/tmp/agent` vide apres le run.
+
+- [ ] Decider s'il faut garder le manuel cote MBPP : ~100 tokens par tour,
+      `run_tests()` jamais appele (P2.6)
+- [ ] Borner l'echeance des appels d'outils par le temps restant, pas par
+      la duree du bench
 
 ### P2.5 bis — `configs/models.json`
 
@@ -1727,6 +1876,15 @@ conclusions MBPP provisoires (`ministral-14b` retenu, `nemotron-3-super` en
 repli). Tous les chiffres sont recalcules par script depuis les
 `solution.json`, pas recopies de ce TODO.
 
+**Mis a jour le 2026-10-04** avec `run45` a `run54` (agent branche MCP) :
+statut (outils appelables, Docker manquant), § 1.1 (manuel, `r"""`),
+§ 1.2 (incident de validation), lignes « MCP agent » dans les tableaux 2.1,
+3.1 et 4.1, matrice par tache, note en § 5 (pas une ablation : deux
+changements a la fois), conclusions 6.1 (`codestral` defaut MBPP du
+`Makefile`, `nemotron-3-ultra` ecarte pour MBPP, manuel MBPP inutilise). Les
+chiffres viennent d'un script qui retrouve a l'identique les valeurs deja
+publiees pour `run17/18`, `run33/34`, `run35/36` et `run43/44`.
+
 **Revalidation de `run5` a `run8` par la moulinette** (2026-10-02) : ils
 n'avaient ete verifies qu'en executant les `test_list` en local. Seul ecart,
 **`run7` passe de 9/10 a 8/10** : MBPP 400 echoue au test cache, invisible
@@ -1741,8 +1899,9 @@ cles d'API avant versionnage : aucune.
 - [~] Setup (modeles/providers, taches + justification) — MBPP fait, taches
       SWE a justifier
 - [~] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
-      — MBPP fait (6 modeles × 20 taches, plus les 4 modeles encore
-      disponibles sur l'agent du 2026-10-03), SWE vide
+      — MBPP fait (6 modeles × 20 taches, les 4 modeles encore
+      disponibles sur l'agent du 2026-10-03, puis 5 modeles sur l'agent
+      branche MCP le 2026-10-04), SWE vide
 - [~] Fiabilite provider : temps de reponse moyen, retries, disponibilite —
       MBPP fait ; SWE : seules les latences a 56k tokens
 - [~] ≥ 2 metriques intermediaires : etape du 1er acces au fichier du patch final
@@ -1751,7 +1910,7 @@ cles d'API avant versionnage : aucune.
       — la discipline est mesuree sur MBPP ; les deux autres n'existent que
       sur SWE
 - [~] **Etude d'ablation** avant/apres un changement, memes taches, meme modele
-      — 5 sur MBPP (E le 2026-10-03). Le sujet ne dit pas qu'elle doit porter sur SWE ; en
+      — 6 sur MBPP (A a F ; F le 2026-10-03). Le sujet ne dit pas qu'elle doit porter sur SWE ; en
       faire une sur SWE reste plus sur
 - [~] Conclusions justifiees par les donnees + les `solution.json` de backing
       **presents dans le repo** — conclusions MBPP provisoires ; backing MBPP
@@ -2146,6 +2305,43 @@ sur le meme code + `send_stop: false`. `RESUME.json` porte un champ
       NVIDIA du 2026-10-02 le classait deja « protocole incompatible, meme
       sans `stop` » ; a ne regler qu'apres une sonde
 
+#### Campagne du 2026-10-04 : agent branche MCP (`run45` a `run54`)
+
+Memes 20 taches (`run6` + `run7`), 5 modeles, sur `ca8f0ad` + le
+branchement MCP + l'exemple en `r"""` (non commites). Lancee par
+fournisseur en parallele (Groq, Mistral, NVIDIA), les 3 modeles Mistral
+l'un apres l'autre. `RESUME.json` a un champ `run_tests` (nombre d'etapes
+dont le code appelle `run_tests(`), `META.txt` les champs `mcp` et
+`exemple_mbpp=multiligne-r` (documentes dans `benchmarks/README.md`).
+
+| Modele | Dernier run (agent) | 2026-10-04 | Entree / sortie par tache | Temps par tache | Echecs d'appel |
+|---|---|---|---|---|---|
+| Groq `gpt-oss-120b` | 18/20 (`run43/44`) | **18/20** | 1 043 / 551 | 2,9 s | 6 / 25 (4 × 429 TPM, 1 vide, 1 × 400 appel d'outil natif → repli) |
+| `codestral-2508` | 17/20 (`run33/34`) | **15/20** | 1 954 / 612 | 5,9 s | 0 / 33 |
+| `ministral-14b-2512` | 13/20 (`run35/36`) | **14/20** | 1 525 / 781 | 8,0 s | 0 / 26 |
+| `ministral-8b-2512` | 13/20 (`run37/38`) | **12/20** | 1 781 / 837 | 10,2 s | 1 / 30 (echeance) |
+| `nemotron-3-ultra` | 14/20 (`run17/18`, agent du 2026-10-02) | **16/20** | 1 677 / 540 | 27,1 s (max 114,5) | 20 / 49 (17 × 503, 3 × echeance) |
+
+- **Metriques valides 100/100**, aucune soumission a l'aveugle
+- **`run_tests()` jamais appele** (0 sur 100 taches) : les modeles valident
+  avec leurs `assert`, comme l'exemple. La description de l'outil ne dit pas
+  ou ecrire le candidat. Le manuel coute ~100 tokens par tour pour rien
+  cote MBPP
+- **`r"""` repris tout de suite** : 103 `final_answer` sur 104 (seul un de
+  `nemotron-3-ultra` ne l'a pas), 0 sur 101 aux runs precedents
+- Ecarts de score de ±2 taches, dans le bruit d'un tirage. `codestral` perd
+  MBPP 264 (affiche des valeurs 4 tours sans soumettre, jusqu'au plafond
+  d'entree) et 305 (plafond de sortie au 3e essai). Les echecs `ministral`
+  sont surtout le plafond de sortie (9 sur 14) ou d'entree (3)
+- **Pas une ablation** : deux changements a la fois (branchement MCP et
+  `r"""`). Pour isoler l'un, rejouer sans manuel avec `r"""`, sur Groq et
+  `codestral`
+- **Incident de validation** : le Docker rootless n'avait pas
+  `python:3.11-slim`, toutes les validations sortaient FAILED sans erreur
+  affichee (les premieres taches de `run45`, `run47`, `run53`). Image tiree,
+  les 100 solutions revalidees a la fin ; controle prealable sur
+  `run43/01` (PASSED)
+
 ---
 
 ## A faire ensemble (fin de projet)
@@ -2169,10 +2365,11 @@ sur le meme code + `send_stop: false`. `RESUME.json` porte un champ
 2. [x] En parallele — sandbox qui execute + boucle avec provider injecte
 3. [x] **MBPP end-to-end**, et au-dela : 15 taches reelles avec les limites
        branchees
-4. [~] Mesurer et optimiser le prompt → 4 correctifs issus des mesures, rejeu a
-       jeu egal fait (`run4`). **Reste : une campagne apres la couche `Provider`**
+4. [x] Mesurer et optimiser le prompt → 4 correctifs issus des mesures, rejeu a
+       jeu egal fait (`run4`), puis 50 campagnes jusqu'a `run54` (P2.6)
 5. [ ] **Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.** Cote P2,
-       SWE-bench est pret a etre branche — le chemin critique est cote P1
+       les outils sont branches depuis le 2026-10-04 — le chemin critique
+       est cote P1 : Docker, evasion du sandbox, CLI `sandbox`
 6. [ ] SWE-bench sur les 3 taches conseillees : `sympy__sympy-14711` /
        `sympy__sympy-13480` / `pydata__xarray-4629`
 7. [ ] `BENCHMARK_REPORT.md` une fois les 2 benchmarks fonctionnels
@@ -2236,13 +2433,16 @@ sur le meme code + `send_stop: false`. `RESUME.json` porte un champ
        `codestral` rejoue (`run25`/`run26`, 17/20). **Exemple MBPP passe en
        multiligne et mesure** le 2026-10-03 (ablation E, `run27` a `run34`).
        **Rejeu fait le 2026-10-03** (`run35` a `run40`) : les deux
-       `ministral` a 13/20, `nemotron-3-super` retire. Reste a **decider** du
-       modele MBPP par defaut (`codestral-2508` 17/20 contre `ministral-14b`
-       13/20 sur l'agent actuel, et Groq 18/20 sans echec depuis l'ablation
-       F, P2.6)
+       `ministral` a 13/20, `nemotron-3-super` retire. Defaut MBPP passe a
+       `codestral-2508` (`3156144`). **Campagne sur l'agent branche MCP le
+       2026-10-04** (`run45` a `run54`) : Groq 18/20, `nemotron-3-ultra`
+       16/20, `codestral` 15/20, `ministral-14b` 14/20, `ministral-8b` 12/20
+       (P2.6). Reste a **decider** si Groq (18/20 deux fois, mais 8 000
+       tokens/min et appels d'outils natifs) doit redevenir le defaut MBPP
 4 sexies. [~] **`BENCHMARK_REPORT.md`** — partie MBPP ecrite et backing
-       versionne (`0faae67`), ablation E ajoutee le 2026-10-03. Reste la partie SWE, des que les outils sont
-       appelables : 5 modeles × 3 taches (`sympy__sympy-14711`,
+       versionne (`0faae67`), ablation E ajoutee le 2026-10-03, campagne
+       MCP le 2026-10-04. Reste la partie SWE, des que Docker existe (les
+       outils sont appelables depuis le 2026-10-04) : 5 modeles × 3 taches (`sympy__sympy-14711`,
        `sympy__sympy-13480`, `pydata__xarray-4629`), les deux metriques
        propres a SWE, et de preference une ablation SWE. **Chaque nouvelle
        campagne va directement dans `benchmarks/`**, pas dans `cache/`
@@ -2260,20 +2460,19 @@ sur le meme code + `send_stop: false`. `RESUME.json` porte un champ
        le sujet du payant »). Restent : le test `:free` pour OpenRouter, et
        **demander a l'equipe pedagogique comment les scripts d'examen
        choisissent `--model-name`**
-4 decies. [~] **Sandbox manual dans le prompt** — cote `Prompt`, fait le
-       2026-10-03, doublons retires (P2.4). Reste a **convenir avec
-       ndi-tull** de ce que le sandbox exposera pour que les CLI recuperent
-       le manuel, puis a remplacer `manual=None` dans les deux CLI
+4 decies. [x] **Sandbox manual dans le prompt** — cote `Prompt`, fait le
+       2026-10-03, doublons retires (P2.4) ; **branche dans les deux CLI le
+       2026-10-04** (P2.5, « Branchement MCP »)
 4 undecies. [x] **Reponses Groq sans `content`** — reprise depuis
        `reasoning` et comptage des tokens rejetes (`81bfa3b`), puis
        sequence d'arret retiree pour `gpt-oss` (`send_stop: false`, non
        commite), le tout mesure le 2026-10-03 (ablation F) : Groq 18/20,
        **0 echec en 21 tentatives** au lieu d'un sur deux. Reste ouvert :
        OpenRouter `gpt-oss-20b:free`, non mesure (P2.6)
-5. [ ] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). Ce qui
+5. [~] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). **Branche
+       le 2026-10-04, mais jamais appele** (0 sur 100 taches, P2.6). Ce qui
        restera cote P2 :
-   - passer le manuel a `Prompt(manual=)` au lieu de `None` (le cote `Prompt`
-     est pret depuis le 2026-10-03, 4 decies)
+   - [x] passer le manuel a `Prompt(manual=)` au lieu de `None` (2026-10-04)
    - decrire `run_tests` dans le prompt MBPP et **remplacer ou composer avec** la
      consigne actuelle ("use the assert to VALIDATE your code") : aujourd'hui le
      modele valide par `assert` et fait 8/10, il ne sait pas que l'outil existe
@@ -2292,7 +2491,7 @@ sur le meme code + `send_stop: false`. `RESUME.json` porte un champ
 
 ### Le banc d'essai `tests/`
 
-**500 tests** (2026-10-03), gitignore, hors rendu — c'est un outil de travail,
+**519 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 
@@ -2326,7 +2525,8 @@ ce fichier, les deux passaient inapercus.
 - Le **sandbox manual** est produit par P1 et consomme par P2 : **le format rendu
   est l'interface**, P2 insere dans `Prompt(manual=)`, il ne compose pas.
   **Tranche le 2026-10-03** : un texte deja mis en forme (`render_manual`).
-  Reste a convenir de la facon dont l'agent le recupere du sandbox.
+  **Recuperation tranchee le 2026-10-04** : la CLI lance le serveur, rend
+  le manuel et passe le client a la boucle (P1.4, P2.5).
 - **Aucune consigne du prompt ne doit supposer qu'un outil precis existe** : le
   sujet teste avec un serveur MCP inconnu. D'ou l'`assert` garde comme repli MBPP.
 - **`run_tests` MBPP** : exige par le § V.3 mais non specifie. P1 choisit la

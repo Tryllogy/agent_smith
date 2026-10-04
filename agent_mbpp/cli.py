@@ -1,18 +1,26 @@
+import os
+import sys
+
 from dotenv import load_dotenv
 
+from core import constants
 from core.agent.loop import Loop
 from core.agent.prompt import Prompt
 from core.agent_cli_helper import (
+    connect_mcp_server,
     get_api_keys,
     get_fallback_clients,
     get_provider_and_model_config,
     get_task_from_file,
     make_llm_client,
+    remove_file,
 )
 from core.constants import MBPP
 from core.llm.client import LLMClient
 from core.llm.fallback import FallbackClient
 from core.models import MBPPTaskInput, SandboxConfig, SolutionOutput
+from sandbox.manual import render_manual
+from sandbox.mcp_client.client import MCPClient
 
 load_dotenv()
 
@@ -27,23 +35,16 @@ class AgentMBPP:
         model_name: str,
         provider_url: str,
     ) -> None:
-        """Load the task, then build the prompt, LLM client and loop.
+        """Load the task, then build the LLM client, tools, prompt and loop.
 
         Raises on any configuration error (task file, models.json,
-        API keys): no request is made here.
+        API keys): no request is made here. The MCP tool server is
+        started last, once the configuration is known to be valid.
         """
         self.task: dict = get_task_from_file(task_file, MBPPTaskInput)
         self.output_file: str = output_file
 
         sandbox: SandboxConfig = SandboxConfig()
-        manual = None
-
-        prompt: Prompt = Prompt(
-            bench=MBPP,
-            task=self.task,
-            manual=manual,
-            allowed_imports=sandbox.authorized_imports,
-        )
 
         self.provider_config, self.model_config = (
             get_provider_and_model_config(model_name, provider_url)
@@ -62,29 +63,81 @@ class AgentMBPP:
             ]
         )
 
-        self.loop = Loop(
-            client=self.client,
-            prompt=prompt,
-            bench=MBPP,
-            config_sandbox=sandbox,
-            answer_tests=[
-                *self.task.get("test_imports", []),
-                *self.task.get("test_list", []),
-            ],
+        self.solution_file: str = os.path.join(
+            constants.SCRATCH_DIR, f"solution_{os.getpid()}.py"
         )
+        self.mcp_client: MCPClient | None = self.connect_tools(task_file)
+        try:
+            prompt: Prompt = Prompt(
+                bench=MBPP,
+                task=self.task,
+                manual=(
+                    render_manual(self.mcp_client) if self.mcp_client else None
+                ),
+                allowed_imports=sandbox.authorized_imports,
+            )
+            self.loop = Loop(
+                client=self.client,
+                prompt=prompt,
+                bench=MBPP,
+                config_sandbox=sandbox,
+                answer_tests=[
+                    *self.task.get("test_imports", []),
+                    *self.task.get("test_list", []),
+                ],
+                mcp_client=self.mcp_client,
+            )
+        except Exception:
+            self.close()
+            raise
+
+    def connect_tools(self, task_file: str) -> MCPClient | None:
+        """Start the MBPP tool server on this task and connect to it.
+
+        Its run_tests() checks the candidate the model writes to
+        solution_file, in the sandbox's scratch directory. Without the
+        server the agent still runs, on its own asserts: the failure is
+        reported on stderr and None is returned.
+        """
+        try:
+            os.makedirs(constants.SCRATCH_DIR, exist_ok=True)
+            return connect_mcp_server(
+                constants.MBPP_MCP_SERVER,
+                [
+                    "--task-file",
+                    task_file,
+                    "--solution-file",
+                    self.solution_file,
+                ],
+                call_timeout=MBPP.timeout,
+            )
+        except (RuntimeError, OSError) as e:
+            sys.stderr.write(f"Warning: {e}; running without MCP tools\n")
+            return None
+
+    def close(self) -> None:
+        """Stop the tool server and remove the candidate file."""
+        if self.mcp_client is not None:
+            self.mcp_client.close()
+            self.mcp_client = None
+        remove_file(self.solution_file)
 
     def run(self) -> SolutionOutput:
         """Run the loop and write its SolutionOutput to the output file.
 
         An unexpected exception inside the loop is reported in the
         output, with the steps already recorded, instead of propagating.
+        The tool server is stopped in every case.
         """
         try:
-            solution: SolutionOutput = self.loop.run(self.task["task_id"])
-        except Exception as e:
-            solution = self.loop.make_solution_output(
-                error=f"Unexpected error: {e}"
-            )
-        with open(self.output_file, "w") as f:
-            f.write(solution.model_dump_json(indent=4))
+            try:
+                solution: SolutionOutput = self.loop.run(self.task["task_id"])
+            except Exception as e:
+                solution = self.loop.make_solution_output(
+                    error=f"Unexpected error: {e}"
+                )
+            with open(self.output_file, "w") as f:
+                f.write(solution.model_dump_json(indent=4))
+        finally:
+            self.close()
         return solution

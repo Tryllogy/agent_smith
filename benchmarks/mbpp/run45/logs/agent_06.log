@@ -1,0 +1,1 @@
+LLM fallback on step 1: Permanent error from LLM provider: Tool choice is none, but model called a tool (HTTP 400); switching to ministral-14b-2512 at https://api.mistral.ai/v1/chat/completions

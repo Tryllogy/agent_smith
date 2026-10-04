@@ -1,0 +1,9 @@
+modele=openai/gpt-oss-120b
+provider=https://api.groq.com/openai/v1
+taches=benchmarks/mbpp/run6 (memes fichiers)
+code=ca8f0ad + modifications non commitees
+exemple_mbpp=multiligne-r
+mcp=mcp_tools_mbpp.py
+debut=2026-10-04T15:15:06+02:00
+note=agent branche sur le serveur MCP MBPP (manuel dans le prompt, run_tests appelable) et exemple MBPP en final_answer(r"""...""") (2026-10-04); a comparer aux derniers runs du meme modele sur les memes taches
+fin=2026-10-04T15:16:10+02:00

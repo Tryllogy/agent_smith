@@ -1,6 +1,9 @@
+import contextlib
 import json
 import os
+import shlex
 import sys
+import tempfile
 import time
 
 from pydantic import ValidationError
@@ -11,6 +14,7 @@ from core.config_models import FallbackConfig, ModelConfig, ProviderConfig
 from core.llm.client import LLMClient
 from core.llm.provider import Provider
 from core.models import MBPPTaskInput, SolutionOutput, SWEBenchTaskInput
+from sandbox.mcp_client.client import MCPClient, MCPError
 
 
 def check_args(args):
@@ -242,6 +246,40 @@ def get_task_from_file(
         raise RuntimeError(
             f"An error occurred while reading the task file: {e}"
         ) from e
+
+
+def connect_mcp_server(
+    script: str, args: list[str], call_timeout: float
+) -> MCPClient:
+    """Start the MCP server script with args, return the connected client.
+
+    The server runs on the agent's own interpreter, over stdio, and
+    call_timeout bounds each request to it. Raises RuntimeError if the
+    server does not start or fails the handshake.
+    """
+    command: str = shlex.join(["python", script, *args])
+    try:
+        return MCPClient.from_command(
+            command, call_timeout=call_timeout
+        ).connect()
+    except (MCPError, ValueError) as e:
+        raise RuntimeError(f"MCP server '{script}' unavailable: {e}") from e
+
+
+def write_temp_file(content: str, suffix: str) -> str:
+    """Write content to a new temporary file and return its path."""
+    fd, path = tempfile.mkstemp(prefix="agent_smith_", suffix=suffix)
+    with os.fdopen(fd, "w") as f:
+        f.write(content)
+    return path
+
+
+def remove_file(path: str | None) -> None:
+    """Delete the file at path, if any; a cleanup never raises."""
+    if not path:
+        return
+    with contextlib.suppress(OSError):
+        os.remove(path)
 
 
 def read_task_id(file_path: str, key: str) -> str:
