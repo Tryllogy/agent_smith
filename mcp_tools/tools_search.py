@@ -1,123 +1,130 @@
+"""Code search tools.
+
+All three share the output format the subject imposes:
+
+    /absolute/path.py:<line_number> <line_content>
+
+Searches start from the repository root the server was configured with,
+not from the current directory, so results do not depend on where the
+server happened to be launched.
+"""
+
 import re
 from pathlib import Path
 
+from mcp_tools.config import get_config
+
+# Definitions and references are Python symbols, so those two tools look
+# at Python files only.
+PYTHON_FILES = "*.py"
+
+
+def _iter_lines(file_pattern: str):
+    """Yield (absolute path, line number, line) for every matching file.
+
+    Files that cannot be read as text are skipped: a repository holds
+    images and binaries, and no search here is looking for them.
+    """
+    for path in get_config().repo_root.rglob(file_pattern):
+        if not path.is_file():
+            continue
+        try:
+            content = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        resolved = path.resolve()
+        for number, line in enumerate(content.splitlines(), start=1):
+            yield resolved, number, line
+
+
+def _format(matches: list, empty: str) -> str:
+    """Render matches in the common format, or `empty` if there are none."""
+    if not matches:
+        return empty
+    return "\n".join(f"{path}:{number} {line}"
+                     for path, number, line in matches)
+
 
 def search_code(pattern: str, file_pattern: str) -> str:
-    """Search for a text pattern in files matching a glob pattern.
-
-    Recursively searches the current directory for files whose name matches
-    `file_pattern` (shell-style, e.g. "*.py"), then returns every line that
-    contains `pattern`. Each match is formatted as:
-
-        /absolute/path.py:<line_number> <line_content>
+    """Perform a grep-like search in the codebase.
 
     Args:
-        pattern: Literal text to search for on each line.
-        file_pattern: Shell-style glob to select which files to search
+        pattern: Literal text to look for on each line.
+        file_pattern: Shell-style glob selecting which files to search
             (e.g. "*.py", "test_*.py").
 
     Returns:
         One match per line, or a message if nothing matches.
     """
-    result = []
-    for path in Path(".").rglob(file_pattern):
-        if not path.is_file():
-            continue
-        try:
-            with open(path) as f:
-                lines = f.readlines()
-        except (UnicodeDecodeError, OSError):
-            continue
-        for number, content in enumerate(lines, start=1):
-            if pattern in content:
-                absolute = path.resolve()
-                result.append(f"{absolute}:{number} {content.rstrip(chr(10))}")
-
-    if not result:
-        return f"No matches for '{pattern}' in files matching '{file_pattern}'"
-
-    return "\n".join(result)
+    matches = [(path, number, line)
+               for path, number, line in _iter_lines(file_pattern)
+               if pattern in line]
+    return _format(
+        matches,
+        f"No matches for '{pattern}' in files matching '{file_pattern}'")
 
 
-def search_function_or_class_definition_in_code(
-        name: str, file_pattern: str) -> str:
-    """Find where a function or class is defined.
+def search_function_or_class_definition_in_code(name: str) -> str:
+    """Find the definition of a function or a class.
 
-    Recursively searches files matching `file_pattern` for the definition of
-    a function or class called `name`, i.e. a line starting (after optional
-    indentation) with `def name` or `class name`. Each match is formatted as:
-
-        /absolute/path.py:<line_number> <line_content>
+    Looks through every Python file of the repository for a line that
+    starts, after any indentation, with `def name` or `class name`, and
+    checks that the name stops there, so that `add` does not match
+    `def address`.
 
     Args:
-        name: Exact name of the function or class to locate.
-        file_pattern: Shell-style glob to select which files to search
-            (e.g. "*.py").
+        name: Exact name of the function or class.
 
     Returns:
         One match per line, or a message if nothing matches.
     """
-    prefixes = (f"def {name}", f"class {name}")
-    result = []
-    for path in Path(".").rglob(file_pattern):
-        if not path.is_file():
-            continue
-        try:
-            with open(path) as f:
-                lines = f.readlines()
-        except (UnicodeDecodeError, OSError):
-            continue
-        for number, content in enumerate(lines, start=1):
-            stripped = content.lstrip()
-            if stripped.startswith(prefixes):
-                after = stripped[4:] if stripped.startswith(
-                    "def ") else stripped[6:]
-                rest = after[len(name):]
-                if rest[:1] in ("(", ":", " "):
-                    absolute = path.resolve()
-                    result.append(
-                        f"{absolute}:{number} {content.rstrip(chr(10))}")
-
-    if not result:
-        return f"No definition of '{name}' in files matching '{file_pattern}'"
-
-    return "\n".join(result)
+    matches = []
+    for path, number, line in _iter_lines(PYTHON_FILES):
+        stripped = line.lstrip()
+        for keyword in ("def ", "class ", "async def "):
+            if stripped.startswith(keyword + name):
+                rest = stripped[len(keyword) + len(name):]
+                if rest[:1] in ("(", ":", " ", ""):
+                    matches.append((path, number, line))
+                break
+    return _format(matches, f"No definition of '{name}' found")
 
 
-def find_references(name: str, file_pattern: str) -> str:
-    """Find all references (usages) of a symbol.
+def find_references(name: str, filepath: str, line: int) -> str:
+    """Find all usages of a symbol (function or class).
 
-    Recursively searches files matching `file_pattern` for every line where
-    `name` appears as a whole word (so "add" matches `add(x)` but not
-    `address` or `add_two`). Each match is formatted as:
-
-        /absolute/path.py:<line_number> <line_content>
+    `filepath` and `line` say which symbol is meant, since the same name
+    can be defined in several places. The position is checked first, so
+    that a wrong one is reported instead of silently turning into a plain
+    name search.
 
     Args:
-        name: Exact symbol name to look for.
-        file_pattern: Shell-style glob to select which files to search
-            (e.g. "*.py").
+        name: Name of the symbol.
+        filepath: File where the symbol is defined; a relative path is
+            taken from the repository root.
+        line: 1-based line of the symbol in that file.
 
     Returns:
-        One match per line, or a message if nothing matches.
+        One usage per line, or a message if the position does not hold
+        the symbol or nothing uses it.
     """
+    target = Path(filepath)
+    if not target.is_absolute():
+        target = get_config().repo_root / target
+    try:
+        lines = target.read_text().splitlines()
+    except (UnicodeDecodeError, OSError) as exc:
+        return f"Error: cannot read '{filepath}': {exc}"
+
+    if not 1 <= line <= len(lines):
+        return (f"Error: line {line} is out of range for '{filepath}', "
+                f"which has {len(lines)} lines")
     word = re.compile(r"\b" + re.escape(name) + r"\b")
-    result = []
-    for path in Path(".").rglob(file_pattern):
-        if not path.is_file():
-            continue
-        try:
-            with open(path) as f:
-                lines = f.readlines()
-        except (UnicodeDecodeError, OSError):
-            continue
-        for number, content in enumerate(lines, start=1):
-            if word.search(content):
-                absolute = path.resolve()
-                result.append(
-                    f"{absolute}:{number} {content.rstrip(chr(10))}")
+    if not word.search(lines[line - 1]):
+        return (f"Error: '{name}' does not appear at {filepath}:{line}. "
+                f"That line reads: {lines[line - 1].strip()}")
 
-    if not result:
-        return f"No references to '{name}' in files matching '{file_pattern}'"
-
-    return "\n".join(result)
+    matches = [(path, number, text)
+               for path, number, text in _iter_lines(PYTHON_FILES)
+               if word.search(text)]
+    return _format(matches, f"No references to '{name}' found")
