@@ -74,7 +74,34 @@ def edit_file(filepath: str, old_str: str, new_str: str) -> str:
     with open(path, "w") as f:
         f.write(new_content)
 
-    return f"Edited {filepath}: 1 replacement"
+    message = f"Edited {filepath}: 1 replacement"
+    warning = _syntax_warning(path, new_content)
+    return f"{message}\n{warning}" if warning else message
+
+
+def _syntax_warning(path, content):
+    """Warn when an edit left a Python file that no longer compiles.
+
+    The subject wants the model told when an edit breaks the syntax,
+    rather than finding out only when the tests fail. The edit is kept:
+    this is feedback, so the model can fix it on the next step.
+
+    Args:
+        path: The edited file (a Path).
+        content: Its new content.
+
+    Returns:
+        A warning line, or "" when the file still compiles or is not
+        Python.
+    """
+    if path.suffix != ".py":
+        return ""
+    try:
+        compile(content, str(path), "exec")
+    except SyntaxError as exc:
+        return (f"Warning: this edit leaves a syntax error in {path.name} "
+                f"at line {exc.lineno}: {exc.msg}")
+    return ""
 
 
 def list_files(directory: str, pattern: str) -> str:
