@@ -22,8 +22,11 @@ l'execute dans le sandbox (`e7faba0`). **Un bloc mal forme est execute
 quand meme, et le modele est prevenu de la facon dont il a ete lu**
 (2026-10-04, `1d9c02f`, P2.2). **SWE : observations tronquees et
 anciennes observations elaguees** (`3538fcf`, P2.1), **exemple SWE aligne
-sur les vrais outils** (`1462032`) **puis raccourci** (non commite, P2.4) :
-prompt SWE ~4 700 → ~2 900 tokens. **558 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
+sur les vrais outils** (`1462032`) **puis raccourci** (`2e8dcb0`, P2.4) :
+prompt SWE ~4 700 → ~2 900 tokens. **Docker merge (`2610650`) et branche
+dans l'agent SWE** (non commite, P2.5) : **premier vrai run SWE** le
+2026-10-04 (`sympy__sympy-14711`, `codestral`), chaine complete mais tache
+non resolue (P2.6). **564 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
 fichiers de ndi-tull non formates (`mcp_tools/*`, `sandbox/manual.py`,
 `sandbox/mcp_client/client.py`, `wrappers.py`).
 
@@ -90,18 +93,19 @@ liste par benchmark), puis echoue proprement (P2.3, « Repli de provider »).
 comptes** (`81bfa3b`), **et sequence d'arret retiree pour Groq
 `gpt-oss-120b`** (`"send_stop": false`, `3156144`). Detail en P2.3.
 
-> **Le chemin critique est cote P1** : Docker (rien n'existe), la securite du
-> sandbox (evasion toujours ouverte) et le CLI `sandbox` (vide). Le prompt SWE
-> n'a toujours jamais tourne contre un vrai depot.
+> **Docker, le CLI `sandbox` et `sandbox_template.json` sont arrives le
+> 2026-10-04** (merge `2610650`). Restent sur le chemin critique : **la
+> securite du sandbox** (evasion toujours ouverte, P1) et **la mise au point
+> SWE** sur les 3 taches, puis la partie SWE du rapport (P2).
 
 **Dettes qui bloquent la mesure** :
 
 0. **Il manque un 5e modele SWE** (2026-10-03) : `nemotron-3-super` retire
    par NVIDIA, 4 modeles restent pour un minimum de 5 (« Prochaines
    actions », 4 bis)
-1. **Docker** : `agent_swebench/docker.py` est vide, aucune tache SWE
-   possible (P1.6). Les outils, eux, sont conformes et appelables depuis le
-   2026-10-04
+1. ~~**Docker** : `agent_swebench/docker.py` est vide~~ — **reglee le
+   2026-10-04** : `TaskContainer` de ndi-tull (`e9e5dd1`), branche dans
+   l'agent SWE (P2.5), premier run reel le meme jour (P2.6)
 2. ~~Le modele par defaut du `Makefile` est inutilisable~~ — reglee le
    2026-10-02 (« Prochaines actions », 4 quater)
 3. ~~L'echeance de 30 s par appel est trop courte pour SWE~~ — reglee le
@@ -118,15 +122,23 @@ puis sur `ca8f0ad`.
       `import random; random._os.system(...)` lance une commande shell,
       `typing.sys.modules['builtins'].open('/etc/hostname')` lit le fichier,
       `typing.sys.modules['_socket']` est accessible. `ast_guard.py:10` ne
-      bloque que les `__x` ; `_os` et `typing.sys` passent. ~~Nouveau chemin
+      bloque que les `__x` ; `_os` et `typing.sys` passent. **Reverifie apres
+      le merge `2610650`** : ndi-tull bloque desormais les attributs de frame
+      (`gi_frame`, `f_globals`, `tb_frame`…, `ea1c30f`), mais
+      `random._os.getcwd()` et `typing.sys.modules[...]` passent toujours.
+      ~~Nouveau chemin
       depuis le branchement : `run_tests` MBPP execute le candidat avec
       `python`, hors sandbox~~ — **ferme le 2026-10-04** (`e7faba0`) : chaque
       assertion tourne dans `sandbox.executor.execute`, et un test verifie
       qu'`import os` passe a `run_tests` est refuse
-- [ ] **`uv run sandbox` plante** (`ImportError: cannot import name 'main'`) :
-      `sandbox/cli.py` est vide. `sandbox_template.json` fait 0 octet
-      (§ V.2.1, et `exam_sandbox.sh` passera tres probablement par la)
-- [ ] **Docker** : `agent_swebench/docker.py` vide (P1.6)
+- [x] **`uv run sandbox` plantait** (`sandbox/cli.py` vide,
+      `sandbox_template.json` a 0 octet) — **regle le 2026-10-04** par
+      ndi-tull (`da080c2`) : REPL, config JSON, `--mcp-stdio` et
+      `--mcp-server`. Verifie : variables gardees d'une entree a l'autre,
+      valeur d'une expression seule affichee, `import os` refuse, sortie sur
+      `exit`
+- [x] **Docker** : `agent_swebench/docker.py` vide — **regle le 2026-10-04**
+      (`e9e5dd1`, branche cote P2, P2.5 et P1.6)
 - [ ] **Retours exiges par le § V.1 : 2 cas sur 5 manquent** (4 au moment de
       la revue, le decompte « 3 » ecrit alors etait faux). Aucun bloc → ✓.
       Bloc mal forme interprete quand meme → ✓ **depuis le 2026-10-04**
@@ -384,7 +396,15 @@ ReAct definitivement ecartes (P2.2). Puis le **bloc mal forme interprete
 quand meme** (P2.2, `1d9c02f`), qui corrige au passage l'appariement des
 blocs ; **l'exemple SWE aligne sur les vrais outils** (`1462032`) ; **la
 troncature et l'elagage des observations** (P2.1, `3538fcf`) ; enfin
-**l'exemple SWE raccourci** (P2.4). **Non commite** : `core/constants.py`,
+**l'exemple SWE raccourci** (P2.4, `2e8dcb0`). Puis **merge
+d'`origin/ndi-tull`** (`2610650`, un conflit dans `mcp_tools/config.py`
+resolu en gardant les champs Docker et le retrait de `solution_file`) :
+Docker, CLI `sandbox`, sandbox persistant, `ast_guard` durci. **Docker
+branche dans l'agent SWE** (P2.5) et **premier vrai run SWE** (P2.6). 660
+copies d'`eval_script` laissees dans `/tmp` par l'ancien helper
+`write_temp_file` (tests qui construisaient un agent SWE sans le fermer)
+supprimees ; le helper n'existe plus. **Non commite** :
+`agent_swebench/cli.py`, `core/agent_cli_helper.py`, `core/constants.py`,
 `TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
@@ -403,15 +423,15 @@ troncature et l'elagage des observations** (P2.1, `3538fcf`) ; enfin
 
 ### Qui a du code
 
-Etat au 2026-10-04 (apres le merge `ca8f0ad`) :
+Etat au 2026-10-04 (apres le merge `2610650`) :
 
 | Ecrit | Encore vide |
 |---|---|
-| `core/` : `models.py`, `config_models.py`, `errors.py`, `constants.py`, `api_key.py`, `agent_cli_helper.py` | `sandbox/cli.py`, `security/limits.py` |
-| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | `agent_swebench/docker.py` |
-| `core/llm/` : `client.py`, `provider.py`, `fallback.py` | `sandbox_template.json` |
+| `core/` : `models.py`, `config_models.py`, `errors.py`, `constants.py`, `api_key.py`, `agent_cli_helper.py` | `security/limits.py` |
+| `core/agent/` : `loop.py`, `prompt.py`, `extraction.py` | |
+| `core/llm/` : `client.py`, `provider.py`, `fallback.py` ; `sandbox/cli.py`, `sandbox_template.json`, `agent_swebench/docker.py` (ndi-tull, 2026-10-04) | |
 | `mcp_tools/` (`tools_fs`, `tools_search`, `tools_exec`, `tools_mbpp`, `config`) + les 2 `mcp_tools_*.py` racine, signatures conformes depuis `9bc28dd` | `README.md` |
-| `agent_mbpp/`, `agent_swebench/` (sauf `docker.py`), branches sur MCP le 2026-10-04 | |
+| `agent_mbpp/`, `agent_swebench/`, branches sur MCP (et Docker pour SWE) le 2026-10-04 | |
 | `sandbox/executor.py`, `sandbox/manual.py`, `sandbox/mcp_client/` (`client.py`, `wrappers.py`, `transports.py`), `configs/` | |
 | `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` ; `BENCHMARK_REPORT.md` (partie MBPP) | |
 
@@ -581,9 +601,13 @@ hallucine ses observations.
 
 ### P1.3 — CLI sandbox
 
-- [ ] `uv run sandbox` (REPL), `... sandbox_template.json` (config custom),
-      `--mcp-stdio "python mcp_tools_mbpp.py"`, `--mcp-server <URL>` (HTTP)
-- [ ] REPL : memes restrictions, sortie propre sur `exit` **et** Ctrl+D (EOF)
+- [x] `uv run sandbox` (REPL), `... sandbox_template.json` (config custom),
+      `--mcp-stdio "python mcp_tools_mbpp.py"`, `--mcp-server <URL>` (HTTP) —
+      ndi-tull, `da080c2` (2026-10-04)
+- [x] REPL : memes restrictions, sortie propre sur `exit` **et** Ctrl+D (EOF).
+      Le namespace persiste d'une entree a l'autre (classe `Sandbox` de
+      `executor.py`) ; une entree qui tue le processus (timeout, crash) le
+      redemarre et le dit au modele
 
 ### P1.4 — MCP
 
@@ -687,7 +711,14 @@ impose.
 
 ### P1.6 — Docker / SWE-bench
 
-- [ ] **LA decision d'architecture** — elle change l'implementation des 9 outils
+- [x] **LA decision d'architecture** — **tranchee le 2026-10-04 : (b)**
+      (ndi-tull, `e9e5dd1`). Le `/testbed` de l'image est copie sur l'hote,
+      puis remonte dans le conteneur au meme endroit : les outils fichiers et
+      git travaillent sur la copie, `run_command` et `run_tests` passent par
+      `docker exec … bash -l` (environnement conda de l'image), avec un
+      `timeout -s KILL` cote conteneur. Le modele ne voit que `/testbed`
+      (`to_host` / `to_alias` dans `mcp_tools/config.py`). Ancienne note :
+      elle change l'implementation des 9 outils
       en entier. Ce qui ne bouge pas dans les deux cas : le serveur MCP reste un
       processus distinct, le client reste dans le sandbox
   - **(a) sandbox + serveur MCP DANS le conteneur** : chemins locaux,
@@ -695,19 +726,27 @@ impose.
     **dans l'environnement conda `testbed`**
   - **(b) sandbox sur l'hote, serveur MCP faisant le pont par `docker exec`** :
     l'image reste intacte, mais chaque outil devient un aller-retour
-- [ ] Pull / run de l'image, montage de `${TESTBED_PATH}` si necessaire
+- [x] Pull / run de l'image, montage de `${TESTBED_PATH}` si necessaire
+      (`TaskContainer.start()` : pull si absente, `docker cp` de `/testbed`,
+      `docker run -v <copie>:/testbed … sleep infinity`). Images stockees
+      dans `/goinfre/tchemin/docker` (daemon rootless)
 - [~] `git -c core.fileMode=false diff` pour `get_patch()` — fait, mais apres
       `git add -A` (revue du 2026-10-04)
-- [ ] **Cleanup des containers** apres execution (exige)
-- [ ] **Docker est rootless sur nos postes** (2026-10-04) : le SDK Python
-      `docker` a besoin de `DOCKER_HOST=unix:///run/user/$UID/docker.sock`,
-      sinon `PermissionError` sur `/var/run/docker.sock`
-- [ ] Le branchement P2 du 2026-10-04 lance le serveur SWE **sur l'hote**
-      avec `--repo-root /testbed` et l'`eval_script` dans un fichier
-      temporaire (`agent_swebench/cli.py`). A revoir selon (a) ou (b) : en
-      (a), le serveur et l'`eval_script` doivent vivre dans le conteneur.
-      **Sans Docker, ne pas lancer l'agent SWE** : `run_command` executerait
-      ce que demande le modele sur la machine
+- [x] **Cleanup des containers** apres execution (exige) : `TaskContainer.stop()`
+      supprime le conteneur et la copie, appele par `close()` de l'agent dans
+      tous les cas. Verifie apres le run reel : aucun conteneur `sweb-*`,
+      aucune copie restante
+- [x] **Docker est rootless sur nos postes** (2026-10-04) : le SDK Python
+      `docker` a besoin de `DOCKER_HOST=unix:///run/user/$UID/docker.sock`.
+      `docker.py` passe par la commande `docker` (contexte rootless deja
+      actif), donc rien a regler pour l'agent ; la variable reste necessaire
+      pour la validation MBPP de la moulinette
+- [x] Le branchement P2 lancait le serveur SWE sur l'hote avec
+      `--repo-root /testbed` : **remplace le 2026-10-04** par le conteneur de
+      la tache (P2.5)
+- [ ] La duree du pull et de la copie (~110 s pour `sympy__sympy-14711`)
+      n'entre pas dans `total_time_seconds`, mais un script d'examen peut
+      avoir son propre delai : envisager de tirer les images a l'avance
 
 ### P1.7 — Tests de securite
 
@@ -1893,10 +1932,14 @@ et passent le client a la boucle. En cinq pieces :
   (2026-10-04, P2.4) ; avant, l'agent continuait sur ses `assert`. Le
   candidat par fichier (`/tmp/agent/solution_<pid>.py`) a disparu avec
   `run_tests(code)`
-- `agent_swebench/cli.py` : l'`eval_script` est ecrit dans un fichier
-  temporaire hors des dossiers du sandbox, serveur lance avec
-  `--repo-root /testbed --eval-script <fichier>`. **Sans serveur, echec au
-  demarrage** (`solution.json` en echec)
+- `agent_swebench/cli.py` : **depuis le 2026-10-04, le conteneur de la
+  tache** (`TaskContainer`, ndi-tull) est demarre apres la validation de la
+  config, puis le serveur est lance avec `--repo-root <copie hote>
+  --container <nom> --eval-script <script>`. `close()` arrete le serveur
+  puis supprime le conteneur et la copie. **Sans serveur ou sans Docker,
+  echec au demarrage** (`solution.json` en echec). `write_temp_file`,
+  `remove_file` et `SWE_REPO_ROOT` retires (plus utilises) ; les tests
+  utilisent un faux conteneur et ne lancent jamais Docker
 
 Le serveur est lance **en dernier**, une fois la config validee : un modele
 non declare n'en demarre aucun. `close()` arrete le serveur et supprime les
@@ -2570,6 +2613,32 @@ plus tard, sur `e7faba0` + le prompt MBPP sans `assert` (non commite).
 - [ ] Rejouer pour consolider (un seul tirage par modele) avant d'en
       faire la conclusion du rapport
 
+#### Premier vrai run SWE (2026-10-04, `sympy__sympy-14711`, `codestral-2508`)
+
+Avec Docker et les outils MCP, sur l'agent branche (non commite). Sortie
+dans `cache/swebench_solution_docker.json` (hors depot).
+
+- **La chaine tient** : pull + copie ~110 s, boucle 74,5 s, 30 iterations,
+  **180 582 tokens d'entree / 300k**, 5 679 de sortie / 10k, metriques dans
+  les limites. Recherches et lectures en `/testbed/...`, `run_command` et
+  `run_tests` dans le conteneur, deux editions reussies, l'elagage fait
+  baisser l'entree (8 016 → 5 073 tokens au tour 16), conteneur et copie
+  supprimes a la fin
+- **Echec : plafond d'iterations, aucun patch soumis.** Le modele a
+  recommence **8 fois le meme `edit_file`** de `__mul__`, avec un `old_str`
+  invente au-dela des lignes lues ; « old_str not found » ne l'a jamais
+  fait changer d'approche. Il est aussi alle lire directement
+  `sympy/physics/vector/vector.py` sans recherche prealable (a surveiller
+  au regard de la regle anti-recitation)
+- [ ] Message d'erreur d'`edit_file` plus utile (montrer les lignes
+      proches, rappeler de relire) et/ou detection par la boucle d'une
+      action repetee a l'identique
+- [ ] **Decider du sandbox persistant** : la boucle cree un processus neuf
+      a chaque tour (`execute()`) ; la classe `Sandbox` de ndi-tull garde
+      les variables d'un tour a l'autre, ce que promet le sujet
+      (*« persistent variables between steps »*). Touche aussi MBPP
+- [ ] Les 3 taches conseillees × 5 modeles pour le rapport
+
 ---
 
 ## A faire ensemble (fin de projet)
@@ -2722,7 +2791,7 @@ plus tard, sur `e7faba0` + le prompt MBPP sans `assert` (non commite).
 
 ### Le banc d'essai `tests/`
 
-**558 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
+**564 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

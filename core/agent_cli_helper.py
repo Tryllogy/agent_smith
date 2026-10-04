@@ -1,9 +1,7 @@
-import contextlib
 import json
 import os
 import shlex
 import sys
-import tempfile
 import time
 
 from pydantic import ValidationError
@@ -264,22 +262,6 @@ def connect_mcp_server(
         ).connect()
     except (MCPError, ValueError) as e:
         raise RuntimeError(f"MCP server '{script}' unavailable: {e}") from e
-
-
-def write_temp_file(content: str, suffix: str) -> str:
-    """Write content to a new temporary file and return its path."""
-    fd, path = tempfile.mkstemp(prefix="agent_smith_", suffix=suffix)
-    with os.fdopen(fd, "w") as f:
-        f.write(content)
-    return path
-
-
-def remove_file(path: str | None) -> None:
-    """Delete the file at path, if any; a cleanup never raises."""
-    if not path:
-        return
-    with contextlib.suppress(OSError):
-        os.remove(path)
 
 
 def read_task_id(file_path: str, key: str) -> str:
