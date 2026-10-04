@@ -18,14 +18,23 @@ from mcp_tools.config import get_config
 # at Python files only.
 PYTHON_FILES = "*.py"
 
+# Not the repository's own code: git's internals and an installed
+# virtual environment. Searching them buries real matches under
+# thousands of hits from third-party packages.
+IGNORED_DIRS = {".git", ".venv"}
+
 
 def _iter_lines(file_pattern: str):
     """Yield (absolute path, line number, line) for every matching file.
 
-    Files that cannot be read as text are skipped: a repository holds
-    images and binaries, and no search here is looking for them.
+    Files under IGNORED_DIRS are left out, and so are files that cannot
+    be read as text: a repository holds images and binaries, and no
+    search here is looking for them.
     """
-    for path in get_config().repo_root.rglob(file_pattern):
+    root = get_config().repo_root
+    for path in root.rglob(file_pattern):
+        if IGNORED_DIRS.intersection(path.relative_to(root).parts):
+            continue
         if not path.is_file():
             continue
         try:
