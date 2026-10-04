@@ -5,6 +5,7 @@ directory per campaign, named as in the report.
 
 ```
 benchmarks/
+├── swebench/runN/    same layout, SWE-bench tasks (see the end of this file)
 └── mbpp/
     └── runN/
         ├── META.txt          model, provider, task set, commit, start/end time
@@ -77,3 +78,26 @@ asks for asserts: the model keeps its solution in a variable, checks it
 with `run_tests(code=solution)` (run in the sandbox by the MCP server)
 and calls `final_answer(solution)` in the same block only if every test
 passes. The agent refuses to start without its MCP server.
+
+## SWE-bench runs
+
+`swebench/run1` to `run5` (2026-10-04) hold one model each on the same
+three tasks (`task_01` `sympy__sympy-14711`, `task_02`
+`sympy__sympy-13480`, `task_03` `pydata__xarray-4629`), dumped once with
+`moulinette_eval dump swebench --task_id …`. Every verdict comes from
+`moulinette_eval validate swebench`, output in `logs/validate_XX.txt`; it
+needs a regular Docker daemon (with rootless Docker the checker fails to
+copy the patch into the container, on `lchown`). The checker writes
+`/tmp/patch.diff` and `/tmp/eval.sh`, so two SWE-bench validations must
+not run at the same time.
+
+`RESUME.json` has the MBPP fields, plus `resolution` (the checker's
+status, `RESOLVED_FULL` for a pass), `wall` (seconds from the agent's start
+to its exit, container set-up included; `sec` is the agent's own
+`total_time_seconds`), `edit_file` and `get_patch` (calls in the steps'
+code) and `models` (the models that answered). The last line of each
+`logs/agent_XX.log` gives the agent's exit code and `wall`.
+
+`run5` (Qwen) has only `task_02` and `task_03` so far: `task_01` waits for
+the OpenRouter free quota. Its `task_02` was run twice, the second run
+overwriting the first; `META.txt` records the first run's figures.

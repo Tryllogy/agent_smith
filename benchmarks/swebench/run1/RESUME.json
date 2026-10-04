@@ -1,0 +1,77 @@
+[
+  {
+    "f": "01",
+    "tid": "sympy__sympy-14711",
+    "claim": true,
+    "reel": "PASS",
+    "resolution": "RESOLVED_FULL",
+    "metrics": "VALID",
+    "it": 22,
+    "req": 22,
+    "tin": 122628,
+    "tout": 2281,
+    "sec": 56.48,
+    "wall": 58.6,
+    "steps": 22,
+    "rty": 0,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 4,
+    "edit_file": 5,
+    "get_patch": 1,
+    "models": [
+      "codestral-2508"
+    ],
+    "err": ""
+  },
+  {
+    "f": "02",
+    "tid": "sympy__sympy-13480",
+    "claim": false,
+    "reel": "FAIL",
+    "resolution": "",
+    "metrics": "VALID",
+    "it": 30,
+    "req": 30,
+    "tin": 261127,
+    "tout": 3458,
+    "sec": 131.77,
+    "wall": 133.8,
+    "steps": 30,
+    "rty": 0,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 12,
+    "edit_file": 12,
+    "get_patch": 0,
+    "models": [
+      "codestral-2508"
+    ],
+    "err": "Iteration limit exceeded"
+  },
+  {
+    "f": "03",
+    "tid": "pydata__xarray-4629",
+    "claim": true,
+    "reel": "PASS",
+    "resolution": "RESOLVED_FULL",
+    "metrics": "VALID",
+    "it": 3,
+    "req": 3,
+    "tin": 11940,
+    "tout": 713,
+    "sec": 12.53,
+    "wall": 14.3,
+    "steps": 3,
+    "rty": 0,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 0,
+    "edit_file": 1,
+    "get_patch": 1,
+    "models": [
+      "codestral-2508"
+    ],
+    "err": ""
+  }
+]

@@ -1,0 +1,77 @@
+[
+  {
+    "f": "01",
+    "tid": "sympy__sympy-14711",
+    "claim": false,
+    "reel": "FAIL",
+    "resolution": "",
+    "metrics": "VALID",
+    "it": 30,
+    "req": 30,
+    "tin": 168424,
+    "tout": 1802,
+    "sec": 108.15,
+    "wall": 110.3,
+    "steps": 30,
+    "rty": 0,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 0,
+    "edit_file": 0,
+    "get_patch": 0,
+    "models": [
+      "nvidia/nemotron-3-ultra-550b-a55b"
+    ],
+    "err": "Iteration limit exceeded"
+  },
+  {
+    "f": "02",
+    "tid": "sympy__sympy-13480",
+    "claim": true,
+    "reel": "PASS",
+    "resolution": "RESOLVED_FULL",
+    "metrics": "VALID",
+    "it": 5,
+    "req": 5,
+    "tin": 14750,
+    "tout": 300,
+    "sec": 23.29,
+    "wall": 25.4,
+    "steps": 5,
+    "rty": 0,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 0,
+    "edit_file": 1,
+    "get_patch": 1,
+    "models": [
+      "nvidia/nemotron-3-ultra-550b-a55b"
+    ],
+    "err": ""
+  },
+  {
+    "f": "03",
+    "tid": "pydata__xarray-4629",
+    "claim": true,
+    "reel": "PASS",
+    "resolution": "RESOLVED_FULL",
+    "metrics": "VALID",
+    "it": 15,
+    "req": 15,
+    "tin": 98746,
+    "tout": 2028,
+    "sec": 57.78,
+    "wall": 59.6,
+    "steps": 15,
+    "rty": 0,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 0,
+    "edit_file": 1,
+    "get_patch": 2,
+    "models": [
+      "nvidia/nemotron-3-ultra-550b-a55b"
+    ],
+    "err": ""
+  }
+]

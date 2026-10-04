@@ -1,0 +1,11 @@
+modele=qwen/qwen3.8-27b:free
+provider=https://openrouter.ai/api/v1
+taches=sympy__sympy-13480 pydata__xarray-4629 (sympy__sympy-14711 a faire : quota OpenRouter du jour epuise)
+code=84d22b1 + configs/models.json (entree qwen/qwen3.8-27b:free, reasoning desactive) non commite
+mcp=mcp_tools_swebench.py
+docker=29.8.2 (classique, socket /var/run/docker.sock)
+validation=moulinette_eval validate swebench (verdict officiel)
+debut=2026-10-04T21:55:33+02:00
+fin=2026-10-04T21:58:39+02:00
+note=5e modele SWE. qwen3.8-27b servi par OpenRouter :free (fournisseur ModelRun, accepte stop), reasoning desactive (sinon 2000 tokens de raisonnement et content vide a 15k tokens de contexte). Quota 50 req/jour par compte.
+incident=tache 02 jouee deux fois : 1re session 21:55:33-21:56:27, PASS RESOLVED_FULL en 5 it., 16209 in / 401 out, 30.39 s, 2 retries (HTTP 429), fichiers ecrases ; 2e session 21:56:39-21:58:39 (lancee pour la tache 03, le script rejouait aussi la 02), PASS RESOLVED_FULL en 10 it. : c'est elle qui est sur disque
