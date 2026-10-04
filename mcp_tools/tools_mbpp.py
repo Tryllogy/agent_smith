@@ -15,13 +15,10 @@ from pathlib import Path
 from core.models import MBPPTaskInput
 from mcp_tools.config import get_config
 
-# An MBPP task is one short function: past this, it is looping.
 TEST_TIMEOUT = 30
 ASSERT_TIMEOUT = 5
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Runs each assertion on its own, so one failure does not hide the
-# others, and names the exception instead of printing a traceback.
 _RUNNER = """
 import json
 import sys

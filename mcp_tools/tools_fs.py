@@ -1,16 +1,16 @@
 from pathlib import Path
 
-from mcp_tools.config import get_config
+from mcp_tools.config import to_alias, to_host
 
 
 def _resolve(filepath: str) -> Path:
-    """Take a relative path from the repository root, an absolute one as is.
+    """Find the file the model means.
 
     The model writes both "/testbed/src/mail.py" and "src/mail.py"; both
-    must reach the same file, wherever the server was started from.
+    must reach the same file, wherever the server was started from, and
+    even when /testbed is in fact a copy on the host (see to_host).
     """
-    path = Path(filepath)
-    return path if path.is_absolute() else get_config().repo_root / path
+    return to_host(filepath)
 
 
 def read_file(filepath: str, start_line: int, end_line: int) -> str:
@@ -92,7 +92,7 @@ def list_files(directory: str, pattern: str) -> str:
     """
     result = []
     for found in _resolve(directory).rglob(pattern):
-        result.append(str(found.resolve()))
+        result.append(to_alias(found.resolve()))
 
     if not result:
         return f"No files matching '{pattern}' in {directory}"
