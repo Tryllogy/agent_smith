@@ -10,9 +10,8 @@ server happened to be launched.
 """
 
 import re
-from pathlib import Path
 
-from mcp_tools.config import get_config
+from mcp_tools.config import get_config, to_alias, to_host
 
 # Definitions and references are Python symbols, so those two tools look
 # at Python files only.
@@ -50,7 +49,7 @@ def _format(matches: list, empty: str) -> str:
     """Render matches in the common format, or `empty` if there are none."""
     if not matches:
         return empty
-    return "\n".join(f"{path}:{number} {line}"
+    return "\n".join(f"{to_alias(path)}:{number} {line}"
                      for path, number, line in matches)
 
 
@@ -117,9 +116,7 @@ def find_references(name: str, filepath: str, line: int) -> str:
         One usage per line, or a message if the position does not hold
         the symbol or nothing uses it.
     """
-    target = Path(filepath)
-    if not target.is_absolute():
-        target = get_config().repo_root / target
+    target = to_host(filepath)
     try:
         lines = target.read_text().splitlines()
     except (UnicodeDecodeError, OSError) as exc:
