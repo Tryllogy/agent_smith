@@ -278,7 +278,9 @@ Per task, MCP agent (2026-10-04) — same marks:
 validating with their own asserts, as the prompt's example does. The tool's
 description, generated from the server, says what it checks but not where
 the candidate must be written for it, so on MBPP the manual is, for now, a
-cost of about 100 tokens per turn without a use. **The raw string was
+cost of about 100 tokens per turn without a use. It must stay all the same
+(the subject requires the manual, V.2.6): section 6.1 says how to make it
+useful. **The raw string was
 adopted at once**: 103 of the 104 `final_answer` calls of the campaign use
 `r"""..."""` (the other one is `nemotron-3-ultra`'s), against none of
 the 101 calls of the previous run of each model. The scores move by one or
@@ -615,8 +617,15 @@ SWE-bench ablation — *to be completed*.
   account, 3 tasks lost to upstream 429 in run11, 4/10 for
   `nemotron-3-super` in run5); `minimax-m3`, no longer free.
 - **The MCP tools cost about 100 input tokens per turn on MBPP and were
-  never used** (section 2.1): either the prompt or the tool description must
-  teach `run_tests()`, or the manual is better left out of the MBPP prompt.
+  never used** (section 2.1). The manual cannot be dropped: the subject
+  requires it in the prompt, with the MCP tools' documentation or how to
+  access it (V.2.6), and `run_tests` is a mandatory MBPP tool (V.3.2). The
+  fix is to make that cost useful and smaller: a `run_tests()` the model can
+  use without guessing where to write its candidate (for instance taking the
+  code as an argument), a shorter manual (signature and first line of each
+  description, still generated from the server), and a prompt line asking to
+  call a test tool before `final_answer()` when one exists, without
+  depending on it, since the agent may face an unknown server.
 - On these 20 tasks the ceiling is about 18/20: MBPP 462 (output cap) and
   MBPP 400 (hidden test) defeat nearly every model.
 
