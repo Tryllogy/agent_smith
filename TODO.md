@@ -20,7 +20,10 @@ passent le client a la boucle (2026-10-04, P2.5 « Branchement MCP »).
 (2026-10-04, `5dfa7f9`, P2.4) ; l'outil prend le code en argument et
 l'execute dans le sandbox (`e7faba0`). **Un bloc mal forme est execute
 quand meme, et le modele est prevenu de la facon dont il a ete lu**
-(2026-10-04, non commite, P2.2). **543 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
+(2026-10-04, `1d9c02f`, P2.2). **SWE : observations tronquees et
+anciennes observations elaguees** (`3538fcf`, P2.1), **exemple SWE aligne
+sur les vrais outils** (`1462032`) **puis raccourci** (non commite, P2.4) :
+prompt SWE ~4 700 → ~2 900 tokens. **558 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
 fichiers de ndi-tull non formates (`mcp_tools/*`, `sandbox/manual.py`,
 `sandbox/mcp_client/client.py`, `wrappers.py`).
 
@@ -124,23 +127,26 @@ puis sur `ca8f0ad`.
       `sandbox/cli.py` est vide. `sandbox_template.json` fait 0 octet
       (§ V.2.1, et `exam_sandbox.sh` passera tres probablement par la)
 - [ ] **Docker** : `agent_swebench/docker.py` vide (P1.6)
-- [ ] **Retours exiges par le § V.1 : 3 cas sur 5 manquent** (4 au moment de
+- [ ] **Retours exiges par le § V.1 : 2 cas sur 5 manquent** (4 au moment de
       la revue, le decompte « 3 » ecrit alors etait faux). Aucun bloc → ✓.
       Bloc mal forme interprete quand meme → ✓ **depuis le 2026-10-04**
       (P2.2 ; avant, un bloc python sans fermeture rendait « No code block
       found »). Timeout avec sortie partielle → ✗ (la
-      sortie est perdue, meme avec le broker). Sortie tronquee → ✗ (aucune
-      troncature : un `read_file` de 2 000 lignes rend 21 685 caracteres).
-      Erreur de syntaxe ou de lint apres `edit_file` → ✗
+      sortie est perdue, meme avec le broker). Sortie tronquee → ✓ **depuis
+      le 2026-10-04** (`3538fcf`, P2.1 : la boucle coupe l'observation et le
+      dit ; avant, un `read_file` de 2 000 lignes rendait 21 685 caracteres
+      entiers). Erreur de syntaxe ou de lint apres `edit_file` → ✗
 
 **Risque absent jusqu'ici — le budget d'entree SWE est cumule :**
 
-- [ ] Prompt SWE + manuel reel ≈ 16 000 caracteres ≈ 4 700 tokens. Tout
+- [~] Prompt SWE + manuel reel ≈ 16 000 caracteres ≈ 4 700 tokens. Tout
       l'historique etant renvoye a chaque tour, 30 tours coutent ~141k des
       300k **sans aucune observation**. Avec ~1,5k tokens ajoutes par tour
-      (estimation, pas une mesure), le plafond tombe vers le **17e tour**. A
-      prevoir : troncature des observations, elagage des anciennes, exemple
-      SWE allege (~2,5k tokens)
+      (estimation, pas une mesure), le plafond tombe vers le **17e tour**.
+      **Les trois leviers sont faits le 2026-10-04** : troncature des
+      observations et elagage des anciennes (`3538fcf`, P2.1), exemple SWE
+      raccourci (P2.4, prompt ~2 900 tokens). Simulation : **26 tours**
+      avant 300k. Reste a mesurer le vrai cout par tour sur des runs SWE
 
 **A trancher :**
 
@@ -161,10 +167,11 @@ puis sur `ca8f0ad`.
       ou ecrire le candidat (`--solution-file`), 0 appel sur 100 taches.
       **Regle le 2026-10-04** : `run_tests(code: str)` (`e7faba0`), puis
       prompt MBPP sans `assert` : 112 appels sur 126 etapes (P2.6)
-- [ ] **Exemple SWE decale des vraies sorties** : `run_command` rend
-      `exit code: 0 / --- stdout ---`, l'exemple montre `stdout: …
-      exit_code: 0` (`constants.py`) ; `edit_file` rend `Edited X: 1
-      replacement`, l'exemple `X:92 edited (1 replacement)`
+- [x] **Exemple SWE decale des vraies sorties** : `run_command` rend
+      `exit code: 0 / --- stdout ---`, l'exemple montrait `stdout: …
+      exit_code: 0` ; `edit_file` rend `Edited X: 1 replacement`, l'exemple
+      `X:92 edited (1 replacement)`. **Regle le 2026-10-04** (`1462032`, puis
+      exemple raccourci, P2.4)
 - [ ] **Echeance des appels d'outils** : bornee par la duree du bench
       (`call_timeout` = 120 s ou 900 s), pas par le temps restant de la tache
 - [ ] Groq `gpt-oss-120b` a fait un appel d'outil **natif** (HTTP 400 « Tool
@@ -374,9 +381,11 @@ et **le prompt MBPP sans `assert`** : validation par `run_tests`, agent MBPP
 obligatoirement branche (P2.4). Campagne `run55` a `run64` (ablation G,
 81/100 contre 75/100), le tout commite dans `5dfa7f9`. XML, JSON/Hermes et
 ReAct definitivement ecartes (P2.2). Puis le **bloc mal forme interprete
-quand meme** (P2.2), qui corrige au passage l'appariement des blocs.
-**Non commite** : `core/agent/extraction.py`, `core/agent/loop.py`,
-`core/constants.py`, `TODO.md`.
+quand meme** (P2.2, `1d9c02f`), qui corrige au passage l'appariement des
+blocs ; **l'exemple SWE aligne sur les vrais outils** (`1462032`) ; **la
+troncature et l'elagage des observations** (P2.1, `3538fcf`) ; enfin
+**l'exemple SWE raccourci** (P2.4). **Non commite** : `core/constants.py`,
+`TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -566,8 +575,9 @@ hallucine ses observations.
       edit ayant casse la syntaxe ou le lint
   - [x] aucun bloc trouve, et **bloc malforme** (2026-10-04) : faits cote P2,
         dans l'extraction et la boucle (P2.2)
-  - [ ] sortie partielle au timeout, troncature, verification apres
-        `edit_file` : restent cote P1 (sandbox et outils)
+  - [x] **troncature** (2026-10-04) : faite cote P2, dans la boucle (P2.1)
+  - [ ] sortie partielle au timeout, verification apres `edit_file` :
+        restent cote P1 (sandbox et outils)
 
 ### P1.3 — CLI sandbox
 
@@ -644,9 +654,10 @@ de l'agent lance le serveur (`connect_mcp_server()`), rend le manuel avec
 
   **Signatures et comportements cales sur le § V.5 le 2026-10-04**
   (`9bc28dd`). Restent (revue du 2026-10-04) : le `git add -A` de
-  `get_patch`, `read_file` sans valeurs par defaut, aucune troncature des
-  sorties, aucune verification apres `edit_file`. Rien n'a tourne contre un
-  vrai conteneur SWE.
+  `get_patch`, `read_file` sans valeurs par defaut, aucune verification
+  apres `edit_file` (la troncature des sorties est faite dans la boucle
+  depuis le 2026-10-04, P2.1). Rien n'a tourne contre un vrai conteneur
+  SWE.
 - [x] `mcp_tools_mbpp.py` et `mcp_tools_swebench.py` a la **racine** : le
       serveur SWE enregistre les 9 outils, le serveur MBPP `run_tests`
 
@@ -801,6 +812,34 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       plafond de sortie.
       12 tests ajoutes pour ces deux points, dont 10 echouent sur l'ancien
       `loop.py`
+
+- [x] **Troncature et elagage des observations** (2026-10-04, `3538fcf`).
+      Toute la conversation est renvoyee a chaque tour contre un plafond
+      d'entree **cumule** (SWE 300k) : une observation gardee est payee a
+      chaque requete suivante. Deux reglages par benchmark dans `Bench` :
+  - `observation_max_chars` (SWE 10 000, MBPP 2 000) : au-dela, la boucle
+    garde le debut (70 %) et la fin (30 %, ou sont erreurs et resumes de
+    tests) et le dit au modele (*« [Output truncated: N characters, only
+    the first X and the last Y are shown. Print a smaller part…] »*) — le
+    signalement exige par le § V.1. Le `sandbox_output` du `solution.json`
+    garde la sortie entiere
+  - `full_observations` (SWE 3, MBPP `None`) : au-dela des 3 dernieres, une
+    observation est remplacee par *« [Output of step S elided to save tokens
+    (N characters). Run the code again if you need it.] »*. Prompt systeme,
+    tache et reponses du modele intacts ; une observation plus courte que
+    ce texte reste telle quelle ; les messages ne portent que `role` et
+    `content` (une cle en plus peut etre refusee par le fournisseur)
+  - l'estimation de la requete suivante ne deduit pas les caracteres
+    elagues : elle continue de surestimer
+
+  **Verifie** : 10 tests (`tests/test_loop.py`) ; sans troncature, sans
+  elagage SWE, avec une estimation qui deduit l'elague ou avec un texte de
+  remplacement plus long que l'observation, au moins un test echoue a
+  chaque fois ; tache MBPP 305 reelle validee PASSED. **Simulation** du
+  budget SWE : 17 tours avant 300k sans elagage, 24 avec, 26 avec en plus
+  l'exemple SWE court (P2.4)
+- [ ] Regler `observation_max_chars` et `full_observations` sur les
+      premiers vrais runs SWE (le cout par tour n'est pas mesure)
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -1729,8 +1768,8 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       variable, la teste avec `run_tests(code=solution)` et soumet
       `final_answer(solution)` — la chaine testee est la chaine soumise
       (112 `final_answer` sur 113 sous cette forme, P2.6)
-- [x] **Validation par `run_tests` au lieu des `assert`** (2026-10-04, non
-      commite). Consigne MBPP : garder la solution dans une variable,
+- [x] **Validation par `run_tests` au lieu des `assert`** (2026-10-04,
+      `5dfa7f9`). Consigne MBPP : garder la solution dans une variable,
       afficher le rapport de `run_tests(code=...)`, appeler `final_answer()`
       avec la meme variable dans le meme bloc seulement si tout passe ; la
       mise en garde sur les tests caches reste. Exemple : premier bloc faux
@@ -1745,6 +1784,29 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       (`return "Invalid""""`) est une `SyntaxError` : vu sur MBPP 396
       (`codestral`, 4 soumissions identiques). Le message
       « unterminated string literal » n'a pas aide le modele
+- [x] **Exemple SWE aligne sur les vrais outils** (2026-10-04, `1462032`).
+      Les observations de l'exemple sont produites par les vraies fonctions
+      de `mcp_tools/` sur un mini-depot fictif : format `exit code: 0` /
+      `--- stdout ---` / `--- stderr ---` de `run_command` et `run_tests`,
+      `Edited <fichier>: 1 replacement` d'`edit_file`. Au passage, deux
+      erreurs de l'ancien exemple corrigees : des lignes de `search_code`
+      fausses (95 a la place de 96, indentation de 76) et un heredoc jamais
+      ferme a l'etape 3 (`PY && python …`, bash ne reconnait pas cette fin).
+      5 tests (`TestSWEExampleMatchesTheTools`) rejouent l'exemple contre les
+      vrais outils et `bash -n` ; tous echouent sur l'ancien exemple
+- [x] **Exemple SWE raccourci** (2026-10-04, non commite) : 8 536 → 2 361
+      caracteres, prompt SWE complet ~4 700 → ~2 900 tokens par tour. Un bug
+      simple (argument par defaut mutable, `acme/shopcart`) en 3 etapes :
+      reproduire avec `python -c` (aucun fichier de travail, rien qui puisse
+      entrer dans le patch), localiser avec `search_code`, lire avec
+      `read_file` ; corriger avec `edit_file` (`old_str` copie de la lecture
+      du tour precedent), relancer la reproduction et `run_tests()` dans le
+      meme bloc ; `get_patch()`, verifier qu'il n'est pas vide, soumettre.
+      Perdus en route : les deux caches a corriger ensemble, la verification
+      des comportements voisins, les scripts dans `/tmp/agent`. Observations
+      toujours produites par les vrais outils ; les 558 tests passent, dont
+      ceux qui confrontent l'exemple aux outils et la regle anti-recitation.
+      **Effet sur la qualite des corrections non mesure** (pas de run SWE)
 - [x] **Prompts et relances corriges (2026-10-01, `9c4754a`)**, mesures le
       meme jour en `run9`/`run10` (voir P2.6) :
   - exemple MBPP : les `assert` sont suivis de `print('all tests passed')`,
@@ -2660,7 +2722,7 @@ plus tard, sur `e7faba0` + le prompt MBPP sans `assert` (non commite).
 
 ### Le banc d'essai `tests/`
 
-**543 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
+**558 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 
