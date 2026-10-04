@@ -1,5 +1,3 @@
-import sys
-
 from dotenv import load_dotenv
 
 from core import constants
@@ -36,8 +34,9 @@ class AgentMBPP:
         """Load the task, then build the LLM client, tools, prompt and loop.
 
         Raises on any configuration error (task file, models.json,
-        API keys): no request is made here. The MCP tool server is
-        started last, once the configuration is known to be valid.
+        API keys) or if the MCP tool server cannot start: no request is
+        made here. The server is started last, once the configuration is
+        known to be valid; the prompt relies on its run_tests().
         """
         self.task: dict = get_task_from_file(task_file, MBPPTaskInput)
         self.output_file: str = output_file
@@ -61,14 +60,16 @@ class AgentMBPP:
             ]
         )
 
-        self.mcp_client: MCPClient | None = self.connect_tools(task_file)
+        self.mcp_client: MCPClient | None = connect_mcp_server(
+            constants.MBPP_MCP_SERVER,
+            ["--task-file", task_file],
+            call_timeout=MBPP.timeout,
+        )
         try:
             prompt: Prompt = Prompt(
                 bench=MBPP,
                 task=self.task,
-                manual=(
-                    render_manual(self.mcp_client) if self.mcp_client else None
-                ),
+                manual=render_manual(self.mcp_client),
                 allowed_imports=sandbox.authorized_imports,
             )
             self.loop = Loop(
@@ -85,24 +86,6 @@ class AgentMBPP:
         except Exception:
             self.close()
             raise
-
-    def connect_tools(self, task_file: str) -> MCPClient | None:
-        """Start the MBPP tool server on this task and connect to it.
-
-        Its run_tests(code) checks a candidate against the task's
-        test_list, in the sandbox. Without the server the agent still
-        runs, on its own asserts: the failure is reported on stderr and
-        None is returned.
-        """
-        try:
-            return connect_mcp_server(
-                constants.MBPP_MCP_SERVER,
-                ["--task-file", task_file],
-                call_timeout=MBPP.timeout,
-            )
-        except RuntimeError as e:
-            sys.stderr.write(f"Warning: {e}; running without MCP tools\n")
-            return None
 
     def close(self) -> None:
         """Stop the tool server."""

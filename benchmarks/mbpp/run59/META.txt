@@ -1,0 +1,9 @@
+modele=ministral-14b-2512
+provider=https://api.mistral.ai/v1
+taches=benchmarks/mbpp/run6 (memes fichiers)
+code=e7faba0 + modifications non commitees
+exemple_mbpp=run_tests
+mcp=mcp_tools_mbpp.py
+debut=2026-10-04T16:34:14+02:00
+note=prompt MBPP sans asserts: validation par run_tests(code=solution) puis final_answer(solution) dans le meme bloc, run_tests execute dans le sandbox, serveur MCP obligatoire (2026-10-04); a comparer a run45-run54 (meme modele, memes taches, validation par asserts)
+fin=2026-10-04T16:36:46+02:00
