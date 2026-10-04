@@ -217,21 +217,26 @@ task_definition: Return the smallest absolute value in a list of integers.
 function_definition: def smallest_abs(a):
 test_list: assert smallest_abs([3, -1, 5]) == 1
 assert smallest_abs([-5, 2]) == 2
-Thought: Smallest absolute value means I take the minimum, then its absolute value. Let me set up the first case.
+Thought: Smallest absolute value means I take the minimum, then its absolute value. I keep the solution in a variable, check it with run_tests, and submit that same variable only if every test passes.
 Code:
 ```python
-print(abs(min([-5, 2])))
+solution = r"""def smallest_abs(a):
+    return abs(min(a))"""
+report = run_tests(code=solution)
+print(report)
+if "PASS" in report and "FAIL" not in report and "ERROR" not in report:
+    final_answer(solution)
 ```<end_code>
-Observation: 5
-Thought: Expected 2, got 5. `min` picks -5 because it is the smallest signed value, and abs only runs afterwards. I must map abs over the list first, then take the minimum. test_list never has only negative numbers, but the task covers them, so I add my own assert for that case. I call final_answer right after the asserts: it only runs if they all pass.
+Observation: 1. PASS  assert smallest_abs([3, -1, 5]) == 1
+2. FAIL  assert smallest_abs([-5, 2]) == 2
+Thought: Test 2 fails: `min` picks -5 because it is the smallest signed value, and abs only runs afterwards. I must map abs over the list first, then take the minimum.
 Code:
 ```python
-def smallest_abs(a):
-    return min(map(abs,a))
-assert smallest_abs([3, -1, 5]) == 1, 'smallest_abs([3, -1, 5]) == 1'
-assert smallest_abs([-5, 2]) == 2, 'smallest_abs([-5, 2]) == 2'
-assert smallest_abs([-4, -9]) == 4, 'smallest_abs([-4, -9]) == 4'
-final_answer(r"""def smallest_abs(a):
-    return min(map(abs,a))""")
+solution = r"""def smallest_abs(a):
+    return min(map(abs, a))"""
+report = run_tests(code=solution)
+print(report)
+if "PASS" in report and "FAIL" not in report and "ERROR" not in report:
+    final_answer(solution)
 ```<end_code>
 '''

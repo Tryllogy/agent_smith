@@ -15,9 +15,10 @@
 
 **Cote P2 (tchemin) : la boucle appelle les outils MCP.** Les deux CLI
 lancent leur serveur MCP en stdio, inserent le manuel dans le prompt et
-passent le client a la boucle (2026-10-04, non commite, P2.5 « Branchement
-MCP »). L'exemple MBPP soumet en `final_answer(r"""...""")` (P2.4).
-**519 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
+passent le client a la boucle (2026-10-04, P2.5 « Branchement MCP »).
+**Le prompt MBPP valide par `run_tests(code)` et non plus par des `assert`**
+(2026-10-04, non commite, P2.4) ; l'outil prend le code en argument et
+l'execute dans le sandbox (`e7faba0`). **529 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
 fichiers de ndi-tull non formates (`mcp_tools/*`, `sandbox/manual.py`,
 `sandbox/mcp_client/client.py`, `wrappers.py`).
 
@@ -52,8 +53,15 @@ appele dans aucune des 100 taches**, alors que le manuel coute ~100 tokens
 par tour ; le `r"""` de l'exemple est repris dans 103 `final_answer` sur 104
 (0 sur 101 avant). Detail en P2.6.
 
+**MBPP : campagne des 5 modeles sur le prompt `run_tests`** (2026-10-04,
+`run55` a `run64`, ablation G) : **81/100** contre 75/100 juste avant.
+Groq 19/20, `codestral` 18/20, `nemotron-3-ultra` 18/20, `ministral-8b`
+14/20, `ministral-14b` 12/20, metriques 100/100 valides. `run_tests()` est
+appele dans 112 etapes sur 126, et les reponses sont plus courtes (sortie
+÷ 2,1 pour `codestral`, ÷ 2,7 pour `nemotron-3-ultra`). Detail en P2.6.
+
 **`BENCHMARK_REPORT.md` : partie MBPP a jour au 2026-10-04** (en anglais),
-sur les 50 campagnes `run5` a `run54`, **versionnees dans
+sur les 60 campagnes `run5` a `run64` (ablation G comprise), **versionnees dans
 `benchmarks/mbpp/`** avec leurs `solution.json`. Les sections SWE gardent la
 structure du sujet et attendent Docker (P2.6).
 
@@ -105,11 +113,11 @@ puis sur `ca8f0ad`.
       `import random; random._os.system(...)` lance une commande shell,
       `typing.sys.modules['builtins'].open('/etc/hostname')` lit le fichier,
       `typing.sys.modules['_socket']` est accessible. `ast_guard.py:10` ne
-      bloque que les `__x` ; `_os` et `typing.sys` passent. **Nouveau chemin
-      depuis le branchement** : `run_tests` MBPP execute le fichier candidat
-      avec `python`, hors sandbox (`mcp_tools/tools_mbpp.py`) — un fichier
-      ecrit dans `/tmp/agent` par le code du modele s'execute sans aucune
-      restriction
+      bloque que les `__x` ; `_os` et `typing.sys` passent. ~~Nouveau chemin
+      depuis le branchement : `run_tests` MBPP execute le candidat avec
+      `python`, hors sandbox~~ — **ferme le 2026-10-04** (`e7faba0`) : chaque
+      assertion tourne dans `sandbox.executor.execute`, et un test verifie
+      qu'`import os` passe a `run_tests` est refuse
 - [ ] **`uv run sandbox` plante** (`ImportError: cannot import name 'main'`) :
       `sandbox/cli.py` est vide. `sandbox_template.json` fait 0 octet
       (§ V.2.1, et `exam_sandbox.sh` passera tres probablement par la)
@@ -142,9 +150,10 @@ puis sur `ca8f0ad`.
 - [ ] **`read_file` exige `start_line` et `end_line`** : `read_file(path)`
       leve `TypeError`, un tour perdu. Des valeurs par defaut resteraient
       conformes
-- [ ] **`run_tests` MBPP** : la description vue par le modele ne dit pas
-      ou ecrire le candidat (`--solution-file`). 0 appel sur 100 taches
-      (P2.6)
+- [x] **`run_tests` MBPP** : la description vue par le modele ne disait pas
+      ou ecrire le candidat (`--solution-file`), 0 appel sur 100 taches.
+      **Regle le 2026-10-04** : `run_tests(code: str)` (`e7faba0`), puis
+      prompt MBPP sans `assert` : 112 appels sur 126 etapes (P2.6)
 - [ ] **Exemple SWE decale des vraies sorties** : `run_command` rend
       `exit code: 0 / --- stdout ---`, l'exemple montre `stdout: …
       exit_code: 0` (`constants.py`) ; `edit_file` rend `Edited X: 1
@@ -352,10 +361,14 @@ broker, signatures calees, `run_tests` MBPP. Puis **branchement MCP des deux
 CLI** (P2.5) et **exemple MBPP en `r"""`** apres l'echec de MBPP 396 sur un
 `\1` (P2.4). Campagne des 5 modeles sur ce nouvel agent (`run45` a `run54`,
 P2.6), Docker rootless et image de validation manquante decouverts en
-route. `BENCHMARK_REPORT.md` et ce TODO mis a jour. **Non commite** :
-`agent_mbpp/cli.py`, `agent_swebench/cli.py`, `core/agent/loop.py`,
-`core/agent_cli_helper.py`, `core/constants.py`, `BENCHMARK_REPORT.md`,
-`benchmarks/README.md`, `benchmarks/mbpp/run45` a `run54`, `TODO.md`.
+route. `BENCHMARK_REPORT.md` et ce TODO mis a jour (commite dans
+`01ab8ba`). Puis **`run_tests(code)`**, execute dans le sandbox (`e7faba0`),
+et **le prompt MBPP sans `assert`** : validation par `run_tests`, agent MBPP
+obligatoirement branche (P2.4). Campagne `run55` a `run64` (ablation G,
+81/100 contre 75/100). **Non commite** : `agent_mbpp/cli.py`,
+`core/agent/loop.py`, `core/agent/prompt.py`, `core/constants.py`,
+`BENCHMARK_REPORT.md`, `benchmarks/README.md`, `benchmarks/mbpp/run55` a
+`run64`, `TODO.md`.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -629,12 +642,18 @@ La logique va dans `mcp_tools/` (`tools_fs`, `tools_search`, `tools_exec`) ; les
 2 fichiers racine ne sont que des points d'entree fins, l'emplacement etant
 impose.
 
-- [~] **`run_tests` MBPP** — ecrit par ndi-tull (`mcp_tools/tools_mbpp.py`,
-      2026-10-04) : contrat par fichier, le modele ecrit son candidat dans
-      `--solution-file`, l'outil le passe contre les `test_list` de
-      `--task-file`. **Deux problemes** : il execute le candidat avec `python`
-      **hors sandbox**, et sa description ne dit pas ou ecrire le fichier (0
-      appel sur 100 taches, P2.6). Ancienne note :
+- [x] **`run_tests` MBPP** — ecrit par ndi-tull (`mcp_tools/tools_mbpp.py`,
+      2026-10-04) avec un contrat par fichier (`--solution-file`), execute
+      hors sandbox et jamais appele. **Repris le 2026-10-04** (`e7faba0`) :
+      `run_tests(code: str)` prend le candidat en argument et passe chaque
+      assertion de `test_list` dans `sandbox.executor.execute` (meme
+      `SandboxConfig` que le code du modele), dans un interpreteur neuf pour
+      que rien n'atteigne le canal stdio du serveur ; `--solution-file` est
+      retire de `mcp_tools/config.py`. **Signature libre** pour MBPP (§ V.3.2),
+      le `run_tests()` sans argument du § V.5.3 est celui du serveur SWE,
+      inchange. 11 tests (`tests/test_tools_mbpp.py`), dont 4 echouent si
+      l'outil execute hors sandbox. **A signaler a ndi-tull** : deux de ses
+      fichiers modifies. Ancienne note :
       exige par le § V.3 point 2, souvent oublie parce que
       les 9 outils sont annonces "in the context of SWE-bench". **Aucune
       signature ni format imposes**, donc liberte de conception et charge de la
@@ -1642,9 +1661,27 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       **Mesure** (`run45` a `run54`, P2.6) : 103 `final_answer` sur 104 en
       `r"""` (0 sur 101 avant). Effet sur le score non isole : la campagne
       change aussi le branchement MCP
-- [ ] Un modele peut encore ecrire `"""` sans `r` : la boucle ne le detecte
-      pas. Piste : verifier que la fonction soumise est celle qui vient d'etre
-      testee
+- [x] Un modele pouvait ecrire `"""` sans `r` : la boucle ne le detecte
+      pas. **Contourne le 2026-10-04** : l'exemple met la solution dans une
+      variable, la teste avec `run_tests(code=solution)` et soumet
+      `final_answer(solution)` — la chaine testee est la chaine soumise
+      (112 `final_answer` sur 113 sous cette forme, P2.6)
+- [x] **Validation par `run_tests` au lieu des `assert`** (2026-10-04, non
+      commite). Consigne MBPP : garder la solution dans une variable,
+      afficher le rapport de `run_tests(code=...)`, appeler `final_answer()`
+      avec la meme variable dans le meme bloc seulement si tout passe ; la
+      mise en garde sur les tests caches reste. Exemple : premier bloc faux
+      (1 PASS, 1 FAIL, la vraie sortie de l'outil), second bloc corrige et
+      soumis. Relance d'une sortie vide MBPP : « Print the report of
+      run_tests() ». **Effet de bord voulu** : l'agent MBPP refuse de
+      demarrer sans son serveur. Tests : l'exemple est joue contre le vrai
+      serveur MBPP (observation exacte, premier bloc ne soumet pas, dernier
+      soumet la fonction testee) ; une observation fausse dans l'exemple fait
+      echouer le test. **Mesure** : ablation G (P2.6), 81/100 contre 75/100
+- [ ] Une solution qui finit par `"` colle aux `"""` fermants
+      (`return "Invalid""""`) est une `SyntaxError` : vu sur MBPP 396
+      (`codestral`, 4 soumissions identiques). Le message
+      « unterminated string literal » n'a pas aide le modele
 - [x] **Prompts et relances corriges (2026-10-01, `9c4754a`)**, mesures le
       meme jour en `run9`/`run10` (voir P2.6) :
   - exemple MBPP : les `assert` sont suivis de `print('all tests passed')`,
@@ -1726,10 +1763,11 @@ et passent le client a la boucle. En cinq pieces :
   `write_temp_file()` et `remove_file()`
 - `core/agent/loop.py` : parametre `mcp_client`, transmis a
   `execute(..., client=)` ; `None` laisse `final_answer` seul dans le sandbox
-- `agent_mbpp/cli.py` : serveur lance avec `--task-file` et un candidat
-  propre au run (`/tmp/agent/solution_<pid>.py`, pour qu'un run ne lise pas
-  celui d'un autre) ; `/tmp/agent` cree s'il manque. **Sans serveur, l'agent
-  continue sur ses `assert`** (avertissement sur stderr)
+- `agent_mbpp/cli.py` : serveur lance avec `--task-file`. **Sans serveur,
+  echec au demarrage** depuis que le prompt MBPP valide par `run_tests`
+  (2026-10-04, P2.4) ; avant, l'agent continuait sur ses `assert`. Le
+  candidat par fichier (`/tmp/agent/solution_<pid>.py`) a disparu avec
+  `run_tests(code)`
 - `agent_swebench/cli.py` : l'`eval_script` est ecrit dans un fichier
   temporaire hors des dossiers du sandbox, serveur lance avec
   `--repo-root /testbed --eval-script <fichier>`. **Sans serveur, echec au
@@ -1747,7 +1785,10 @@ la CLI SWE fait echouer un test a chaque fois. 518 tests verts, `ruff`
 propre. Run reel MBPP 396 : manuel dans `system_prompt`, aucun serveur
 restant, `/tmp/agent` vide apres le run.
 
-- [ ] **Le manuel MBPP reste obligatoire** (§ V.2.6 : *« a sandbox manual
+- [x] **Le manuel MBPP reste obligatoire** — **rendu utile le 2026-10-04** :
+      `run_tests(code)` et le prompt sans `assert`, 112 appels sur 126
+      etapes (P2.6). Reste le manuel allege (deuxieme piste ci-dessous).
+      (§ V.2.6 : *« a sandbox manual
       to be fed to the LLM prompt, which must include the MCP tools doc, or
       how to access it »* ; § V.1.6 : *« clear documentation of the available
       tools »* ; § V.3.2 : `run_tests` exige). Il coute ~100 tokens par tour
@@ -1900,6 +1941,17 @@ changements a la fois), conclusions 6.1 (`codestral` defaut MBPP du
 chiffres viennent d'un script qui retrouve a l'identique les valeurs deja
 publiees pour `run17/18`, `run33/34`, `run35/36` et `run43/44`.
 
+**Puis avec `run55` a `run64`** (ablation G) : § 1.1 (`run_tests(code)`,
+prompt sans `assert`, serveur obligatoire), lignes « run_tests agent » dans
+2.1, 3.1 et 4.1, matrice par tache, ligne G du tableau des ablations,
+conclusions 6.1 reecrites (validation par `run_tests` en tete, manuel
+obligatoire et desormais utile). **Metriques du § 4.1 redefinies** : un
+controle est un `assert` execute sans erreur **ou** un rapport de
+`run_tests()` affiche avec seulement des PASS ; un `final_answer` que le
+code saute parce que le rapport montre un echec n'est pas un refus. Les
+definitions etendues redonnent les memes valeurs pour tous les runs
+jusqu'a `run54`.
+
 **Revalidation de `run5` a `run8` par la moulinette** (2026-10-02) : ils
 n'avaient ete verifies qu'en executant les `test_list` en local. Seul ecart,
 **`run7` passe de 9/10 a 8/10** : MBPP 400 echoue au test cache, invisible
@@ -1916,7 +1968,7 @@ cles d'API avant versionnage : aucune.
 - [~] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
       — MBPP fait (6 modeles × 20 taches, les 4 modeles encore
       disponibles sur l'agent du 2026-10-03, puis 5 modeles sur l'agent
-      branche MCP le 2026-10-04), SWE vide
+      branche MCP puis sur le prompt `run_tests` le 2026-10-04), SWE vide
 - [~] Fiabilite provider : temps de reponse moyen, retries, disponibilite —
       MBPP fait ; SWE : seules les latences a 56k tokens
 - [~] ≥ 2 metriques intermediaires : etape du 1er acces au fichier du patch final
@@ -1925,7 +1977,7 @@ cles d'API avant versionnage : aucune.
       — la discipline est mesuree sur MBPP ; les deux autres n'existent que
       sur SWE
 - [~] **Etude d'ablation** avant/apres un changement, memes taches, meme modele
-      — 6 sur MBPP (A a F ; F le 2026-10-03). Le sujet ne dit pas qu'elle doit porter sur SWE ; en
+      — 7 sur MBPP (A a G ; G le 2026-10-04, `assert` contre `run_tests`). Le sujet ne dit pas qu'elle doit porter sur SWE ; en
       faire une sur SWE reste plus sur
 - [~] Conclusions justifiees par les donnees + les `solution.json` de backing
       **presents dans le repo** — conclusions MBPP provisoires ; backing MBPP
@@ -2359,6 +2411,40 @@ dont le code appelle `run_tests(`), `META.txt` les champs `mcp` et
   les 100 solutions revalidees a la fin ; controle prealable sur
   `run43/01` (PASSED)
 
+#### Campagne du 2026-10-04 : prompt `run_tests` (`run55` a `run64`, ablation G)
+
+Memes 20 taches, memes 5 modeles que `run45` a `run54`, quelques heures
+plus tard, sur `e7faba0` + le prompt MBPP sans `assert` (non commite).
+`META.txt` : `exemple_mbpp=run_tests` (documente dans
+`benchmarks/README.md`). Image de validation presente des le depart.
+
+| Modele | `assert` (`run45`-`54`) | `run_tests` (`run55`-`64`) | Entree / sortie par tache | Temps par tache | Echecs d'appel |
+|---|---|---|---|---|---|
+| Groq `gpt-oss-120b` | 18/20 | **19/20** | 1 110 / 447 | 3,0 s | 2 / 23 (1 × 429, 1 × 400 appel d'outil natif → repli, MBPP 247) |
+| `codestral-2508` | 15/20 | **18/20** | 1 466 / 289 | 4,4 s | 0 / 26 |
+| `nemotron-3-ultra` | 16/20 | **18/20** | 1 573 / 198 | 16,5 s (max 67) | 7 / 35 (5 × 503, 2 × echeance) |
+| `ministral-8b-2512` | 12/20 | **14/20** | 1 544 / 526 | 7,7 s | 0 / 26 |
+| `ministral-14b-2512` | 14/20 | **12/20** | 1 331 / 674 | 8,9 s | 0 / 24 |
+
+- **81/100 contre 75/100**, metriques 100/100 valides, aucune soumission a
+  l'aveugle, discipline 0 partout, aucun refus de la boucle
+- **`run_tests()` appele dans 112 etapes sur 126** (0 sur 100 taches
+  avant) ; 112 `final_answer` sur 113 soumettent la variable testee
+- **Sorties plus courtes** sans `assert` a ecrire : `codestral` 612 → 289
+  tokens par tache, `nemotron-3-ultra` 540 → 198. MBPP 462, perdue presque
+  partout sur le plafond de sortie, passe pour Groq et `nemotron-3-ultra`
+- **`ministral-14b` seul en recul** (14 → 12) : 252 et 247 sur le plafond
+  de sortie avant tout code, 71 sur le test cache
+- Chaque ecart par modele reste dans le bruit d'un tirage ; le total
+  (4 modeles en hausse, 1 en baisse) et les tokens sont le signal net
+- **Pas tout a fait une seule variable** : la signature de l'outil a aussi
+  change (`run_tests()` par fichier → `run_tests(code)`), mais l'ancienne
+  n'etait jamais appelee : l'effet mesure est celui de la consigne
+- [ ] Groq refait un appel d'outil natif (HTTP 400) : 2 fois sur 40
+      taches depuis que le manuel est dans le prompt
+- [ ] Rejouer pour consolider (un seul tirage par modele) avant d'en
+      faire la conclusion du rapport
+
 ---
 
 ## A faire ensemble (fin de projet)
@@ -2486,21 +2572,24 @@ dont le code appelle `run_tests(`), `META.txt` les champs `mcp` et
        commite), le tout mesure le 2026-10-03 (ablation F) : Groq 18/20,
        **0 echec en 21 tentatives** au lieu d'un sur deux. Reste ouvert :
        OpenRouter `gpt-oss-20b:free`, non mesure (P2.6)
-5. [~] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). **Branche
-       le 2026-10-04, mais jamais appele** (0 sur 100 taches, P2.6). Ce qui
-       restera cote P2 :
+5. [x] **Brancher `run_tests` MBPP des que ndi-tull l'aura ecrit** (P1.5). **Branche
+       le 2026-10-04**, d'abord jamais appele (0 sur 100), puis **appele dans
+       112 etapes sur 126** avec `run_tests(code)` et le prompt sans `assert`
+       (P2.6, ablation G). Ce qui restait cote P2 :
    - [x] passer le manuel a `Prompt(manual=)` au lieu de `None` (2026-10-04)
-   - decrire `run_tests` dans le prompt MBPP et **remplacer ou composer avec** la
-     consigne actuelle ("use the assert to VALIDATE your code") : aujourd'hui le
-     modele valide par `assert` et fait 8/10, il ne sait pas que l'outil existe
-   - rejouer les 10 taches a jeu egal → **etude d'ablation** (assert seul vs
-     `run_tests`), meme modele, memes taches
+   - [x] decrire `run_tests` dans le prompt MBPP et **remplacer** la consigne
+     des `assert` (2026-10-04, P2.4)
+   - [x] rejouer a jeu egal → **etude d'ablation** : ablation G, `assert`
+     (`run45`-`run54`, 75/100) contre `run_tests` (`run55`-`run64`, 81/100),
+     5 modeles, memes 20 taches
    - surveiller le cout : MBPP plafonne a 6000 tokens d'entree **cumules**, chaque
      description d'outil est rejouee a chaque tour. D'ou la prudence sur le *"any
      additional tools"* — l'invitation du sujet n'est pas gratuite
-   - **ne pas rendre le prompt dependant de `run_tests`** : le sujet teste avec un
-     serveur MCP inconnu ou l'outil n'existe pas. Les `assert` doivent rester un
-     repli utilisable, pas un vestige a supprimer
+   - ~~ne pas rendre le prompt dependant de `run_tests`~~ — **decide le
+     contraire le 2026-10-04** : le prompt MBPP depend de `run_tests`. Ca tient
+     parce que l'agent MBPP lance toujours son propre serveur (la commande
+     d'examen n'en prend aucun en argument) et refuse de demarrer sans lui ;
+     le « serveur MCP inconnu » concerne le CLI `sandbox`
    - les descriptions ne sont **pas a rediger a la main** : elles viennent des
      schemas du serveur via le manuel de P1.4. Ce que P2 controle, c'est la mise
      en forme et les consignes autour (quand appeler, dans quel ordre, avant
@@ -2508,7 +2597,7 @@ dont le code appelle `run_tests(`), `META.txt` les champs `mcp` et
 
 ### Le banc d'essai `tests/`
 
-**519 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
+**529 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 
@@ -2544,13 +2633,17 @@ ce fichier, les deux passaient inapercus.
   **Tranche le 2026-10-03** : un texte deja mis en forme (`render_manual`).
   **Recuperation tranchee le 2026-10-04** : la CLI lance le serveur, rend
   le manuel et passe le client a la boucle (P1.4, P2.5).
-- **Aucune consigne du prompt ne doit supposer qu'un outil precis existe** : le
-  sujet teste avec un serveur MCP inconnu. D'ou l'`assert` garde comme repli MBPP.
+- ~~Aucune consigne du prompt ne doit supposer qu'un outil precis existe~~ —
+  **revu le 2026-10-04** : le prompt MBPP suppose `run_tests`, parce que
+  l'agent MBPP lance toujours son propre serveur. Le prompt SWE, lui, nomme
+  deja les 9 outils obligatoires. Le serveur inconnu reste le cas du CLI
+  `sandbox`.
 - **`run_tests` MBPP** : exige par le § V.3 mais non specifie. P1 choisit la
   signature, P2 la decrit et mesure l'effet. A caler ensemble, sinon le prompt
   decrira un outil qui n'a pas cette forme. **Recouvrement depuis le
   2026-10-01** : la boucle verifie deja le `final_answer` contre `test_list`
   (P2.1). L'outil sert le modele *avant* de soumettre, la verification
-  protege *a la soumission* — decider ensemble si les deux coexistent.
+  protege *a la soumission* — **les deux coexistent** depuis le 2026-10-04 :
+  `run_tests(code)` avant, la boucle a la soumission.
 - MBPP end-to-end **avant** de toucher a Docker.
 - Ne pas optimiser (tokens, choix de modele) avant que l'approche soit prouvee.

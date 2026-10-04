@@ -32,7 +32,7 @@ solution FAIL without any error in the checker's output.
 
 ## Which verdict is authoritative
 
-- **run9 to run54**: the `reel` and `metrics` fields of `RESUME.json` are the
+- **run9 to run64**: the `reel` and `metrics` fields of `RESUME.json` are the
   checker's verdicts; its full output is in `logs/validate_XX.txt`.
 - **run5 to run8**: these runs were first checked by running `test_list`
   locally, and `RESUME.json` keeps that verdict. They were re-validated with
@@ -71,3 +71,9 @@ From run45 on, the agent is connected to the MBPP MCP server
 number of steps whose code called `run_tests(`. run45 to run54 were all
 re-validated once the campaign was over: the checker's image was missing
 for the first tasks.
+
+From run55 on (`exemple_mbpp=run_tests`), the MBPP prompt no longer
+asks for asserts: the model keeps its solution in a variable, checks it
+with `run_tests(code=solution)` (run in the sandbox by the MCP server)
+and calls `final_answer(solution)` in the same block only if every test
+passes. The agent refuses to start without its MCP server.

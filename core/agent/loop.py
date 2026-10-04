@@ -178,9 +178,8 @@ class Loop:
                 )
                 if self.bench == constants.MBPP:
                     content += (
-                        " Passing asserts print nothing: call"
-                        " final_answer() right after them, in the same"
-                        " block."
+                        " Print the report of run_tests() to see which"
+                        " tests pass."
                     )
             elif self.bench == constants.MBPP:
                 content: str = (
