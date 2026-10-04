@@ -1,0 +1,52 @@
+[
+  {
+    "f": "02",
+    "tid": "sympy__sympy-13480",
+    "claim": true,
+    "reel": "PASS",
+    "resolution": "RESOLVED_FULL",
+    "metrics": "VALID",
+    "it": 10,
+    "req": 12,
+    "tin": 47678,
+    "tout": 772,
+    "sec": 48.02,
+    "wall": 50.1,
+    "steps": 10,
+    "rty": 2,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 1,
+    "edit_file": 1,
+    "get_patch": 1,
+    "models": [
+      "qwen/qwen3.8-27b:free"
+    ],
+    "err": ""
+  },
+  {
+    "f": "03",
+    "tid": "pydata__xarray-4629",
+    "claim": true,
+    "reel": "PASS",
+    "resolution": "RESOLVED_FULL",
+    "metrics": "VALID",
+    "it": 8,
+    "req": 9,
+    "tin": 34064,
+    "tout": 521,
+    "sec": 28.84,
+    "wall": 30.7,
+    "steps": 8,
+    "rty": 1,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 1,
+    "edit_file": 1,
+    "get_patch": 1,
+    "models": [
+      "qwen/qwen3.8-27b:free"
+    ],
+    "err": ""
+  }
+]

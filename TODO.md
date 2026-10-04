@@ -28,9 +28,15 @@ dans l'agent SWE** (`6a933b9`, P2.5). **Sandbox persistant** : un seul
 processus par tache, variables gardees d'un tour a l'autre, et le timeout
 configure du sandbox enfin respecte (`84338df`, P2.1). **Premiers vrais
 runs SWE** le 2026-10-04 (P2.6) : `sympy__sympy-14711` non resolue,
-**`sympy__sympy-13480` resolue** en 4 iterations (rejouee a la main : 45
-tests passent ; la moulinette ne peut pas valider SWE sur nos postes, Docker
-rootless). **570 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
+**`sympy__sympy-13480` resolue** en 4 iterations. **Campagne SWE des 4
+modeles le 2026-10-04 au soir** (`benchmarks/swebench/run1` a `run4`, sur
+`84d22b1`, P2.6) : **chaque modele resout 2 taches sur 3, 8/12**, verdicts
+de la **vraie moulinette** (`validate swebench`, `RESOLVED_FULL`), sur un
+poste a Docker classique ou le `lchown` du rootless ne se produit pas.
+`xarray-4629` 4/4, `sympy-13480` 3/4, `sympy-14711` 1/4 (`codestral`
+seul). Metriques 12/12 valides. Revele un defaut de `run_tests` SWE : le
+resultat des tests est coupe sur sympy (P1, revue du 2026-10-04).
+**570 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
 fichiers de ndi-tull non formates (`mcp_tools/*`, `sandbox/manual.py`,
 `sandbox/mcp_client/client.py`, `wrappers.py`).
 
@@ -99,14 +105,19 @@ comptes** (`81bfa3b`), **et sequence d'arret retiree pour Groq
 
 > **Docker, le CLI `sandbox` et `sandbox_template.json` sont arrives le
 > 2026-10-04** (merge `2610650`). Restent sur le chemin critique : **la
-> securite du sandbox** (evasion toujours ouverte, P1) et **la mise au point
-> SWE** sur les 3 taches, puis la partie SWE du rapport (P2).
+> securite du sandbox** (evasion toujours ouverte, P1), **`run_tests` SWE
+> qui cache le resultat des tests** (P1) et **le 5e modele SWE** (P2). ~~La
+> mise au point SWE sur les 3 taches, puis la partie SWE du rapport~~ —
+> faites le 2026-10-04 (P2.6, `BENCHMARK_REPORT.md` § 2.3 a 6.2).
 
 **Dettes qui bloquent la mesure** :
 
 0. **Il manque un 5e modele SWE** (2026-10-03) : `nemotron-3-super` retire
    par NVIDIA, 4 modeles restent pour un minimum de 5 (« Prochaines
-   actions », 4 bis)
+   actions », 4 bis). **Trouve le 2026-10-04** : `qwen/qwen3.8-27b:free`
+   (OpenRouter, P2.3 « Sondes du 2026-10-04 »), 2/2 sur `sympy-13480` et
+   `xarray-4629` (`swebench/run5`) ; **reste `sympy-14711`**, quota
+   OpenRouter du jour epuise
 1. ~~**Docker** : `agent_swebench/docker.py` est vide~~ — **reglee le
    2026-10-04** : `TaskContainer` de ndi-tull (`e9e5dd1`), branche dans
    l'agent SWE (P2.5), premier run reel le meme jour (P2.6)
@@ -162,7 +173,12 @@ puis sur `ca8f0ad`.
       **Les trois leviers sont faits le 2026-10-04** : troncature des
       observations et elagage des anciennes (`3538fcf`, P2.1), exemple SWE
       raccourci (P2.4, prompt ~2 900 tokens). Simulation : **26 tours**
-      avant 300k. Reste a mesurer le vrai cout par tour sur des runs SWE
+      avant 300k. **Mesure le 2026-10-04** (campagne SWE, P2.6) : les 5
+      taches allees jusqu'a 30 tours ont consomme 164k a **267k** tokens
+      d'entree, jamais plus de 300k ; requete la plus grosse 19 071 tokens
+      (`ministral-14b`). Le plafond n'a coupe aucune tache, mais `ministral-14b`
+      sur `sympy-14711` a fini a 267k/300k et **9 739/10 000 tokens de
+      sortie** : la marge de sortie est la plus mince
 
 **A trancher :**
 
@@ -180,14 +196,49 @@ puis sur `ca8f0ad`.
       `100755 → 100644` sur `tests/test_hyperbolic.py`, parce que
       `core.fileMode=false` n'est passe qu'au `diff`, pas au `add`. Il s'est
       applique sans erreur, mais n'a rien a faire dans le patch. Correctif
-      possible : `git -c core.fileMode=false add -A` (P1)
-- [ ] **La moulinette ne peut pas valider SWE sur nos postes** (2026-10-04) :
+      possible : `git -c core.fileMode=false add -A` (P1). **Revu dans la
+      campagne SWE** (P2.6) : 2 patchs sur 8 (`ministral-14b` et
+      `ministral-8b`, `sympy-13480`), tous deux `RESOLVED_FULL` quand meme
+- [x] **La moulinette ne peut pas valider SWE sur nos postes** (2026-10-04) :
       `failed to Lchown "/tmp/patch.diff" for UID 103977 … invalid argument`.
       Elle copie le patch dans le conteneur avec notre UID, que le Docker
       rootless ne sait pas faire correspondre. Probleme d'environnement, pas
-      du patch. Contournement utilise : conteneur neuf, `git apply -v` et
-      `eval_script` passes par l'entree standard (P2.6). Pour le rapport :
-      une machine avec un Docker classique, ou ce rejeu documente comme tel
+      du patch. **Regle le 2026-10-04** : campagne SWE validee sur un poste a
+      Docker classique (utilisateur dans le groupe `docker`), les 8 patchs
+      soumis appliques par `git apply` (les 4 echecs n'en soumettent pas),
+      verdicts officiels (P2.6). Deux pieges de
+      ce poste : le paquet `moulinette` s'installe vide (`uv sync` ne copie
+      pas les sources, lancer avec `PYTHONPATH=moulinette`), et la
+      moulinette ecrit `/tmp/patch.diff` et `/tmp/eval.sh` en dur, donc
+      **deux validations SWE en parallele se marchent dessus** (le script de
+      campagne les a serialisees)
+- [ ] **`run_tests` SWE cache le resultat des tests** (constate le
+      2026-10-04, campagne SWE, P2.6) — **le plus genant des defauts SWE**.
+      Deux causes cumulees : (1) l'`eval_script` commence par `git show`, et
+      le commit « SWE-bench » des images sympy change le mode de **chaque**
+      fichier du depot (`old mode 100644 / new mode 100755`), des milliers
+      de lignes sur stdout **avant** les tests ; `_cap_tool` et l'executor
+      gardent les 20 000 **premiers** caracteres (`sandbox/executor.py:225`),
+      donc le resume des tests est coupe et le modele ne voit que la liste
+      des modes. **Regression du merge `84d22b1`** : ce plafond vient de
+      `341a778` (ndi-tull) et passe **avant** la troncature de la boucle,
+      qui garde tete et queue expres pour les resumes de tests (`3538fcf`,
+      P2.1) ; la queue qu'elle voit n'est plus que du bruit. 14 des 22 appels de la campagne sont aveugles, tous sur
+      `sympy-13480` (12 pour `codestral`, 1 pour chaque ministral). (2) le
+      `exit code` affiche est celui du dernier `git checkout` du script,
+      **toujours 0**, meme avec « 0 passed, 4 exceptions » (`ministral-14b`,
+      `14711`). Correctif possible (P1) : rendre seulement ce qui est entre
+      `>>>>> Start Test Output` et `>>>>> End Test Output`, avec la ligne
+      de resume, et garder la queue plutot que la tete quand on coupe
+- [ ] **`edit_file` ne cree pas de fichier** : `old_str=""` sur un fichier
+      absent rend `[Errno 2] No such file or directory: '/tmp/agen…'`
+      (chemin hote, pas `/testbed`). `ministral-14b` y a perdu 3 tours sur
+      `sympy-14711`. Le manuel devrait dire comment creer un fichier
+      (`run_command` avec `cat >`), ou l'outil le faire
+- [ ] **`search_code` refuse un `file_pattern` absolu** (« Non-relative
+      patterns are unsupported ») alors que les autres outils prennent
+      `/testbed/...` : 1 tour perdu par `ministral-14b` et `ministral-8b`.
+      Accepter `/testbed/` en tete, ou le dire dans le manuel
 - [ ] **`read_file` exige `start_line` et `end_line`** : `read_file(path)`
       leve `TypeError`, un tour perdu. Des valeurs par defaut resteraient
       conformes
@@ -1717,6 +1768,33 @@ branches donc `NameError` a chaque appel d'outil) :
       sur le gratuit), Cohere (cle d'essai a ~1000 appels/mois), SambaNova.
       Utile seulement si Mistral est refuse
 
+**Sondes du 2026-10-04 au soir : le 5e modele.** Catalogues relus en direct,
+puis vrai prompt SWE (system + enonce de `sympy-14711`, ~2 600 tokens) et
+contexte de ~15k tokens (16 tours rejoues de `swebench/run1/solution_01`) :
+
+| Fournisseur / modele | Resultat | Verdict |
+|---|---|---|
+| Mistral `mistral-vibe-cli-*` (Devstral 2), `magistral-*`, `mistral-medium-3.5`, `mistral-small-2603` | 429, `x-ratelimit-limit-req-minute: 0` | fermes sur ce compte, comme le 2026-10-02 |
+| Mistral `codestral-latest` = `mistral-code-latest` | ouverts (125 req/min), reponses identiques entre eux, differentes de `codestral-2508` | autre version de Codestral : meme famille, secours seulement |
+| Groq (tous) | `x-ratelimit-limit-tokens: 8000` | exclus (413) |
+| NVIDIA `kimi-k3`, `glm-5.3`, `glm-5.3-flash`, `deepseek-v4.1-flash`, `gemma-4-31b-it` | plus de 90 s (`kimi-k3` 72,8 s pour 33 tokens) | toujours satures |
+| NVIDIA `nemotron-3-nano-omni-30b-a3b-reasoning` | 0,7 s, mais `print(get_patch())` des le 1er tour (2 fois sur 2), 503 « 16/16 workers » | ecarte (degenere) |
+| OpenRouter `nemotron-3-super:free` (fournisseur Nvidia) | 1,0 s, bon format… mais **le fournisseur ne prend pas `stop`** (absent de `supported_parameters`, `require_parameters` → 404) : dans l'agent, il ecrit `<end_code>`, invente une « Observation » et boucle jusqu'a **10 000 tokens en une reponse** (1 requete, budget de sortie epuise) | ecarte |
+| OpenRouter `laguna-s-2.1:free` (Poolside), `gemma-4-*:free`, `nemotron-3-ultra:free`, `nemotron-3.5-lightning:free` | pas de `stop` ; Laguna repond en `<tool_call>` natifs | ecartes |
+| OpenRouter `inkling:free` | 403 « only available on agentic harnesses » | ferme |
+| OpenRouter `north-mini-code:free` (Cohere) | `content` vide ou boucle de phrases, `finish=error` | ecarte |
+| **OpenRouter `qwen/qwen3.8-27b:free`** (fournisseur ModelRun, prend `stop`) | 3,0 s au 1er tour ; a 15k tokens, **2 000 tokens de raisonnement et `content` vide**, mais **1,5 s et bon format avec `reasoning: {enabled: false}`** | **retenu** |
+
+- [x] **5e modele : `qwen/qwen3.8-27b:free`** (OpenRouter, raisonnement
+      coupe dans `configs/models.json`). Famille differente (Alibaba) des 4
+      autres (Mistral, NVIDIA). Deja mesure en MBPP (`run11`, 7/10).
+      Valide le 2026-10-04 dans `swebench/run5` (P2.6)
+- [ ] Limite : **50 requetes/jour** sur le compte OpenRouter gratuit (la
+      cle de ce poste : `is_free_tier: true`), et des 429 « upstream »
+      absorbes par les retries. Une campagne de 3 taches en coute ~50 : a
+      etaler sur deux jours, et inutilisable pour l'examen (3 taches d'un
+      coup)
+
 Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-build/),
 [pasqualepillitteri.it — NVIDIA Build 2026](https://pasqualepillitteri.it/en/news/1621/nvidia-build-free-api-100-ai-models-2026),
 [forum NVIDIA — 40 RPM](https://forums.developer.nvidia.com/t/request-to-increase-nvidia-nim-api-rate-limit-from-40-rpm-to-250-300-rpm/372594),
@@ -2117,7 +2195,7 @@ que l'etape 2 reclamait.
 - [ ] Regle de precedence CLI > fichier : sans objet tant qu'aucun reglage n'est
       expose en double. A rouvrir des qu'un l'est
 
-### P2.6 — `BENCHMARK_REPORT.md` *(partie MBPP ecrite, SWE a faire)*
+### P2.6 — `BENCHMARK_REPORT.md` *(MBPP ecrit ; SWE ecrit sur 5 modeles, une case en attente)*
 
 **≥ 5 modeles × ≥ 3 taches SWE-bench communes.**
 
@@ -2174,19 +2252,32 @@ solutions, logs), 22 runs, 1 031 fichiers, 5,1 Mo dont 1,9 Mo de logs ;
 `benchmarks/README.md` dit quel verdict fait foi pour chaque run. Scan des
 cles d'API avant versionnage : aucune.
 
-- [~] Setup (modeles/providers, taches + justification) — MBPP fait, taches
-      SWE a justifier
+**Partie SWE ecrite le 2026-10-04** avec la campagne `benchmarks/swebench/run1`
+a `run4` (detail plus bas, « Campagne SWE des 4 modeles ») : statut, § 1.2
+(verdict `validate swebench`), § 1.3 (taches SWE et pourquoi), § 1.4
+(colonne SWE), § 2.3 (matrice 4 modeles × 3 taches), § 3.2 (fiabilite), § 4.2
+(exploration, discipline, appels de `run_tests` aveugles, actions
+repetees), § 5 (pas d'ablation SWE, et pourquoi), § 6.2 (conclusions),
+Backing data. Chiffres recalcules par script depuis les `solution.json`.
+
+- [x] Setup (modeles/providers, taches + justification) — MBPP fait, taches
+      SWE justifiees le 2026-10-04 (les 3 conseillees, toutes dans l'`EXAM_POOL`
+      de la moulinette)
 - [~] Tableau modele × tache : pass/fail, iterations, tokens in/out, temps mur
       — MBPP fait (6 modeles × 20 taches, les 4 modeles encore
       disponibles sur l'agent du 2026-10-03, puis 5 modeles sur l'agent
-      branche MCP puis sur le prompt `run_tests` le 2026-10-04), SWE vide
-- [~] Fiabilite provider : temps de reponse moyen, retries, disponibilite —
-      MBPP fait ; SWE : seules les latences a 56k tokens
-- [~] ≥ 2 metriques intermediaires : etape du 1er acces au fichier du patch final
+      branche MCP puis sur le prompt `run_tests` le 2026-10-04) ; **SWE :
+      5 modeles × 3 taches le 2026-10-04, 14 cases sur 15** (`qwen` /
+      `sympy-14711` en attente du quota OpenRouter)
+- [x] Fiabilite provider : temps de reponse moyen, retries, disponibilite —
+      MBPP fait ; SWE fait le 2026-10-04 (187 requetes, 0 echec)
+- [x] ≥ 2 metriques intermediaires : etape du 1er acces au fichier du patch final
       (exploration) / etape ou les echecs de tests baissent (progres partiel) /
       iterations entre "tests au vert" et `final_answer` (discipline, 0 ideal)
-      — la discipline est mesuree sur MBPP ; les deux autres n'existent que
-      sur SWE
+      — la discipline est mesuree sur MBPP ; **exploration et discipline
+      mesurees sur SWE le 2026-10-04**. Le progres partiel n'est pas
+      mesurable tant que `run_tests` cache le resultat des tests (revue du
+      2026-10-04)
 - [~] **Etude d'ablation** avant/apres un changement, memes taches, meme modele
       — 7 sur MBPP (A a G ; G le 2026-10-04, `assert` contre `run_tests`). Le sujet ne dit pas qu'elle doit porter sur SWE ; en
       faire une sur SWE reste plus sur
@@ -2682,7 +2773,9 @@ dans `cache/swebench_solution_docker.json` (hors depot).
       `Vector.__init__`, jamais de `run_tests()`), et le modele n'a jamais
       reutilise une variable d'un tour a l'autre (chaque etape est un
       `print(...)`)
-- [ ] Les 3 taches conseillees × 5 modeles pour le rapport
+- [~] Les 3 taches conseillees × 5 modeles pour le rapport — **4 modeles
+      faits le 2026-10-04** (« Campagne SWE des 4 modeles » plus bas), le 5e
+      manque toujours
 
 #### Deuxieme vrai run SWE (2026-10-04, `sympy__sympy-13480`, `codestral-2508`)
 
@@ -2708,6 +2801,76 @@ moulinette (`dump swebench --task_id sympy__sympy-13480`). Sorties dans
   precis), mais toute la suite du fichier passe
 - Metriques validees par la moulinette (4/30 iterations, 15k/300k, 420/10k,
   18 s/900 s)
+
+#### Campagne SWE des 4 modeles (2026-10-04, `benchmarks/swebench/run1` a `run4`)
+
+Agent de `84d22b1` (Docker, MCP, sandbox persistant), arbre propre. Les 3
+taches conseillees, dumpees une fois par la moulinette et copiees dans
+chaque run. Un run par modele : `run1` `codestral-2508`, `run2`
+`ministral-14b-2512`, `run3` `ministral-8b-2512`, `run4`
+`nemotron-3-ultra`. Chaine Mistral en sequence (une seule cle, une seule
+limite de tokens par minute), NVIDIA en parallele ; validations
+serialisees. **Valide par la vraie moulinette** (`validate swebench`) sur un
+poste a Docker classique : plus de `lchown`, les 8 patchs soumis
+appliques par `git apply --verbose` (les 4 echecs n'en soumettent pas). Images tirees avant la campagne : les temps sont ceux
+de la boucle, le temps mur ajoute ~2 s de demarrage.
+
+| Modele | `sympy-14711` | `sympy-13480` | `xarray-4629` | Total |
+|---|---|---|---|---|
+| `codestral-2508` | **P** 22 it. | F 30 it. | **P** 3 it. | **2/3** |
+| `ministral-14b-2512` | F 30 it. | **P** 3 it. | **P** 7 it. | **2/3** |
+| `ministral-8b-2512` | F 30 it. | **P** 6 it. | **P** 6 it. | **2/3** |
+| `nemotron-3-ultra` | F 30 it. | **P** 5 it. | **P** 15 it. | **2/3** |
+
+- **8/12, chaque modele au seuil de l'examen (2 sur 3)**, metriques 12/12
+  valides, aucun faux succes (les 8 succes annonces sont les 8
+  `RESOLVED_FULL`), aucun retry, aucun repli
+- **`sympy-14711` resolue pour la premiere fois** (`codestral`, 22 it.) ;
+  `xarray-4629` resolue par tous avec le meme correctif
+  (`dict(variable_attrs[0])`)
+- **Les 4 echecs vont au plafond de 30 iterations sans patch soumis**, avec
+  4 causes differentes :
+  - `codestral` / `13480` (resolue en 4 it. l'apres-midi, avant le merge
+    `84d22b1`) : **11 fois le meme `edit_file`** avec un `old_str` a 21
+    espaces au lieu de 20, relecture des lignes 589-591 entre chaque essai
+    — « old_str not found » ne l'aide pas (revue, `edit_file`) ;
+    ses 12 `run_tests()` sont tous aveugles (revue, `run_tests` SWE)
+  - `ministral-14b` / `14711` : code Python passe a `run_command` (bash →
+    erreur de syntaxe), 3 essais de creer un fichier avec `edit_file`
+    (revue), `def __mul__` redefini **dans le sandbox** 3 fois au lieu
+    d'editer le depot ; premiere edition du vrai fichier au tour 25. Fini a
+    267k/300k en entree et **9 739/10 000 en sortie**
+  - `ministral-8b` / `14711` : **21 etapes sur 30 sans `print()`**, 27
+    observations vides malgre le message « only what you print() appears »
+    a chaque fois
+  - `nemotron-3-ultra` / `14711` : lit tout le fichier par fenetres de 100
+    lignes (tours 2 a 7), puis **relit les memes parties en boucle**
+    (`__mul__` 5 fois de plus, lignes 55-65 6 fois de plus), jamais
+    d'edition. Probable effet de l'elagage
+    (`full_observations=3`) : une plage lue il y a plus de 3 tours n'est
+    plus visible
+- **Discipline** : 4 des 8 succes sont soumis sans aucun `run_tests()`, 2
+  apres un `run_tests()` aveugle (les deux ministral sur `13480`) ; les 2
+  derniers ont des tests au vert visibles, a 1 iteration de `final_answer`
+- **Fiabilite** : 187 requetes, 0 echec ; temps de reponse moyen
+  `codestral` 1,8 s, `ministral-8b` 3,0 s, `nemotron-3-ultra` 3,5 s (max
+  36,2 s), `ministral-14b` 3,6 s
+- **Premiere tentative perdue** : les cles du `.env` de ce poste etaient
+  permutees entre fournisseurs, 12 taches en 401 avant toute requete ;
+  repertoires supprimes, `.env` corrige, campagne relancee
+- [~] **5e modele SWE** (dette 0) : `qwen/qwen3.8-27b:free` (OpenRouter),
+      `swebench/run5`, le 2026-10-04 au soir. `sympy-13480` **PASS** deux
+      fois (5 it. puis 10 it. : le script de campagne a rejoue la tache
+      02 en lancant la 03, le 1er passage est ecrase, ses chiffres sont dans
+      `META.txt`), `xarray-4629` **PASS** (8 it.). **Reste `sympy-14711`**
+      (jusqu'a 30 requetes) apres la remise a zero du quota OpenRouter
+      (minuit UTC). **`run5` ajoute au rapport le 2026-10-04** (§ 1.4 avec
+      les sondes, 2.3, 3.2, 4.2, 5, 6.2, Backing data), `sympy-14711`
+      marquee *pending* : a completer apres le run
+- [ ] Rejouer apres le correctif de `run_tests` SWE (P1) : c'est
+      l'ablation SWE naturelle (meme modeles, memes taches, une variable)
+- [ ] Un seul tirage par modele : `codestral` a resolu `13480` l'apres-midi
+      et l'a ratee le soir ; rejouer avant de conclure sur un classement
 
 ---
 
@@ -2737,9 +2900,11 @@ moulinette (`dump swebench --task_id sympy__sympy-13480`). Sorties dans
 5. [ ] **Durcir le sandbox (P1.7) pendant que P2 attaque SWE-bench.** Cote P2,
        les outils sont branches depuis le 2026-10-04 — le chemin critique
        est cote P1 : Docker, evasion du sandbox, CLI `sandbox`
-6. [ ] SWE-bench sur les 3 taches conseillees : `sympy__sympy-14711` /
-       `sympy__sympy-13480` / `pydata__xarray-4629`
-7. [ ] `BENCHMARK_REPORT.md` une fois les 2 benchmarks fonctionnels
+6. [x] SWE-bench sur les 3 taches conseillees : `sympy__sympy-14711` /
+       `sympy__sympy-13480` / `pydata__xarray-4629` — 2026-10-04, 4 modeles,
+       2/3 chacun, validation officielle (P2.6)
+7. [~] `BENCHMARK_REPORT.md` une fois les 2 benchmarks fonctionnels — MBPP
+       et SWE ecrits le 2026-10-04 ; manque le 5e modele SWE
 8. [ ] `README.md` + relecture croisee
 
 ### Prochaines actions (cote tchemin), par rentabilite

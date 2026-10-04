@@ -1,0 +1,10 @@
+modele=nvidia/nemotron-3-ultra-550b-a55b
+provider=https://integrate.api.nvidia.com/v1
+taches=sympy__sympy-14711 sympy__sympy-13480 pydata__xarray-4629
+code=84d22b1
+mcp=mcp_tools_swebench.py
+docker=29.8.2 (classique, socket /var/run/docker.sock)
+validation=moulinette_eval validate swebench (verdict officiel)
+debut=2026-10-04T21:25:46+02:00
+note=campagne SWE 3 taches conseillees x modele, agent Docker+MCP+sandbox persistant, validation moulinette officielle (Docker classique, plus de lchown rootless)
+fin=2026-10-04T21:29:41+02:00

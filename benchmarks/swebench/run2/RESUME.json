@@ -1,0 +1,77 @@
+[
+  {
+    "f": "01",
+    "tid": "sympy__sympy-14711",
+    "claim": false,
+    "reel": "FAIL",
+    "resolution": "",
+    "metrics": "VALID",
+    "it": 30,
+    "req": 30,
+    "tin": 266950,
+    "tout": 9739,
+    "sec": 127.9,
+    "wall": 129.9,
+    "steps": 30,
+    "rty": 0,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 3,
+    "edit_file": 6,
+    "get_patch": 0,
+    "models": [
+      "ministral-14b-2512"
+    ],
+    "err": "Iteration limit exceeded"
+  },
+  {
+    "f": "02",
+    "tid": "sympy__sympy-13480",
+    "claim": true,
+    "reel": "PASS",
+    "resolution": "RESOLVED_FULL",
+    "metrics": "VALID",
+    "it": 3,
+    "req": 3,
+    "tin": 9772,
+    "tout": 455,
+    "sec": 13.45,
+    "wall": 15.5,
+    "steps": 3,
+    "rty": 0,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 1,
+    "edit_file": 1,
+    "get_patch": 1,
+    "models": [
+      "ministral-14b-2512"
+    ],
+    "err": ""
+  },
+  {
+    "f": "03",
+    "tid": "pydata__xarray-4629",
+    "claim": true,
+    "reel": "PASS",
+    "resolution": "RESOLVED_FULL",
+    "metrics": "VALID",
+    "it": 7,
+    "req": 7,
+    "tin": 33719,
+    "tout": 1370,
+    "sec": 25.28,
+    "wall": 27.1,
+    "steps": 7,
+    "rty": 0,
+    "fallback": 0,
+    "from_reasoning": 0,
+    "run_tests": 1,
+    "edit_file": 1,
+    "get_patch": 1,
+    "models": [
+      "ministral-14b-2512"
+    ],
+    "err": ""
+  }
+]
