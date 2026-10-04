@@ -9,7 +9,7 @@ from core.agent.prompt import Prompt
 from core.config_models import LLMResponse
 from core.llm.fallback import FallbackClient
 from core.models import SandboxConfig, SolutionOutput, StepMetrics
-from sandbox.executor import execute
+from sandbox.executor import Sandbox, execute
 from sandbox.mcp_client.client import MCPClient
 
 
@@ -140,8 +140,10 @@ class Loop:
     def observation(self, max_execution_time: int) -> bool:
         """Run the extracted code and add the observation for the LLM.
 
-        Returns True only when final_answer() was called with a valid
-        answer. Every other outcome is reported as a user message.
+        The code may run for the sandbox's configured timeout, cut down to
+        max_execution_time, the time the task has left. Returns True only
+        when final_answer() was called with a valid answer. Every other
+        outcome is reported as a user message.
         """
         if not self.code["found"]:
             self.sandbox_input = ""
@@ -152,10 +154,12 @@ class Loop:
             )
             return False
         self.sandbox_input: str = self.code["code"]
-        config_copy: SandboxConfig = self.config_sandbox.model_copy()
-        config_copy.max_execution_time_seconds = max_execution_time
-        stdout, stderr, error, is_final, answer = execute(
-            self.sandbox_input, config_copy, client=self.mcp_client
+        stdout, stderr, error, is_final, answer = self.sandbox.run(
+            self.sandbox_input,
+            timeout=min(
+                self.config_sandbox.max_execution_time_seconds,
+                max_execution_time,
+            ),
         )
         self.sandbox_output: str = (
             stdout + stderr + error if error else stdout + stderr
@@ -345,9 +349,17 @@ class Loop:
     ) -> SolutionOutput:
         """Run the loop on task_id and return the SolutionOutput.
 
+        The model's code runs in one sandbox for the whole task, so the
+        variables, functions and imports of a step are still there at the
+        next; it is closed when the task ends, however it ends.
         Transient LLM errors are retried; permanent ones and exhausted
         limits end the run with error set instead of raising.
         """
+        with Sandbox(self.config_sandbox, self.mcp_client) as self.sandbox:
+            return self.run_steps(task_id)
+
+    def run_steps(self, task_id: str) -> SolutionOutput:
+        """Run the Thought -> Code -> Observation steps of run()."""
         self.start_time: float = time.time()
         self.iteration: int = 0
         self.task_id: str = task_id
