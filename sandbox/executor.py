@@ -231,18 +231,22 @@ class Sandbox:
         )
         self.p.start()
 
-    def run(self, code, interactive=False):
+    def run(self, code, interactive=False, timeout=None):
         """Run one piece of code in the persistent namespace.
 
         Args:
             code: The Python to run.
             interactive: Print the value of a lone expression, as the
                 Python prompt does. Meant for the REPL.
+            timeout: Seconds allowed for this entry, or None for the
+                configured max_execution_time_seconds. The agent loop
+                passes the time its task has left.
 
         Returns:
             (stdout, stderr, error, is_final, answer).
         """
-        timeout = self.config.max_execution_time_seconds
+        if timeout is None:
+            timeout = self.config.max_execution_time_seconds
         if self.p is None or not self.p.is_alive():
             self.start()
         self.jobs.put((code, interactive))
