@@ -21,10 +21,12 @@ async def stdio_session(command: str, args: list):
         An initialized mcp.ClientSession, ready for list_tools/call_tool.
     """
     params = mcp.StdioServerParameters(command=command, args=args)
-    async with mcp.stdio_client(params) as (read, write):
-        async with mcp.ClientSession(read, write) as session:
-            await session.initialize()
-            yield session
+    async with (
+        mcp.stdio_client(params) as (read, write),
+        mcp.ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        yield session
 
 
 @asynccontextmanager
@@ -42,7 +44,9 @@ async def http_session(url: str):
     Yields:
         An initialized mcp.ClientSession, ready for list_tools/call_tool.
     """
-    async with streamable_http_client(url) as (read, write, *_):
-        async with mcp.ClientSession(read, write) as session:
-            await session.initialize()
-            yield session
+    async with (
+        streamable_http_client(url) as (read, write, *_),
+        mcp.ClientSession(read, write) as session,
+    ):
+        await session.initialize()
+        yield session

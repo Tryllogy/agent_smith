@@ -1,80 +1,102 @@
-import subprocess
 import shlex
+import subprocess
+
+from mcp_tools.config import get_config
+
+# run_tests() gets a longer budget than run_command(): an evaluation
+# script walks a whole test suite.
+EVAL_TIMEOUT = 600
 
 
-def run_command(
-        command: str,
-        timeout: int = 60,
-        cwd: str = "/testbed",
-        raw: bool = False) -> str:
-    """Run a shell command and return its output.
+def _run(command: str, workdir: str, timeout: int):
+    """Run a command line through a shell and return the finished process.
 
-    The command is split shell-style (quotes are respected) and run as a
-    process list, without a shell, so shell metacharacters have no special
-    power. By default, combines the exit code, stdout and stderr into a
-    single string for the LLM to read.
+    Private because it returns a CompletedProcess: each public tool turns
+    it into the text its caller expects.
+
+    Raises:
+        subprocess.TimeoutExpired: If the command outlived `timeout`.
+        OSError: If the shell could not be started.
+    """
+    return subprocess.run(
+        command,
+        shell=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        cwd=workdir,
+    )
+
+
+def run_command(command: str, workdir: str = "", timeout: int = 60) -> str:
+    """Execute a shell command in the specified working directory.
+
+    The command goes through a shell, so pipes, redirections, `&&` and
+    heredocs behave as they would in a terminal.
 
     Args:
         command: Shell command line to run (e.g. "pytest -x tests/").
+        workdir: Directory to run it in. Empty means the repository root.
         timeout: Maximum seconds to wait before the command is killed.
-        cwd: Directory to run the command in (defaults to the repo root).
-        raw: If True, return only the raw stdout (no exit-code/stderr
-            decoration). Used when the output must stay machine-usable,
-            e.g. a git patch to be applied.
 
     Returns:
-        The decorated output (exit code, stdout, stderr), or just the raw
-        stdout if `raw` is True, or a timeout message if the command
-        exceeded `timeout`.
+        The exit code, stdout and stderr, or a message saying the command
+        timed out or could not be started.
     """
-    args = shlex.split(command)
-
+    cwd = workdir or str(get_config().repo_root)
     try:
-        proc = subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=timeout, cwd=cwd)
+        proc = _run(command, cwd, timeout)
     except subprocess.TimeoutExpired:
         return f"Command timed out after {timeout}s"
+    except OSError as exc:
+        return f"Command could not be started in '{cwd}': {exc}"
 
-    if raw:
-        return proc.stdout
     return (f"exit code: {proc.returncode}\n"
             f"--- stdout ---\n{proc.stdout}\n"
             f"--- stderr ---\n{proc.stderr}\n"
             )
 
 
-def run_tests(test_path: str = "", timeout: int = 300) -> str:
-    """Run the test suite with pytest and return the result.
+def run_tests() -> str:
+    """Execute the evaluation script of the task.
 
-    Runs `python -m pytest` in the repo. If `test_path` is given, only that
-    file, directory or test is run (e.g. "tests/test_foo.py::test_add");
-    if empty, the whole suite runs.
-
-    Args:
-        test_path: Optional path or node id to target specific tests. Empty
-            runs the entire suite.
-        timeout: Maximum seconds to wait before the run is killed.
+    The script is the one the server was started with (--eval-script),
+    run from the repository root.
 
     Returns:
-        The pytest output (exit code, stdout and stderr), or a timeout
-        message if the run exceeded `timeout`.
+        The script's exit code, stdout and stderr, or a message saying
+        why it could not be run.
     """
-    command = "python -m pytest " + test_path
-    return run_command(command, raw=False, timeout=timeout)
+    config = get_config()
+    if not config.eval_script.is_file():
+        return (f"Error: no evaluation script at '{config.eval_script}'. "
+                "Start the tool server with --eval-script pointing at "
+                "the task's eval_script.")
+    return run_command(
+        f"bash {shlex.quote(str(config.eval_script))}",
+        workdir=str(config.repo_root),
+        timeout=EVAL_TIMEOUT,
+    )
 
 
 def get_patch() -> str:
-    """Return all changes made to the repo as a git patch.
+    """Retrieve the unified git diff of all changes made to the repository.
 
-    Stages every change (modified, new and deleted files) with `git add -A`,
-    then returns the unified diff against the initial commit via
-    `git diff --cached`. This diff is the final SWE-bench solution.
+    Stages every change first, so that new and deleted files appear in
+    the diff, and ignores file mode changes, which are noise.
 
     Returns:
-        The git patch (unified diff), including newly created files.
+        The git patch, or a message saying why it could not be built.
     """
-    run_command("git add -A")
-    return run_command("git diff --cached", raw=True)
+    root = str(get_config().repo_root)
+    try:
+        _run("git add -A", root, 60)
+        proc = _run("git -c core.fileMode=false diff --cached", root, 60)
+    except subprocess.TimeoutExpired:
+        return "Error: git timed out while building the patch"
+    except OSError as exc:
+        return f"Error: git could not be started in '{root}': {exc}"
+
+    if proc.returncode != 0:
+        return f"Error: git diff failed: {proc.stderr.strip()}"
+    return proc.stdout
