@@ -1747,8 +1747,23 @@ la CLI SWE fait echouer un test a chaque fois. 518 tests verts, `ruff`
 propre. Run reel MBPP 396 : manuel dans `system_prompt`, aucun serveur
 restant, `/tmp/agent` vide apres le run.
 
-- [ ] Decider s'il faut garder le manuel cote MBPP : ~100 tokens par tour,
-      `run_tests()` jamais appele (P2.6)
+- [ ] **Le manuel MBPP reste obligatoire** (§ V.2.6 : *« a sandbox manual
+      to be fed to the LLM prompt, which must include the MCP tools doc, or
+      how to access it »* ; § V.1.6 : *« clear documentation of the available
+      tools »* ; § V.3.2 : `run_tests` exige). Il coute ~100 tokens par tour
+      et `run_tests()` n'est jamais appele (P2.6) : **le rendre utile et plus
+      court**, pas le retirer :
+  - `run_tests` utilisable sans deviner ou ecrire le candidat, par exemple
+    `run_tests(code: str)` (ndi-tull, avec l'execution hors sandbox a
+    corriger au passage)
+  - manuel allege : signature + premiere ligne de la description, sans le
+    bloc `Returns:` (`sandbox/manual.py`, ndi-tull), toujours genere depuis
+    le serveur
+  - une phrase du prompt MBPP : appeler l'outil de test s'il existe avant
+    `final_answer()`, sans en dependre (serveur inconnu possible)
+  - le *« or how to access it »* ne fait pas gagner grand-chose :
+    `run_tests.__doc__` est bloque par l'`ast_guard` (attribut en `__`), il
+    faudrait une primitive du sandbox
 - [ ] Borner l'echeance des appels d'outils par le temps restant, pas par
       la duree du bench
 
@@ -2326,7 +2341,8 @@ dont le code appelle `run_tests(`), `META.txt` les champs `mcp` et
 - **`run_tests()` jamais appele** (0 sur 100 taches) : les modeles valident
   avec leurs `assert`, comme l'exemple. La description de l'outil ne dit pas
   ou ecrire le candidat. Le manuel coute ~100 tokens par tour pour rien
-  cote MBPP
+  cote MBPP, mais il est **obligatoire** (§ V.2.6) : le rendre utile et
+  plus court (P2.5, « Branchement MCP »)
 - **`r"""` repris tout de suite** : 103 `final_answer` sur 104 (seul un de
   `nemotron-3-ultra` ne l'a pas), 0 sur 101 aux runs precedents
 - Ecarts de score de ±2 taches, dans le bruit d'un tirage. `codestral` perd
@@ -2335,7 +2351,8 @@ dont le code appelle `run_tests(`), `META.txt` les champs `mcp` et
   sont surtout le plafond de sortie (9 sur 14) ou d'entree (3)
 - **Pas une ablation** : deux changements a la fois (branchement MCP et
   `r"""`). Pour isoler l'un, rejouer sans manuel avec `r"""`, sur Groq et
-  `codestral`
+  `codestral` — **pour la mesure seulement** : le rendu garde le manuel
+  (§ V.2.6)
 - **Incident de validation** : le Docker rootless n'avait pas
   `python:3.11-slim`, toutes les validations sortaient FAILED sans erreur
   affichee (les premieres taches de `run45`, `run47`, `run53`). Image tiree,

@@ -2,8 +2,8 @@
 
 The tools run in a process of their own, so what they need to know about
 the task -- where the repository is, which script evaluates it, where
-the MBPP task and candidate solution are -- reaches them on the server's
-command line, and is kept here.
+the MBPP task is -- reaches them on the server's command line, and is
+kept here.
 
 Entry points call `configure_from_argv()` once at startup; the tools
 read the result back with `get_config()`.
@@ -33,7 +33,6 @@ class ToolsConfig:
     repo_root: Path = field(default_factory=_default_repo_root)
     eval_script: Path = SCRATCH / "eval_script.sh"
     task_file: Path | None = None
-    solution_file: Path = SCRATCH / "solution.py"
 
 
 _config = ToolsConfig()
@@ -107,12 +106,6 @@ def build_parser(benchmark: str) -> argparse.ArgumentParser:
             help="JSON file holding the MBPP task whose assertions "
                  "run_tests() checks.",
         )
-        parser.add_argument(
-            "--solution-file",
-            type=Path,
-            help=f"File run_tests() reads the candidate from (default: "
-                 f"{SCRATCH}/solution.py).",
-        )
     return parser
 
 
@@ -131,6 +124,5 @@ def configure_from_argv(benchmark: str, argv=None) -> argparse.Namespace:
     if benchmark == "swebench":
         configure(repo_root=args.repo_root, eval_script=args.eval_script)
     else:
-        configure(repo_root=args.repo_root, task_file=args.task_file,
-                  solution_file=args.solution_file)
+        configure(repo_root=args.repo_root, task_file=args.task_file)
     return args

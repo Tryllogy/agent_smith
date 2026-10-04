@@ -1,4 +1,3 @@
-import os
 import sys
 
 from dotenv import load_dotenv
@@ -13,7 +12,6 @@ from core.agent_cli_helper import (
     get_provider_and_model_config,
     get_task_from_file,
     make_llm_client,
-    remove_file,
 )
 from core.constants import MBPP
 from core.llm.client import LLMClient
@@ -63,9 +61,6 @@ class AgentMBPP:
             ]
         )
 
-        self.solution_file: str = os.path.join(
-            constants.SCRATCH_DIR, f"solution_{os.getpid()}.py"
-        )
         self.mcp_client: MCPClient | None = self.connect_tools(task_file)
         try:
             prompt: Prompt = Prompt(
@@ -94,33 +89,26 @@ class AgentMBPP:
     def connect_tools(self, task_file: str) -> MCPClient | None:
         """Start the MBPP tool server on this task and connect to it.
 
-        Its run_tests() checks the candidate the model writes to
-        solution_file, in the sandbox's scratch directory. Without the
-        server the agent still runs, on its own asserts: the failure is
-        reported on stderr and None is returned.
+        Its run_tests(code) checks a candidate against the task's
+        test_list, in the sandbox. Without the server the agent still
+        runs, on its own asserts: the failure is reported on stderr and
+        None is returned.
         """
         try:
-            os.makedirs(constants.SCRATCH_DIR, exist_ok=True)
             return connect_mcp_server(
                 constants.MBPP_MCP_SERVER,
-                [
-                    "--task-file",
-                    task_file,
-                    "--solution-file",
-                    self.solution_file,
-                ],
+                ["--task-file", task_file],
                 call_timeout=MBPP.timeout,
             )
-        except (RuntimeError, OSError) as e:
+        except RuntimeError as e:
             sys.stderr.write(f"Warning: {e}; running without MCP tools\n")
             return None
 
     def close(self) -> None:
-        """Stop the tool server and remove the candidate file."""
+        """Stop the tool server."""
         if self.mcp_client is not None:
             self.mcp_client.close()
             self.mcp_client = None
-        remove_file(self.solution_file)
 
     def run(self) -> SolutionOutput:
         """Run the loop and write its SolutionOutput to the output file.
