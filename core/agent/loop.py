@@ -10,6 +10,7 @@ from core.config_models import LLMResponse
 from core.llm.fallback import FallbackClient
 from core.models import SandboxConfig, SolutionOutput, StepMetrics
 from sandbox.executor import execute
+from sandbox.mcp_client.client import MCPClient
 
 
 class Loop:
@@ -28,14 +29,18 @@ class Loop:
         bench: constants.Bench,
         config_sandbox: SandboxConfig | None = None,
         answer_tests: list[str] | None = None,
+        mcp_client: MCPClient | None = None,
     ) -> None:
         """Bind the client, prompt and benchmark limits.
 
         config_sandbox defaults to SandboxConfig(). answer_tests are Python
         lines run after the final answer, alone in the sandbox, before it
-        is accepted (MBPP: test_imports then test_list).
+        is accepted (MBPP: test_imports then test_list). mcp_client is the
+        connected MCP server whose tools the model's code may call; None
+        leaves final_answer alone in the sandbox.
         """
         self.client: FallbackClient = client
+        self.mcp_client: MCPClient | None = mcp_client
         self.answer_tests: list[str] = answer_tests or []
         self.thoughts: list = []
         self.reasoning: list = []
@@ -147,7 +152,7 @@ class Loop:
         config_copy: SandboxConfig = self.config_sandbox.model_copy()
         config_copy.max_execution_time_seconds = max_execution_time
         stdout, stderr, error, is_final, answer = execute(
-            self.sandbox_input, config_copy
+            self.sandbox_input, config_copy, client=self.mcp_client
         )
         self.sandbox_output: str = (
             stdout + stderr + error if error else stdout + stderr
@@ -214,7 +219,7 @@ class Loop:
                     f" column {e.offset}). for, if and while cannot"
                     " follow a ';' on the same line: pass your function"
                     " on several lines, in a triple-quoted string:"
-                    ' final_answer("""...""").'
+                    ' final_answer(r"""...""").'
                 )
             except ValueError as e:
                 return f"The final answer is NOT valid Python: {e}."

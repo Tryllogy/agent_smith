@@ -1,10 +1,11 @@
 # Benchmark Report
 
-> **Status — 2026-10-03.** The MBPP part is complete and backed by the runs
+> **Status — 2026-10-04.** The MBPP part is complete and backed by the runs
 > listed in [Backing data](#backing-data). The SWE-bench part is **pending**:
-> the MCP tools are not callable from the sandbox yet, so no SWE-bench task can
-> be solved. The SWE-bench sections keep the structure required by the subject
-> and will be filled once the tools are wired.
+> the MCP tools are callable from the sandbox since 2026-10-04, but the
+> SWE-bench Docker environment is not wired yet, so no SWE-bench task can be
+> solved. The SWE-bench sections keep the structure required by the subject
+> and will be filled once it is.
 
 ## 1. Setup
 
@@ -41,6 +42,17 @@ part of what is measured below:
 several lines, in a triple-quoted string, instead of a one-line
 `final_answer("def f(a): ...")` (ablation E).
 
+**Since 2026-10-04** (run45 to run54), the agent starts the MBPP MCP server
+(`mcp_tools_mbpp.py`) for each task: the sandbox manual, generated from the
+server's tool schemas, is in the system prompt, and the server's
+`run_tests()` can be called from the sandbox. The manual adds about 100
+input tokens to every turn (first-turn input 888 → 983 tokens for Groq,
+859 → 959 for the Mistral models). The same day, the MBPP example switched
+to a raw string, `final_answer(r"""...""")`: in a plain triple-quoted
+string, a regex backreference `\1` copied from the tested code became the
+character `\x01` (MBPP 396, `codestral-2508`: the visible tests passed, the
+hidden one failed).
+
 **Three client changes of 2026-10-03**, measured by run41 to run44 only
 (ablation F):
 
@@ -73,7 +85,10 @@ agent) and **Metrics** (the `solution.json` totals against the limits above).
 A task counts as passed when Correctness is `PASSED`. Runs 5 to 8 were first
 checked by running `test_list` locally; they were all re-validated with the
 checker on 2026-10-02, which turns `run7` from 9/10 into **8/10** (MBPP 400
-fails the hidden test).
+fails the hidden test). On 2026-10-04 the rootless Docker daemon used for
+the checker had no `python:3.11-slim` image, and every solution came out
+FAILED with no error in the checker's output: the image was pulled, and
+run45 to run54 were all re-validated once the campaign was over.
 
 ### 1.3 Tasks
 
@@ -94,15 +109,15 @@ are used for every model comparison; set C was used once.
 
 | Provider | Model | Free access | MBPP runs |
 |---|---|---|---|
-| Groq | `openai/gpt-oss-120b` | free tier, 8,000 tokens/min | run6, 7, 9, 10, 12, 13, 14, 27, 28, 31, 32, 41–44; run39, 40 as the fallback |
+| Groq | `openai/gpt-oss-120b` | free tier, 8,000 tokens/min | run6, 7, 9, 10, 12, 13, 14, 27, 28, 31, 32, 41–46; run39, 40 as the fallback |
 | OpenRouter | `nvidia/nemotron-3-super-120b-a12b:free` | `:free` models, 50 requests/day per account | run5 |
 | OpenRouter | `minimax/minimax-m3:free` | idem (no longer free since 2026-10-01) | run8 |
 | OpenRouter | `qwen/qwen3.8-27b:free` | idem | run11 |
 | NVIDIA Build | `nvidia/nemotron-3-super-120b-a12b` | free API, 40 requests/min; **retired on 2026-10-03** (HTTP 410) | run15, 16 (run39, 40 attempted) |
-| NVIDIA Build | `nvidia/nemotron-3-ultra-550b-a55b` | idem | run17, 18 |
-| Mistral | `codestral-2508` | monthly free credits | run19, 20, 25, 26, 29, 30, 33, 34 |
-| Mistral | `ministral-14b-2512` | idem | run21, 22, 35, 36 |
-| Mistral | `ministral-8b-2512` | idem | run23, 24, 37, 38 |
+| NVIDIA Build | `nvidia/nemotron-3-ultra-550b-a55b` | idem | run17, 18, 53, 54 |
+| Mistral | `codestral-2508` | monthly free credits | run19, 20, 25, 26, 29, 30, 33, 34, 47, 48 |
+| Mistral | `ministral-14b-2512` | idem | run21, 22, 35, 36, 49, 50 |
+| Mistral | `ministral-8b-2512` | idem | run23, 24, 37, 38, 51, 52 |
 
 The two NVIDIA models run with reasoning disabled
 (`chat_template_kwargs` in `configs/models.json`): with reasoning on,
@@ -130,7 +145,11 @@ provider fallback and the multi-line MBPP example of ablation E).
 `nemotron-3-super` could not be rerun: NVIDIA retired it that morning
 (HTTP 410), and its 20 tasks went to the fallback model, Groq (the second
 Groq "current agent" row). The last Groq row is run43 + 44, with the client
-changes of ablation F: unlike all the others, its token counts are complete.
+changes of ablation F: unlike the earlier rows, its token counts are complete.
+The "MCP agent" rows are the reruns of 2026-10-04 (run45 to run54, commit
+`ca8f0ad` plus the MCP wiring and the raw-string example of section 1.1):
+every model of the comparison still available, same 20 tasks, run the same
+afternoon, token counts complete.
 Times are the agent's wall-clock time per task.
 
 | Model | Pass | Valid metrics | Iterations (mean) | Input tokens (mean) | Output tokens (mean) | Time per task (mean / max) | Total time |
@@ -139,15 +158,20 @@ Times are the agent's wall-clock time per task.
 | Groq `gpt-oss-120b`, current agent | **18/20** | 20/20 | 1.05 | 1,004 | 517 | 6.7 s / 23.0 s | 134 s |
 | Groq `gpt-oss-120b`, current agent, as the fallback | 16/20 | 20/20 | 0.95 | 942 | 548 | 5.4 s / 19.7 s | 108 s |
 | Groq `gpt-oss-120b`, current agent, no stop sequence | **18/20** | 20/20 | 1.00 | 941 | 537 | **1.6 s** / 3.8 s | **32 s** |
+| Groq `gpt-oss-120b`, MCP agent | **18/20** | 20/20 | 1.00 | 1,043 | 551 | 2.9 s / 8.3 s | 58 s |
 | NVIDIA `nemotron-3-super` | 15/20 | 20/20 | 1.10 | 1,311 | 789 | 16.8 s / 79.9 s | 336 s |
 | NVIDIA `nemotron-3-ultra` | 14/20 | 19/20 | 1.35 | 1,659 | 414 | 34.9 s / 94.2 s | 697 s |
+| NVIDIA `nemotron-3-ultra`, MCP agent | 16/20 | 20/20 | 1.30 | 1,677 | 540 | 27.1 s / 114.5 s | 542 s |
 | Mistral `codestral-2508` | 11/20 | 17/20 | 1.90 | 3,126 | 888 | 8.8 s / 17.3 s | 177 s |
 | Mistral `codestral-2508`, fixed loop | **17/20** | 20/20 | 1.90 | 2,099 | 635 | 6.1 s / 17.5 s | 121 s |
 | Mistral `codestral-2508`, current agent | **17/20** | 20/20 | 1.25 | 1,317 | 524 | **5.4 s** / 20.6 s | 108 s |
+| Mistral `codestral-2508`, MCP agent | 15/20 | 20/20 | 1.50 | 1,954 | 612 | 5.9 s / 17.3 s | 118 s |
 | Mistral `ministral-14b-2512` | 15/20 | 20/20 | 1.05 | 1,317 | 780 | 8.1 s / 21.5 s | 162 s |
 | Mistral `ministral-14b-2512`, current agent | 13/20 | 20/20 | 1.05 | 1,522 | 811 | 9.7 s / 19.0 s | 194 s |
+| Mistral `ministral-14b-2512`, MCP agent | 14/20 | 20/20 | 1.05 | 1,525 | 781 | 8.0 s / 15.8 s | 159 s |
 | Mistral `ministral-8b-2512` | 15/20 | 19/20 | 1.10 | 1,464 | 689 | 8.2 s / 26.7 s | 163 s |
 | Mistral `ministral-8b-2512`, current agent | 13/20 | 20/20 | 0.90 | 1,179 | 664 | **5.5 s** / 14.7 s | 111 s |
+| Mistral `ministral-8b-2512`, MCP agent | 12/20 | 20/20 | 1.25 | 1,781 | 837 | 10.2 s / 48.6 s | 205 s |
 
 Per task, for the agent of 2026-10-02 (the "current agent" runs follow in
 the next table) — **P** pass / F fail, followed by the iterations used;
@@ -224,6 +248,49 @@ fails the hidden test. None involves the final answer, so the multi-line
 example is not the cause. Groq, on the same agent, scored 18/20 then 16/20:
 a spread of two tasks is within the noise of a single run.
 
+Per task, MCP agent (2026-10-04) — same marks:
+
+| MBPP task | Groq `gpt-oss-120b` | `codestral` | `ministral-14b` | `ministral-8b` | `nemotron-3-ultra` |
+|---|---|---|---|---|---|
+| 127 | **P** 1 | **P** 1 | **P** 1 | **P** 1 | **P** 1 |
+| 80 | **P** 1 | **P** 1 | **P** 1 | **P** 1 | **P** 1 |
+| 252 | **P** 1 | **P** 1 | **P** 1 | **P** 1 | **P** 2 |
+| 251 | **P** 1 | **P** 1 | F 2 | F 3 | **P** 1 |
+| 264 | **P** 1 | F 4 | **P** 1 | F 0 | F 3 |
+| 94 | **P** 1 ↪ | **P** 1 | **P** 1 | **P** 1 | **P** 1 |
+| 305 | **P** 2 | F 2 | **P** 1 | F 4 | **P** 2 |
+| 247 | **P** 1 | **P** 1 | **P** 1 | **P** 1 | **P** 2 |
+| 457 | **P** 1 | **P** 2 | **P** 1 | **P** 1 | **P** 1 |
+| 65 | **P** 1 | **P** 1 | F 2 | **P** 1 | **P** 1 |
+| 451 | **P** 1 | **P** 2 | **P** 1 | **P** 1 | **P** 1 |
+| 462 | F 0 | F 1 | F 0 | F 2 | F 1 |
+| 266 | **P** 1 | **P** 1 | **P** 1 | **P** 1 | **P** 1 |
+| 108 | **P** 1 | F 1 | F 1 | F 1 | **P** 1 |
+| 234 | **P** 1 | **P** 1 | **P** 1 | **P** 1 | **P** 1 |
+| 400 | F 1 † | **P** 1 | F 1 † | F 1 † | F 1 † |
+| 431 | **P** 1 | **P** 2 | **P** 1 | **P** 1 | **P** 2 |
+| 168 | **P** 1 | **P** 2 | **P** 1 | **P** 1 | **P** 1 |
+| 71 | **P** 1 | **P** 1 | **P** 2 | F 2 | **P** 1 |
+| 138 | **P** 1 | F 3 | F 0 | F 0 | F 1 |
+| **Total** | **18/20** | **15/20** | **14/20** | **12/20** | **16/20** |
+
+**No model called `run_tests()`** in any of the 100 tasks: all of them kept
+validating with their own asserts, as the prompt's example does. The tool's
+description, generated from the server, says what it checks but not where
+the candidate must be written for it, so on MBPP the manual is, for now, a
+cost of about 100 tokens per turn without a use. **The raw string was
+adopted at once**: 103 of the 104 `final_answer` calls of the campaign use
+`r"""..."""` (the other one is `nemotron-3-ultra`'s), against none of
+the 101 calls of the previous run of each model. The scores move by one or
+two tasks against those runs (Groq 18 → 18, `codestral` 17 → 15,
+`ministral-14b` 13 → 14, `ministral-8b` 13 → 12, `nemotron-3-ultra` 14 → 16
+on an agent two days older), within the noise of section 5. `codestral`
+loses MBPP 264, printing intermediate values for four iterations without
+submitting until the input budget runs out, and MBPP 305, whose third answer
+hits the output cap after two failing asserts. As on 2026-10-03, most
+`ministral` failures are answers that reach the output cap (9 of 14) or the
+input budget (3 of 14).
+
 ### 2.2 MBPP — earlier campaigns
 
 These runs measured the agent while it was being built: the agent version
@@ -275,14 +342,19 @@ A task is *lost* when 5 attempts in a row fail.
 | Groq `gpt-oss-120b` | 6, 7, 9, 10, 12–14 | 70 | 146 | 60 | 59 % | **1.5 / 1.2 / 5.1 s** | 4 |
 | Groq `gpt-oss-120b`, with fallback | 27, 28, 31, 32, 39–42 | 80 | 164 | 82 | 50 % | **1.4 / 1.2 / 3.5 s** | 0 (4 ↪) |
 | Groq `gpt-oss-120b`, no stop sequence | 43, 44 | 20 | 21 | **0** | **100 %** | **1.5 / 1.3 / 3.8 s** | 0 |
+| Groq `gpt-oss-120b`, MCP agent | 45, 46 | 20 | 25 | 6 | 76 % | **1.3 / 1.1 / 2.2 s** | 0 (1 ↪) |
 | OpenRouter `nemotron-3-super:free` | 5 | 10 | 29 | 13 | 55 % | 15.9 / 16.2 / 29.1 s | 0 |
 | OpenRouter `minimax-m3:free` | 8 | 10 | 29 | 1 | 97 % | 8.5 / 5.9 / 25.5 s | 0 |
 | OpenRouter `qwen3.8-27b:free` | 11 | 10 | 34 | 22 | 35 % | 11.3 / 9.5 / 27.0 s | 3 |
 | NVIDIA `nemotron-3-super` (retired 2026-10-03) | 15, 16 | 20 | 30 | 4 | 87 % | 7.5 / 6.1 / 20.1 s | 0 |
 | NVIDIA `nemotron-3-ultra` | 17, 18 | 20 | 55 | 26 | 53 % | 11.4 / 10.5 / 22.8 s | 2 |
+| NVIDIA `nemotron-3-ultra`, MCP agent | 53, 54 | 20 | 49 | 20 | 59 % | 11.9 / 11.0 / 28.5 s | 0 |
 | Mistral `codestral-2508` | 19, 20, 25, 26, 29, 30, 33, 34 | 80 | 152 | 0 | **100 %** | 3.4 / 3.1 / 15.9 s | 0 |
 | Mistral `ministral-14b-2512` | 21, 22, 35, 36 | 40 | 52 | 0 | **100 %** | 6.8 / 5.5 / 21.5 s | 0 |
 | Mistral `ministral-8b-2512` | 23, 24, 37, 38 | 40 | 49 | 0 | **100 %** | 5.6 / 4.2 / 23.7 s | 0 |
+| Mistral `codestral-2508`, MCP agent | 47, 48 | 20 | 33 | 0 | **100 %** | 3.6 / 2.9 / 14.7 s | 0 |
+| Mistral `ministral-14b-2512`, MCP agent | 49, 50 | 20 | 26 | 0 | **100 %** | 6.1 / 5.5 / 13.3 s | 0 |
+| Mistral `ministral-8b-2512`, MCP agent | 51, 52 | 20 | 30 | 1 | 97 % | 5.8 / 4.7 / 13.6 s | 0 |
 
 Causes, where the agent logged them (from run12 on, one line per retry on
 stderr):
@@ -304,9 +376,16 @@ stderr):
   without `stop` got 1 empty answer out of 14, with its code in the
   reasoning, and nothing written after `<end_code>` in the 13 others. **With
   the stop sequence left out (run43, 44), Groq did not fail once in 21
-  attempts**;
+  attempts**. On the MCP agent (run45, 46), 6 of 25 attempts failed: 4 ×
+  HTTP 429 on the 8,000 tokens/min limit, 1 empty `content`, and a new
+  error, HTTP 400 "Tool choice is none, but model called a tool": the model
+  emitted a native tool call, which the request does not enable. It is
+  permanent, so MBPP 94 went straight to the fallback, `ministral-14b-2512`,
+  which solved it (↪). It first appeared with the sandbox manual in the
+  prompt, which talks about "tools";
 - **NVIDIA `nemotron-3-ultra`**: 18 × HTTP 503 "Service temporarily
-  overloaded" and 6 × the 30 s deadline;
+  overloaded" and 6 × the 30 s deadline (run17, 18); 17 × HTTP 503 and 3 ×
+  the deadline on the MCP agent (run53, 54);
   **`nemotron-3-super`**: 4 × the 30 s deadline. NVIDIA retired it on
   2026-10-03 at 09:00 UTC: every request of run39 and run40 got HTTP 410
   ("has reached its end of life"), and the fallback took all 20 tasks;
@@ -314,7 +393,9 @@ stderr):
   "temporarily rate-limited upstream" were frequent in our OpenRouter tests,
   on top of the 50 requests/day account quota;
 - **Mistral**: no failure at all in 253 attempts, plus the 3 requests
-  `ministral-14b-2512` answered as Groq's fallback.
+  `ministral-14b-2512` answered as Groq's fallback; on the MCP agent, one
+  failure in 89 attempts, a request past its 30 s deadline
+  (`ministral-8b-2512`, run52).
 
 ### 3.2 SWE-bench — *to be completed*
 
@@ -361,6 +442,11 @@ step where the agent's own asserts run without error and the accepted
 | Groq, current agent, as the fallback (run39, 40) | 18 | 0 | 18/18 | 0.00 | 0 | 2 |
 | Groq, current agent, rejected tokens counted (run41, 42) | 14 | 0 | 14/14 | 0.00 | 1 | 1 |
 | Groq, current agent, no stop sequence (run43, 44) | 19 | 0 | 18/19 | 0.05 | 1 | 1 |
+| Groq, MCP agent (run45, 46) | 19 | 0 | **19/19** | **0.00** | 0 | 1 |
+| NVIDIA `nemotron-3-ultra`, MCP agent (run53, 54) | 17 | 0 | 16/17 | 0.06 | 0 | 1 |
+| Mistral `codestral-2508`, MCP agent (run47, 48) | 15 | 0 | **15/15** | **0.00** | 1 | 0 |
+| Mistral `ministral-14b-2512`, MCP agent (run49, 50) | 15 | 0 | **15/15** | **0.00** | 0 | 1 |
+| Mistral `ministral-8b-2512`, MCP agent (run51, 52) | 13 | 0 | **13/13** | **0.00** | 0 | 1 |
 
 Blind submissions disappeared when the prompt started asking for the asserts
 and `final_answer()` in the same code block: since then `final_answer` only
@@ -491,6 +577,11 @@ Groq 18/20 (run31 + 32) then 16/20 (run39 + 40). Only
 B's blind submissions (2 → 0), C's MBPP 451, D's invalid metrics (3 → 0),
 E's refused answers (7 → 0) and F's failed attempts (18 → 0) are clear-cut.
 
+The reruns of 2026-10-04 (run45 to run54) are **not** an ablation: they
+changed two things at once, the MCP wiring and the raw-string example. What
+they show is in section 2.1: every model copies the raw string, none calls
+`run_tests()`, and the scores stay within noise.
+
 SWE-bench ablation — *to be completed*.
 
 ## 6. Conclusions
@@ -499,27 +590,33 @@ SWE-bench ablation — *to be completed*.
 
 - **Groq `gpt-oss-120b` without the stop sequence** (run43, 44) gives the
   best MBPP result of this report: 18/20, no failed attempt in 21, 1.6 s per
-  task, and complete token counts. Before, 41 to 50 % of its attempts failed
-  (empty `content`, mostly cut by the stop sequence) and its token figures
-  were understated (section 1.1). It cannot be used for SWE-bench (HTTP 413
-  above 8,000 tokens), and its free tier allows 8,000 tokens per minute.
-- **Mistral `codestral-2508`** went from 11/20 to 17/20 with the loop fixes,
-  and held it on two further runs (16/20, then 17/20 with the multi-line
-  example). With that example it needs 1.25 iterations per task instead of
-  1.80, and no Mistral request failed in 152 attempts.
-- **Mistral `ministral-14b-2512`**, the MBPP default of the `Makefile`,
-  scored 15/20 then 13/20 on the current agent, `ministral-8b-2512` 15/20
-  then 13/20, every metric valid and no failed request. Their lost tasks are
-  mostly reasoning that runs into the output cap. On the current agent,
-  `codestral`'s lead over both (17/20 against 13/20) is the only gap between
-  Mistral models larger than the measured noise of two tasks.
+  task, and complete token counts; 18/20 again on the MCP agent (run45, 46).
+  Before, 41 to 50 % of its attempts failed (empty `content`, mostly cut by
+  the stop sequence) and its token figures were understated (section 1.1).
+  It cannot be used for SWE-bench (HTTP 413 above 8,000 tokens), and its
+  free tier allows 8,000 tokens per minute, which still costs it a few 429s.
+- **Mistral `codestral-2508`**, the MBPP default of the `Makefile` since
+  2026-10-03, went from 11/20 to 17/20 with the loop fixes, then scored
+  16/20, 17/20 (multi-line example) and 15/20 (MCP agent). No Mistral
+  request failed in its 185 attempts.
+- **Mistral `ministral-14b-2512`** scored 15/20, 13/20 then 14/20, and
+  `ministral-8b-2512` 15/20, 13/20 then 12/20, every metric valid. Their
+  lost tasks are mostly reasoning that runs into the output cap. Over the
+  three agents, `codestral` stays one to four tasks ahead of both.
 - **NVIDIA `nemotron-3-super`** (15/20 on 2026-10-02) no longer exists: NVIDIA
   retired it on 2026-10-03. `nemotron-3-ultra` replaced it at the end of the
   fallback lists.
-- **Disregarded**: NVIDIA `nemotron-3-ultra` (26 retries in 55 attempts, 2
-  tasks lost, 35 s per task); OpenRouter's `:free` models (50 requests/day per
-  account, 3 tasks lost to upstream 429 in run11, 4/10 for `nemotron-3-super`
-  in run5); `minimax-m3`, no longer free.
+- **NVIDIA `nemotron-3-ultra`** scored 16/20 on the MCP agent (14/20 two
+  days before), but 20 of its 49 attempts failed (HTTP 503 "overloaded",
+  deadline) and it took 27 s per task, up to 114.5 s against the 120 s
+  limit: kept for SWE-bench, where it is one of the candidate models,
+  **disregarded for MBPP**.
+- **Disregarded** as well: OpenRouter's `:free` models (50 requests/day per
+  account, 3 tasks lost to upstream 429 in run11, 4/10 for
+  `nemotron-3-super` in run5); `minimax-m3`, no longer free.
+- **The MCP tools cost about 100 input tokens per turn on MBPP and were
+  never used** (section 2.1): either the prompt or the tool description must
+  teach `run_tests()`, or the manual is better left out of the MBPP prompt.
 - On these 20 tasks the ceiling is about 18/20: MBPP 462 (output cap) and
   MBPP 400 (hidden test) defeat nearly every model.
 
@@ -537,15 +634,15 @@ files and which checker output is authoritative for each run.
 | Runs | Model |
 |---|---|
 | run5 | OpenRouter `nemotron-3-super:free` |
-| run6, run7, run9, run10, run12, run13, run14, run27, run28, run31, run32, run41–run44 | Groq `gpt-oss-120b` |
+| run6, run7, run9, run10, run12, run13, run14, run27, run28, run31, run32, run41–run46 | Groq `gpt-oss-120b` |
 | run39, run40 | requested NVIDIA `nemotron-3-super` (retired, HTTP 410); every task done by the fallback, Groq `gpt-oss-120b` |
 | run8 | OpenRouter `minimax-m3:free` |
 | run11 | OpenRouter `qwen3.8-27b:free` |
 | run15, run16 | NVIDIA `nemotron-3-super` |
-| run17, run18 | NVIDIA `nemotron-3-ultra` |
-| run19, run20, run25, run26, run29, run30, run33, run34 | Mistral `codestral-2508` |
-| run21, run22, run35, run36 | Mistral `ministral-14b-2512` |
-| run23, run24, run37, run38 | Mistral `ministral-8b-2512` |
+| run17, run18, run53, run54 | NVIDIA `nemotron-3-ultra` |
+| run19, run20, run25, run26, run29, run30, run33, run34, run47, run48 | Mistral `codestral-2508` |
+| run21, run22, run35, run36, run49, run50 | Mistral `ministral-14b-2512` |
+| run23, run24, run37, run38, run51, run52 | Mistral `ministral-8b-2512` |
 
 To rerun one task and check it:
 

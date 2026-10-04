@@ -25,11 +25,14 @@ uv run moulinette_eval validate mbpp ../benchmarks/mbpp/run15/task_01.json \
     ../benchmarks/mbpp/run15/solution_01.json
 ```
 
-Docker must be running, with the `python:3.11-slim` image available.
+Docker must be running, with the `python:3.11-slim` image available. With
+rootless Docker, the checker needs `DOCKER_HOST` set to the rootless socket
+(e.g. `unix:///run/user/$UID/docker.sock`); a missing image makes every
+solution FAIL without any error in the checker's output.
 
 ## Which verdict is authoritative
 
-- **run9 to run44**: the `reel` and `metrics` fields of `RESUME.json` are the
+- **run9 to run54**: the `reel` and `metrics` fields of `RESUME.json` are the
   checker's verdicts; its full output is in `logs/validate_XX.txt`.
 - **run5 to run8**: these runs were first checked by running `test_list`
   locally, and `RESUME.json` keeps that verdict. They were re-validated with
@@ -59,3 +62,12 @@ From run41 on, `RESUME.json` has a `from_reasoning` field: how many answers
 the client took from the reasoning because `content` was empty (logged as
 `LLM content empty on step S: answer taken from the reasoning`). The token
 totals of run41 on include the rejected responses; earlier ones do not.
+
+From run45 on, the agent is connected to the MBPP MCP server
+(`mcp_tools_mbpp.py`): the sandbox manual is in the system prompt and
+`run_tests()` can be called. `META.txt` has an `mcp` field, and
+`exemple_mbpp=multiligne-r` means the prompt's MBPP example submits with
+`final_answer(r"""...""")`. `RESUME.json` has a `run_tests` field: the
+number of steps whose code called `run_tests(`. run45 to run54 were all
+re-validated once the campaign was over: the checker's image was missing
+for the first tasks.
