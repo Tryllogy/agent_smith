@@ -1,0 +1,182 @@
+"""Command line of the sandbox: `uv run sandbox`.
+
+    uv run sandbox                                   # defaults
+    uv run sandbox sandbox_template.json             # custom configuration
+    uv run sandbox --mcp-stdio "python mcp_tools_mbpp.py" sandbox_template.json
+    uv run sandbox --mcp-server http://127.0.0.1:8000/mcp
+
+It opens a REPL: each entry runs in the sandbox namespace, under the same
+restrictions as the agent's code, with the connected server's tools and
+final_answer available. Variables persist from one entry to the next.
+`exit` or Ctrl+D leaves.
+"""
+
+import argparse
+import codeop
+import contextlib
+import sys
+from pathlib import Path
+
+from pydantic import ValidationError
+
+from core.models import SandboxConfig
+from sandbox.executor import Sandbox
+from sandbox.mcp_client.client import MCPClient, MCPError
+
+# Arrow keys and history in input(), where the platform offers them.
+with contextlib.suppress(ImportError):
+    import readline  # noqa: F401
+
+PROMPT = ">>> "
+CONTINUATION = "... "
+EXIT_COMMANDS = {"exit", "exit()"}
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        prog="sandbox",
+        description="Interactive Agent Smith sandbox.",
+    )
+    parser.add_argument(
+        "config",
+        nargs="?",
+        type=Path,
+        help="JSON file holding a SandboxConfig (default: built-in values).",
+    )
+    server = parser.add_mutually_exclusive_group()
+    server.add_argument(
+        "--mcp-stdio",
+        metavar="COMMAND",
+        help='MCP server to launch over stdio, e.g. '
+             '"python mcp_tools_mbpp.py".',
+    )
+    server.add_argument(
+        "--mcp-server",
+        metavar="URL",
+        help="Running MCP server to reach over streamable HTTP.",
+    )
+    return parser.parse_args(argv)
+
+
+def load_config(path):
+    """Read a SandboxConfig from JSON, or return the defaults."""
+    if path is None:
+        return SandboxConfig()
+    return SandboxConfig.model_validate_json(path.read_text())
+
+
+def open_client(args):
+    """Connect to the MCP server the command line names, if any."""
+    if args.mcp_stdio:
+        return MCPClient.from_command(args.mcp_stdio).connect()
+    if args.mcp_server:
+        return MCPClient.from_url(args.mcp_server).connect()
+    return None
+
+
+def banner(client):
+    """Describe the session: what can be called, and how to leave."""
+    if client is None:
+        tools = "none (no MCP server connected)"
+    else:
+        tools = ", ".join(tool.name for tool in client.tools) or "none"
+    lines = ["Agent Smith sandbox", f"Tools: {tools}, final_answer"]
+    if client is not None and client.resources:
+        uris = ", ".join(str(r.uri) for r in client.resources)
+        lines.append(f"Resources: {uris}")
+    if client is not None and client.prompts:
+        lines.append(f"Prompts: {', '.join(p.name for p in client.prompts)}")
+    lines.append('Type "exit" or press Ctrl+D to leave.')
+    return "\n".join(lines)
+
+
+def read_entry():
+    """Read one entry, asking for more lines while the code is unfinished.
+
+    `def f():` alone is not a complete statement, so the prompt switches
+    to "... " until a blank line closes the block, as the Python prompt
+    does. Code that is simply wrong is returned as is, for the sandbox to
+    report.
+
+    Raises:
+        EOFError: On Ctrl+D.
+        KeyboardInterrupt: On Ctrl+C.
+    """
+    lines = []
+    while True:
+        lines.append(input(CONTINUATION if lines else PROMPT))
+        source = "\n".join(lines)
+        if not source.strip():
+            return ""
+        try:
+            complete = codeop.compile_command(source, "<sandbox>", "single")
+        except (SyntaxError, ValueError, OverflowError):
+            return source
+        if complete is not None:
+            return source
+
+
+def show(result):
+    """Print what one entry produced: output, error, final answer."""
+    stdout, stderr, error, is_final, answer = result
+    if stdout:
+        print(stdout, end="" if stdout.endswith("\n") else "\n")
+    if stderr:
+        print(stderr, end="" if stderr.endswith("\n") else "\n",
+              file=sys.stderr)
+    if error:
+        print(error, file=sys.stderr)
+    if is_final:
+        print(f"final_answer: {answer!r}")
+
+
+def repl(sandbox):
+    """Read, run, print, until exit or Ctrl+D."""
+    while True:
+        try:
+            source = read_entry()
+        except EOFError:
+            print()
+            return
+        except KeyboardInterrupt:
+            print("\nKeyboardInterrupt")
+            continue
+        if source.strip() in EXIT_COMMANDS:
+            return
+        if not source.strip():
+            continue
+        try:
+            show(sandbox.run(source, interactive=True))
+        except KeyboardInterrupt:
+            # Ctrl+C reaches the child too; it cannot be trusted after.
+            sandbox.close()
+            print("\nInterrupted; the sandbox was restarted, so variables "
+                  "from earlier entries are gone", file=sys.stderr)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    try:
+        config = load_config(args.config)
+    except OSError as exc:
+        print(f"sandbox: cannot read {args.config}: {exc}", file=sys.stderr)
+        return 1
+    except ValidationError as exc:
+        print(f"sandbox: invalid configuration in {args.config}:\n{exc}",
+              file=sys.stderr)
+        return 1
+
+    try:
+        client = open_client(args)
+    except (MCPError, ValueError) as exc:
+        print(f"sandbox: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        with Sandbox(config, client) as sandbox:
+            print(banner(client))
+            repl(sandbox)
+    finally:
+        if client is not None:
+            client.close()
+    return 0

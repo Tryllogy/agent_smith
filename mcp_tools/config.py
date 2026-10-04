@@ -15,6 +15,9 @@ from pathlib import Path
 
 SCRATCH = Path("/tmp/agent")
 
+# Where every SWE-bench image keeps the repository to fix.
+CONTAINER_REPO = Path("/testbed")
+
 
 def _default_repo_root() -> Path:
     """Use the SWE-bench testbed when it exists, the cwd otherwise.
@@ -28,11 +31,19 @@ def _default_repo_root() -> Path:
 
 @dataclass
 class ToolsConfig:
-    """Where the tools find the repository and the task files."""
+    """Where the tools find the repository and the task files.
+
+    With a SWE-bench task, the repository lives in a Docker container at
+    /testbed, and the tools work on a copy of it mounted from the host:
+    `repo_root` is that host copy, `container` names the container, and
+    `repo_alias` is the path the model knows the repository by.
+    """
 
     repo_root: Path = field(default_factory=_default_repo_root)
     eval_script: Path = SCRATCH / "eval_script.sh"
     task_file: Path | None = None
+    container: str | None = None
+    repo_alias: Path | None = None
 
 
 _config = ToolsConfig()
@@ -41,6 +52,42 @@ _config = ToolsConfig()
 def get_config() -> ToolsConfig:
     """Return the configuration in force."""
     return _config
+
+
+def to_host(path: str) -> Path:
+    """Turn a path as the model writes it into one the tools can open.
+
+    The model only ever sees /testbed, so with a container a path under
+    /testbed is moved under the host copy. A relative path is taken from
+    the repository root; any other absolute path is left alone.
+    """
+    config = get_config()
+    candidate = Path(path)
+    alias = config.repo_alias
+    under_alias = alias is not None and (
+        candidate == alias or alias in candidate.parents
+    )
+    if under_alias:
+        return config.repo_root / candidate.relative_to(alias)
+    if candidate.is_absolute():
+        return candidate
+    return config.repo_root / candidate
+
+
+def to_alias(path: Path) -> str:
+    """Turn a host path back into the one the model knows (/testbed/...).
+
+    Without a container, or for a path outside the repository, the path
+    is returned unchanged.
+    """
+    config = get_config()
+    if config.repo_alias is not None:
+        try:
+            inside = Path(path).relative_to(config.repo_root.resolve())
+        except ValueError:
+            return str(path)
+        return str(config.repo_alias / inside)
+    return str(path)
 
 
 def configure(**overrides) -> ToolsConfig:
@@ -94,6 +141,12 @@ def build_parser(benchmark: str) -> argparse.ArgumentParser:
                         help="Port to bind for streamable-http.")
     if benchmark == "swebench":
         parser.add_argument(
+            "--container",
+            help="Docker container holding the task. Commands and tests "
+                 "then run inside it, and --repo-root is taken as the host "
+                 "copy of its /testbed.",
+        )
+        parser.add_argument(
             "--eval-script",
             type=Path,
             help=f"Script run_tests() runs (default: {SCRATCH}/"
@@ -122,7 +175,12 @@ def configure_from_argv(benchmark: str, argv=None) -> argparse.Namespace:
     """
     args = build_parser(benchmark).parse_args(argv)
     if benchmark == "swebench":
-        configure(repo_root=args.repo_root, eval_script=args.eval_script)
+        configure(
+            repo_root=args.repo_root,
+            eval_script=args.eval_script,
+            container=args.container,
+            repo_alias=CONTAINER_REPO if args.container else None,
+        )
     else:
         configure(repo_root=args.repo_root, task_file=args.task_file)
     return args

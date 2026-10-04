@@ -10,22 +10,30 @@ server happened to be launched.
 """
 
 import re
-from pathlib import Path
 
-from mcp_tools.config import get_config
+from mcp_tools.config import get_config, to_alias, to_host
 
 # Definitions and references are Python symbols, so those two tools look
 # at Python files only.
 PYTHON_FILES = "*.py"
 
+# Not the repository's own code: git's internals and an installed
+# virtual environment. Searching them buries real matches under
+# thousands of hits from third-party packages.
+IGNORED_DIRS = {".git", ".venv"}
+
 
 def _iter_lines(file_pattern: str):
     """Yield (absolute path, line number, line) for every matching file.
 
-    Files that cannot be read as text are skipped: a repository holds
-    images and binaries, and no search here is looking for them.
+    Files under IGNORED_DIRS are left out, and so are files that cannot
+    be read as text: a repository holds images and binaries, and no
+    search here is looking for them.
     """
-    for path in get_config().repo_root.rglob(file_pattern):
+    root = get_config().repo_root
+    for path in root.rglob(file_pattern):
+        if IGNORED_DIRS.intersection(path.relative_to(root).parts):
+            continue
         if not path.is_file():
             continue
         try:
@@ -41,7 +49,7 @@ def _format(matches: list, empty: str) -> str:
     """Render matches in the common format, or `empty` if there are none."""
     if not matches:
         return empty
-    return "\n".join(f"{path}:{number} {line}"
+    return "\n".join(f"{to_alias(path)}:{number} {line}"
                      for path, number, line in matches)
 
 
@@ -108,9 +116,7 @@ def find_references(name: str, filepath: str, line: int) -> str:
         One usage per line, or a message if the position does not hold
         the symbol or nothing uses it.
     """
-    target = Path(filepath)
-    if not target.is_absolute():
-        target = get_config().repo_root / target
+    target = to_host(filepath)
     try:
         lines = target.read_text().splitlines()
     except (UnicodeDecodeError, OSError) as exc:
