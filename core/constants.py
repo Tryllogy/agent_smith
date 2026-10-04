@@ -81,127 +81,49 @@ MBPP = Bench(
 )
 
 SWE_PROMPT_EXEMPLE = r"""Task: Fix the issue described in the problem statement.
-Repo: /testbed (blueprintml/skema @ 7c1a9e0)
-Tools: read_file, edit_file, list_files, search_code,
-       search_function_or_class_definition_in_code, find_references,
-       run_tests, get_patch, run_command
+Repo: /testbed (acme/shopcart)
 
-Problem statement: `default_factory` result is shared between loads. A field declared
-with `default_factory=list` returns the same object on every `load()`, so mutating one
-load's value is visible from every other load — including through `fields.Nested`.
+Problem statement: Items added to one `Cart` also appear in every other `Cart` created without arguments.
 
 Step 1
 
-Thought: I reproduce both scenarios from the report (flat and nested) to get a local
-oracle before touching anything, and I grep for the memoisation the reporter mentions.
-Object identity is the real signal here, not just the values, so I print both. Scratch
-files go under /tmp/agent so they stay outside the repo and out of the final diff.
+Thought: Before touching anything I reproduce the report, to get a local oracle, then I find where `Cart` is defined and read its constructor. I will only edit code I have read.
 
 ```python
-print(run_command(command="mkdir -p /tmp/agent && cat > /tmp/agent/repro.py <<'PY'\nfrom skema import Schema, fields\n\nclass Bag(Schema):\n    items = fields.List(fields.Str(), default_factory=list)\n\na, b = Bag.load({}), Bag.load({})\na[\"items\"].append(\"x\")\nprint(\"flat   b =\", b[\"items\"], \"| shared:\", a[\"items\"] is b[\"items\"])\n\nclass Inner(Schema):\n    tags = fields.List(fields.Str(), default_factory=list)\n\nclass Outer(Schema):\n    inner = fields.Nested(Inner)\n\nc, d = Outer.load({\"inner\": {}}), Outer.load({\"inner\": {}})\nc[\"inner\"][\"tags\"].append(\"x\")\nprint(\"nested d =\", d[\"inner\"][\"tags\"], \"| shared:\", c[\"inner\"][\"tags\"] is d[\"inner\"][\"tags\"])\nPY\npython /tmp/agent/repro.py", workdir="/testbed"))
-print(search_code(pattern="_default_cache", file_pattern="src/skema/*.py"))
-print(search_code(pattern="_defaults", file_pattern="src/skema/*.py"))
-print(read_file(filepath="/testbed/src/skema/fields.py", start_line=88, end_line=97))
-print(read_file(filepath="/testbed/src/skema/fields.py", start_line=298, end_line=311))
+print(run_command(command="python -c \"from shopcart import Cart; a, b = Cart(), Cart(); a.add('x'); print(b.items)\"", workdir="/testbed"))
+print(search_code(pattern="class Cart", file_pattern="*.py"))
+print(read_file(filepath="/testbed/shopcart/cart.py", start_line=1, end_line=6))
 ```<end_code>
 
 Observation: exit code: 0
 --- stdout ---
-flat   b = ['x'] | shared: True
-nested d = ['x'] | shared: True
+['x']
 
 --- stderr ---
 
 
-/testbed/src/skema/fields.py:76         self._default_cache = _UNSET
-/testbed/src/skema/fields.py:95         if self._default_cache is _UNSET:
-/testbed/src/skema/fields.py:96             self._default_cache = self.default_factory()
-/testbed/src/skema/fields.py:97         return self._default_cache
-/testbed/src/skema/fields.py:302         self._defaults = None
-/testbed/src/skema/fields.py:307         if self._defaults is None:
-/testbed/src/skema/fields.py:308             self._defaults = self.schema._collect_defaults()
-/testbed/src/skema/fields.py:309         data = dict(self._defaults)
-/testbed/src/skema/schema.py:141     def _collect_defaults(cls):
-88:     def has_default(self):
-89:         return self.default is not _UNSET or self.default_factory is not None
-90: 
-91:     def get_default(self):
-92:         if self.default_factory is None:
-93:             return self.default
-94:         # cache the factory result so repeated loads stay cheap (#398)
-95:         if self._default_cache is _UNSET:
-96:             self._default_cache = self.default_factory()
-97:         return self._default_cache
-298: 
-299:     def __init__(self, schema, **kwargs):
-300:         super().__init__(**kwargs)
-301:         self.schema = schema
-302:         self._defaults = None
-303: 
-304:     def deserialize(self, value, **kwargs):
-305:         if value is _UNSET:
-306:             value = {}
-307:         if self._defaults is None:
-308:             self._defaults = self.schema._collect_defaults()
-309:         data = dict(self._defaults)
-310:         data.update(self.schema.load(value, **kwargs))
-311:         return data
+/testbed/shopcart/cart.py:1 class Cart:
+1: class Cart:
+2:     def __init__(self, items=[]):
+3:         self.items = items
+4: 
+5:     def add(self, item):
+6:         self.items.append(item)
 
 Step 2
 
-Thought: Both cases leak, and the grep shows two independent caches, not one. In `Field`
-the factory result is memoised on the field instance, and since fields are class-level
-attributes on the schema, that cache lives as long as the class. In `Nested` the whole
-defaults mapping is memoised and then copied with `dict(...)`, which is shallow, so the
-inner list stays shared no matter what I do to `Field`. Fixing only one would leave half
-the bug alive, so I fix both and re-run the reproducer. I deliberately leave the static
-`default` branch on line 93 untouched: it is returned by identity on purpose and the
-report only concerns `default_factory`.
+Thought: `b` holds the item added to `a`. The default `items=[]` is built once, when the function is defined, so every `Cart()` shares that list. I default to `None` and give each cart its own list, copying a list passed in so the caller's list is not mutated either. Then I re-run the reproduction and the evaluation script.
 
 ```python
-print(edit_file(filepath="/testbed/src/skema/fields.py",
-                old_str="        if self.default_factory is None:\n            return self.default\n        # cache the factory result so repeated loads stay cheap (#398)\n        if self._default_cache is _UNSET:\n            self._default_cache = self.default_factory()\n        return self._default_cache",
-                new_str="        if self.default_factory is None:\n            return self.default\n        # the factory must run on every load: caching its result would share a\n        # single (possibly mutable) object across every load of the schema.\n        return self.default_factory()"))
-print(edit_file(filepath="/testbed/src/skema/fields.py",
-                old_str="        self.schema = schema\n        self._defaults = None",
-                new_str="        self.schema = schema"))
-print(edit_file(filepath="/testbed/src/skema/fields.py",
-                old_str="        if self._defaults is None:\n            self._defaults = self.schema._collect_defaults()\n        data = dict(self._defaults)",
-                new_str="        # recomputed on every call: a cached mapping would be copied shallowly\n        # and leak the inner factory-built values between loads.\n        data = self.schema._collect_defaults()"))
-print(run_command(command="python /tmp/agent/repro.py", workdir="/testbed"))
-```<end_code>
-
-Observation: Edited /testbed/src/skema/fields.py: 1 replacement
-Edited /testbed/src/skema/fields.py: 1 replacement
-Edited /testbed/src/skema/fields.py: 1 replacement
-exit code: 0
---- stdout ---
-flat   b = [] | shared: False
-nested d = [] | shared: False
-
---- stderr ---
-
-
-
-Step 3
-
-Thought: Both scenarios are fixed. Before returning I check the neighbouring behaviours
-my patch could have broken — a static `default` must still come back by identity, the
-factory must not run when a value is supplied, and `required` must still raise — and I
-confirm `_collect_defaults` builds a fresh dict, since my `Nested` change now mutates
-its return value directly. Then I run the evaluation script.
-
-```python
-print(run_command(command="cat > /tmp/agent/check.py <<'PY'\nfrom skema import Schema, fields\n\ncalls = []\ndef factory():\n    calls.append(1)\n    return []\n\nsentinel = object()\n\nclass S(Schema):\n    a = fields.Raw(default=sentinel)\n    b = fields.List(fields.Str(), default_factory=factory)\n\nprint(\"identity default:\", S.load({})[\"a\"] is sentinel)\nS.load({\"b\": [\"v\"]})\nprint(\"factory skipped :\", len(calls) == 0)\nprint(\"fresh mapping   :\", S._collect_defaults() is not S._collect_defaults())\n\nclass R(Schema):\n    x = fields.Str(required=True)\ntry:\n    R.load({})\n    print(\"required        : NO RAISE (regression)\")\nexcept Exception as e:\n    print(\"required        :\", type(e).__name__)\nPY\npython /tmp/agent/check.py", workdir="/testbed"))
+print(edit_file(filepath="/testbed/shopcart/cart.py", old_str="    def __init__(self, items=[]):\n        self.items = items", new_str="    def __init__(self, items=None):\n        self.items = list(items) if items is not None else []"))
+print(run_command(command="python -c \"from shopcart import Cart; a, b = Cart(), Cart(); a.add('x'); print(b.items)\"", workdir="/testbed"))
 print(run_tests())
 ```<end_code>
 
-Observation: exit code: 0
+Observation: Edited /testbed/shopcart/cart.py: 1 replacement
+exit code: 0
 --- stdout ---
-identity default: True
-factory skipped : True
-fresh mapping   : True
-required        : ValidationError
+[]
 
 --- stderr ---
 
@@ -209,26 +131,19 @@ required        : ValidationError
 exit code: 0
 --- stdout ---
 >>>>> Start Test Output
-tests/test_fields.py::test_default_factory_is_called PASSED
-tests/test_fields.py::test_default_factory_not_shared_between_loads PASSED
-tests/test_fields.py::test_default_factory_not_shared_through_nested PASSED
-tests/test_fields.py::test_missing_required_field PASSED
-468 passed, 9 skipped in 6.12s
+tests/test_cart.py::test_add PASSED
+tests/test_cart.py::test_carts_do_not_share_items PASSED
+12 passed in 0.08s
 >>>>> End Test Output
 
 --- stderr ---
-+ git checkout 7c1a9e0 tests/test_fields.py
++ git checkout 3f2a9c1 tests/test_cart.py
 
 
 
-Step 4
+Step 3
 
-Thought: All tests pass, both root causes are addressed, and my scratch files live under
-/tmp/agent so they are outside the repository and cannot appear in the diff. The edits
-are left uncommitted on purpose, since get_patch() diffs the working tree against the
-base commit — committing them would produce an empty patch. I assert the patch is
-non-empty before returning it, so a silently failed edit surfaces as an error instead of
-an empty submission.
+Thought: The reproduction now prints `[]` and every test passes. I take the patch, check that it is not empty, and submit it.
 
 ```python
 patch = get_patch()
