@@ -60,24 +60,43 @@ def get_config() -> ToolsConfig:
     return _config
 
 
+class PathError(ValueError):
+    """A path the tools must not touch (outside the repository)."""
+
+
 def to_host(path: str) -> Path:
     """Turn a path as the model writes it into one the tools can open.
 
-    The model only ever sees /testbed, so with a container a path under
-    /testbed is moved under the host copy. A relative path is taken from
-    the repository root; any other absolute path is left alone.
+    The model only ever sees /testbed, so a path under /testbed is moved
+    under the host copy and a relative path is taken from the repository
+    root. The result must stay inside the repository: the file tools are
+    not the sandbox, so without this check read_file("/etc/passwd") would
+    read the host.
+
+    Raises:
+        PathError: If the path resolves outside the repository root.
     """
     config = get_config()
+    root = config.repo_root
     candidate = Path(path)
     alias = config.repo_alias
     under_alias = alias is not None and (
         candidate == alias or alias in candidate.parents
     )
     if under_alias:
-        return config.repo_root / candidate.relative_to(alias)
-    if candidate.is_absolute():
-        return candidate
-    return config.repo_root / candidate
+        host = root / candidate.relative_to(alias)
+    elif candidate.is_absolute():
+        host = candidate
+    else:
+        host = root / candidate
+
+    try:
+        host.resolve().relative_to(root.resolve())
+    except ValueError:
+        raise PathError(
+            f"'{path}' is outside the repository and cannot be accessed"
+        ) from None
+    return host
 
 
 def to_alias(path: Path) -> str:
@@ -187,11 +206,14 @@ def configure_from_argv(benchmark: str, argv=None) -> argparse.Namespace:
     """
     args = build_parser(benchmark).parse_args(argv)
     if benchmark == "swebench":
+        # repo_alias is set even without a container: the model and the
+        # eval script name the repository /testbed either way, so the
+        # tools must translate that path to repo_root in both cases.
         configure(
             repo_root=args.repo_root,
             eval_script=args.eval_script,
             container=args.container,
-            repo_alias=CONTAINER_REPO if args.container else None,
+            repo_alias=CONTAINER_REPO,
         )
     else:
         configure(repo_root=args.repo_root, task_file=args.task_file,
