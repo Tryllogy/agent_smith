@@ -6,6 +6,7 @@ LLM_MAX_RETRIES = 4
 ESTIMATED_CHARS_PER_TOKEN = 2.5
 LLM_STOP_SEQUENCE = [
     "<end_code>",
+    "Observation:",
 ]
 LLM_START_SEQUENCE = [
     "```python",
