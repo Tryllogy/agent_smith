@@ -9,6 +9,11 @@ TIMEOUT_EXIT = 137
 
 DOCKER_GRACE = 30
 
+# Cap on test output, kept from the end (see _keep_tail). Below the
+# sandbox's own 20000-char tool cap, which trims from the start, so that
+# cap never re-trims and drops the summary.
+MAX_TEST_OUTPUT = 18000
+
 # The eval script wraps the real test run between these two lines. Its
 # own exit code is the last git checkout's, not the tests', so the model
 # must be shown what is between the markers, not that code.
@@ -170,10 +175,24 @@ def _test_report(proc) -> str:
         return f"Tests timed out after {EVAL_TIMEOUT}s (or killed for memory)"
     section = _between_markers(proc.stdout)
     if section is not None:
-        return f"--- test output ---\n{section}"
+        return f"--- test output ---\n{_keep_tail(section)}"
     return (f"No test-output markers in the script's output; the full "
             f"output follows (the exit code {proc.returncode} is the "
-            f"script's, not the tests'):\n{proc.stdout}")
+            f"script's, not the tests'):\n{_keep_tail(proc.stdout)}")
+
+
+def _keep_tail(text: str) -> str:
+    """Trim long test output from the start, not the end.
+
+    The pass/fail summary a test runner prints is its last lines, so
+    when the output must be cut it is the beginning that goes. (The
+    generic tool cap keeps the start; test output is the exception.)
+    """
+    if len(text) <= MAX_TEST_OUTPUT:
+        return text
+    return (f"... {len(text) - MAX_TEST_OUTPUT} characters cut from the "
+            f"start; the end, with the summary, follows\n"
+            + text[-MAX_TEST_OUTPUT:])
 
 
 def _between_markers(text: str):
@@ -205,8 +224,12 @@ def get_patch() -> str:
         The git patch, or a message saying why it could not be built.
     """
     root = str(get_config().repo_root)
+    # core.fileMode=false on BOTH commands: on the diff alone it is too
+    # late, since `git add` has already recorded the mode change in the
+    # index. With it on the add too, the executable bit never enters the
+    # patch.
     try:
-        _run("git add -A", root, 60)
+        _run("git -c core.fileMode=false add -A", root, 60)
         proc = _run("git -c core.fileMode=false diff --cached", root, 60)
     except subprocess.TimeoutExpired:
         return "Error: git timed out while building the patch"
