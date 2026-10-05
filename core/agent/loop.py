@@ -70,6 +70,8 @@ class Loop:
         self.elided_chars: int = 0
         self.observation_indices: list[tuple[int, int]] = []
         self.elided_indices: set[int] = set()
+        self.code_history: dict[str, list[tuple[int, str]]] = {}
+        self.repeat_note: str = ""
         if config_sandbox is None:
             self.config_sandbox: SandboxConfig = SandboxConfig()
         else:
@@ -151,6 +153,7 @@ class Loop:
         when final_answer() was called with a valid answer. Every other
         outcome is reported as a user message.
         """
+        self.repeat_note = ""
         if not self.code["found"]:
             self.sandbox_input = ""
             self.sandbox_output = ""
@@ -169,6 +172,9 @@ class Loop:
         )
         self.sandbox_output: str = (
             stdout + stderr + error if error else stdout + stderr
+        )
+        self.repeat_note = self.check_repeat(
+            self.sandbox_input, self.sandbox_output
         )
         shown: str = self.truncate_output(self.sandbox_output)
         if error is None and is_final:
@@ -210,6 +216,29 @@ class Loop:
         self.add_observation(shown)
         return False
 
+    def check_repeat(self, code: str, output: str) -> str:
+        """Record this step's code and output; say if they were seen before.
+
+        A step that runs the same code as an earlier one and prints the
+        same output learns nothing new. The same code with another output
+        is a legitimate rerun (tests after an edit) and is not reported.
+        Returns the note for the observation, or "" when there is none.
+        """
+        runs: list[tuple[int, str]] = self.code_history.setdefault(
+            code.strip(), []
+        )
+        same: list[int] = [step for step, seen in runs if seen == output]
+        runs.append((self.iteration + 1, output))
+        if not same:
+            return ""
+        steps: str = ", ".join(str(step) for step in same)
+        label: str = "step" if len(same) == 1 else "steps"
+        return (
+            f"[Repeated step: this code is the same as in {label} {steps}"
+            " and printed the same output. Running it again will not change"
+            " the result: change your approach.]"
+        )
+
     def truncate_output(self, output: str) -> str:
         """Return output cut to the bench's observation_max_chars.
 
@@ -232,13 +261,18 @@ class Loop:
         """Send body to the LLM as the observation of the turn.
 
         When the code block was malformed but run anyway, the observation
-        starts by saying how it was read. Older observations are then
-        elided past the bench's full_observations.
+        starts by saying how it was read; when the step repeats an earlier
+        one, it ends by saying so. Older observations are then elided past
+        the bench's full_observations.
         """
         note: str = self.code.get("note", "")
         prefix: str = f"Note: {note}.\n" if note else ""
+        suffix: str = f"\n{self.repeat_note}" if self.repeat_note else ""
         self.prompt.add_message(
-            {"role": "user", "content": f"Observation: {prefix}{body}"}
+            {
+                "role": "user",
+                "content": f"Observation: {prefix}{body}{suffix}",
+            }
         )
         self.observation_indices.append(
             (len(self.prompt.prompt) - 1, self.iteration + 1)
