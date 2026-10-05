@@ -10,6 +10,7 @@ read the result back with `get_config()`.
 """
 
 import argparse
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,11 +21,15 @@ CONTAINER_REPO = Path("/testbed")
 
 
 def _default_repo_root() -> Path:
-    """Use the SWE-bench testbed when it exists, the cwd otherwise.
+    """Find the repository root when --repo-root was not given.
 
-    That keeps the tools usable both inside a task container and on a
-    development machine, without a flag in either case.
+    The eval script names the repository by the TESTBED_PATH environment
+    variable, so that is honoured first; then /testbed, the path inside a
+    task image; then the cwd, for development.
     """
+    env = os.environ.get("TESTBED_PATH")
+    if env:
+        return Path(env)
     testbed = Path("/testbed")
     return testbed if testbed.is_dir() else Path.cwd()
 
