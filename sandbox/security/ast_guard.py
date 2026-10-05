@@ -14,16 +14,32 @@ FORBIDDEN_ATTRS = frozenset({
     "gi_frame", "gi_code", "cr_frame", "cr_code", "ag_frame", "ag_code",
     # Tracebacks
     "tb_frame", "tb_next",
+    # Modules re-exported by otherwise-allowed modules, which hand back
+    # the very capabilities the allowlist withholds: `random._os` would
+    # not be caught by the underscore rule? it is, but `typing.sys` and
+    # the like are not, so the dangerous module names are named here.
+    "sys", "os", "subprocess", "builtins", "importlib", "posix", "nt",
+    "socket", "ctypes",
+})
+
+# namedtuple's public API is spelled with a leading underscore, so the
+# underscore rule below would wrongly reject it. These names expose no
+# capability (they return fields, dicts or copies), so they are allowed.
+SAFE_UNDERSCORE = frozenset({
+    "_fields", "_field_defaults", "_asdict", "_replace", "_make",
 })
 
 
 def check_code(code: str) -> None:
     """Reject code that tries to break out before it is executed.
 
-    Refuses dunder attribute access (`__class__`, `__globals__`, ...)
-    and the frame/generator/traceback attributes in FORBIDDEN_ATTRS,
-    both of which lead from the restricted namespace back to the real
-    interpreter.
+    Refuses three kinds of attribute access that lead from the
+    restricted namespace back to the real interpreter:
+
+    - dunder attributes (`__class__`, `__globals__`, ...);
+    - single-underscore attributes (`random._os`, ...), the private
+      innards an allowed module should not expose;
+    - the frame/traceback and dangerous-module names in FORBIDDEN_ATTRS.
 
     Args:
         code: The source about to be executed.
@@ -39,7 +55,9 @@ def check_code(code: str) -> None:
     for node in ast.walk(tree):
         if not isinstance(node, ast.Attribute):
             continue
-        if node.attr.startswith("__") or node.attr in FORBIDDEN_ATTRS:
+        if node.attr in SAFE_UNDERSCORE:
+            continue
+        if node.attr.startswith("_") or node.attr in FORBIDDEN_ATTRS:
             raise ValueError(
                 f"Forbidden attribute access: {node.attr}"
             ) from None
