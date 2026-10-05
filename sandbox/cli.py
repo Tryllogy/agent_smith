@@ -130,6 +130,19 @@ def show(result):
         print(f"final_answer: {answer!r}")
 
 
+def run_script(sandbox):
+    """Run piped-in code as one block, not as a line-by-line REPL.
+
+    When stdin is not a terminal (`cat prog.py | uv run sandbox`), the
+    whole input is one program: splitting it on blank lines, as the REPL
+    does, would break any block that contains one. So it is read and run
+    in a single call.
+    """
+    source = sys.stdin.read()
+    if source.strip():
+        show(sandbox.run(source, interactive=False))
+
+
 def repl(sandbox):
     """Read, run, print, until exit or Ctrl+D."""
     while True:
@@ -174,8 +187,11 @@ def main(argv=None):
 
     try:
         with Sandbox(config, client) as sandbox:
-            print(banner(client))
-            repl(sandbox)
+            if sys.stdin.isatty():
+                print(banner(client))
+                repl(sandbox)
+            else:
+                run_script(sandbox)
     finally:
         if client is not None:
             client.close()

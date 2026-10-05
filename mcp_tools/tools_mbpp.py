@@ -1,10 +1,11 @@
 """The run_tests tool of the MBPP server.
 
-The server is a process of its own: it cannot see the function the model
-defined inside the sandbox. So the contract is a file. The model writes
-its candidate to the solution file (--solution-file, /tmp/agent/solution.py
-by default, a directory the sandbox already allows), and run_tests()
-checks the task's assertions against it.
+run_tests checks a candidate function against a list of assertions. Both
+can be passed as arguments; whatever is not passed falls back to a file
+the server was configured with. The server is a process of its own and
+cannot see the function defined inside the sandbox, so the file fallback
+reads the candidate from --solution-file (a directory the sandbox
+allows) and the assertions from --task-file.
 """
 
 import json
@@ -30,32 +31,49 @@ for _index, _source in enumerate({tests}, start=1):
 """
 
 
-def run_tests() -> str:
-    """Execute the task's assertions against the candidate solution.
+def run_tests(code: str = None, test_list: list = None) -> str:
+    """Execute a list of assertions against a candidate function.
+
+    Args:
+        code: The candidate function's source. If omitted, it is read
+            from the configured solution file.
+        test_list: The assertions to run (e.g. ["assert f(1) == 2"]).
+            If given, these take priority over the task file. If omitted,
+            the task file's assertions are used.
 
     Returns:
         One line per assertion, PASS, FAIL or ERROR, or a message saying
         why the tests could not run.
     """
-    config = get_config()
-    if config.task_file is None:
-        return ("Error: no MBPP task. Start the tool server with "
-                "--task-file pointing at the task JSON.")
-    if not config.solution_file.is_file():
-        return (f"Error: no candidate solution at '{config.solution_file}'"
-                ". Write your function there before calling run_tests().")
-    try:
-        task = MBPPTaskInput(**json.loads(config.task_file.read_text()))
-        solution = config.solution_file.read_text()
-    except (OSError, ValueError, TypeError) as exc:
-        return f"Error: cannot load the task or the solution: {exc}"
-    if not task.test_list:
-        return "Error: this task carries no assertions."
+    test_imports = []
+    if test_list is None:
+        config = get_config()
+        if config.task_file is None:
+            return ("Error: no test_list given and no --task-file to fall "
+                    "back on.")
+        try:
+            task = MBPPTaskInput(**json.loads(config.task_file.read_text()))
+        except (OSError, ValueError, TypeError) as exc:
+            return f"Error: cannot load the task: {exc}"
+        test_list = task.test_list
+        test_imports = task.test_imports
+    if not test_list:
+        return "Error: no assertions to run."
+
+    if code is None:
+        config = get_config()
+        if not config.solution_file.is_file():
+            return (f"Error: no candidate given and none at "
+                    f"'{config.solution_file}'.")
+        try:
+            code = config.solution_file.read_text()
+        except OSError as exc:
+            return f"Error: cannot read the candidate: {exc}"
 
     script = "\n".join([
-        *task.test_imports,
-        solution,
-        _RUNNER.format(tests=json.dumps(task.test_list)),
+        *test_imports,
+        code,
+        _RUNNER.format(tests=json.dumps(test_list)),
     ])
     try:
         proc = subprocess.run(
