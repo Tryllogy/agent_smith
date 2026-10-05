@@ -17,9 +17,11 @@ from mcp_tools.config import get_config
 
 TEST_TIMEOUT = 30
 ASSERT_TIMEOUT = 5
+VALUE_CHARS = 200
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 _RUNNER = """
+import ast
 import json
 import sys
 
@@ -28,6 +30,31 @@ from sandbox.executor import execute
 
 job = json.load(sys.stdin)
 config = SandboxConfig(max_execution_time_seconds=job["timeout"])
+
+
+def obtained(test):
+    try:
+        node = ast.parse(test).body[0]
+    except (SyntaxError, IndexError):
+        return ""
+    if not (isinstance(node, ast.Assert)
+            and isinstance(node.test, ast.Compare)
+            and len(node.test.ops) == 1
+            and isinstance(node.test.ops[0], ast.Eq)):
+        return ""
+    left = ast.unparse(node.test.left)
+    source = "\\n".join(
+        [*job["imports"], job["code"], f"print(repr({left}))"])
+    out, _, error, is_final, _ = execute(source, config)
+    lines = out.strip().splitlines()
+    if error is not None or is_final or not lines:
+        return ""
+    value = lines[-1]
+    if len(value) > job["value_chars"]:
+        value = value[:job["value_chars"]] + "..."
+    return f"  (got {value})"
+
+
 for index, test in enumerate(job["tests"], start=1):
     source = "\\n".join([*job["imports"], job["code"], test])
     _, _, error, is_final, _ = execute(source, config)
@@ -37,7 +64,7 @@ for index, test in enumerate(job["tests"], start=1):
     elif error is None:
         print(f"{index}. PASS  {test}")
     elif error.startswith("AssertionError"):
-        print(f"{index}. FAIL  {test}")
+        print(f"{index}. FAIL  {test}{obtained(test)}")
     else:
         print(f"{index}. ERROR {error}  {test}")
 """
@@ -54,7 +81,8 @@ def run_tests(code: str, test_list: list[str] | None = None) -> str:
     Returns:
         A first line "success: true" or "success: false" with the number
         of tests passed, then one line per assertion, PASS, FAIL or
-        ERROR; or a message saying why the tests could not run.
+        ERROR; a failed `assert X == Y` also shows the value X had. Or a
+        message saying why the tests could not run.
     """
     if not code.strip():
         return "Error: code is empty. Pass the source of your solution."
@@ -73,6 +101,7 @@ def run_tests(code: str, test_list: list[str] | None = None) -> str:
         "code": code,
         "tests": tests,
         "timeout": ASSERT_TIMEOUT,
+        "value_chars": VALUE_CHARS,
     }
     try:
         proc = subprocess.run(

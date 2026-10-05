@@ -3260,7 +3260,7 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
       (que la boucle n'appelle plus depuis le sandbox persistant) mais
       `Sandbox.run()` (`sandbox/executor.py:320`) ; `# CORRECTOR_CHECK` en
       tete du code envoye, `core/agent/loop.py:165` ; `model_name`
-      journalise, `core/agent/loop.py:594` (`make_step_metrics()`) et **pas
+      journalise, `core/agent/loop.py:596` (`make_step_metrics()`) et **pas
       `core/llm/client.py:228`**, le `model_name` du `LLMResponse` que les
       `StepMetrics` n'utilisent pas (emplacements revus le 2026-10-05 au
       soir, voir `RESUMEEVAL.md`). Sur une tache MBPP, puis `git checkout`
