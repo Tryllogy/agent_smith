@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 import mcp
@@ -20,7 +21,12 @@ async def stdio_session(command: str, args: list):
     Yields:
         An initialized mcp.ClientSession, ready for list_tools/call_tool.
     """
-    params = mcp.StdioServerParameters(command=command, args=args)
+    # Pass our whole environment through: the SDK otherwise forwards only
+    # a small whitelist (HOME, PATH, ...), which would drop TESTBED_PATH,
+    # the variable the SWE-bench server reads to find the repository.
+    params = mcp.StdioServerParameters(
+        command=command, args=args, env=dict(os.environ)
+    )
     async with (
         mcp.stdio_client(params) as (read, write),
         mcp.ClientSession(read, write) as session,

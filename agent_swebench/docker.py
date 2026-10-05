@@ -26,6 +26,7 @@ route, removes the container and the copy. Containers are named
 
 import atexit
 import contextlib
+import os
 import shlex
 import shutil
 import signal
@@ -48,6 +49,7 @@ PULL_TIMEOUT = 1800
 # them even when the normal `with` exit is skipped.
 _LIVE = weakref.WeakSet()
 _NET_INSTALLED = False
+_OWNER = None
 
 
 def _install_safety_net():
@@ -59,16 +61,25 @@ def _install_safety_net():
     handler covers the kill, then chains to whatever was there before so
     the process still ends. Installed once.
     """
-    global _NET_INSTALLED
+    global _NET_INSTALLED, _OWNER
     if _NET_INSTALLED:
         return
     _NET_INSTALLED = True
+    # The sandbox child is forked from this process and inherits both the
+    # atexit callback and this handler. It must not run them: the sandbox
+    # sends SIGTERM to the child on every timeout, which would otherwise
+    # delete this task's containers and host copy mid-run.
+    _OWNER = os.getpid()
 
     atexit.register(_cleanup_all)
 
     previous = signal.getsignal(signal.SIGTERM)
 
     def handle(signum, frame):
+        if os.getpid() != _OWNER:
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
+            signal.raise_signal(signal.SIGTERM)
+            return
         _cleanup_all()
         if callable(previous):
             previous(signum, frame)
@@ -83,7 +94,13 @@ def _install_safety_net():
 
 
 def _cleanup_all():
-    """Remove every container still live. Never raises."""
+    """Remove every container still live. Never raises.
+
+    No-op outside the process that installed the net, so the forked
+    sandbox child never tears down the parent's containers.
+    """
+    if os.getpid() != _OWNER:
+        return
     for box in list(_LIVE):
         with contextlib.suppress(Exception):
             box.stop()

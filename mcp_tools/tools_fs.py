@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from mcp_tools.config import to_alias, to_host
+from mcp_tools.config import PathError, to_alias, to_host
 
 
 def _resolve(filepath: str) -> Path:
@@ -9,6 +9,9 @@ def _resolve(filepath: str) -> Path:
     The model writes both "/testbed/src/mail.py" and "src/mail.py"; both
     must reach the same file, wherever the server was started from, and
     even when /testbed is in fact a copy on the host (see to_host).
+
+    Raises:
+        PathError: If the path is outside the repository.
     """
     return to_host(filepath)
 
@@ -29,8 +32,11 @@ def read_file(filepath: str, start_line: int, end_line: int) -> str:
     Returns:
         The selected lines as a single string, one per line.
     """
-    with open(_resolve(filepath)) as f:
-        lines = f.readlines()
+    try:
+        with open(_resolve(filepath)) as f:
+            lines = f.readlines()
+    except (PathError, OSError) as exc:
+        return f"Error: cannot read {filepath}: {exc}"
 
     selected = lines[start_line - 1:end_line]
 
@@ -57,9 +63,12 @@ def edit_file(filepath: str, old_str: str, new_str: str) -> str:
         A confirmation message, or an error if `old_str` is missing or
         not unique.
     """
-    path = _resolve(filepath)
-    with open(path) as f:
-        content = f.read()
+    try:
+        path = _resolve(filepath)
+        with open(path) as f:
+            content = f.read()
+    except (PathError, OSError) as exc:
+        return f"Error: cannot edit {filepath}: {exc}"
 
     count = content.count(old_str)
     if count == 0:
@@ -117,8 +126,12 @@ def list_files(directory: str, pattern: str) -> str:
     Returns:
         One absolute path per line, or a message if nothing matches.
     """
+    try:
+        root = _resolve(directory)
+    except PathError as exc:
+        return f"Error: cannot list {directory}: {exc}"
     result = []
-    for found in _resolve(directory).rglob(pattern):
+    for found in root.rglob(pattern):
         result.append(to_alias(found.resolve()))
 
     if not result:

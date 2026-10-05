@@ -12,6 +12,7 @@ final_answer available. Variables persist from one entry to the next.
 """
 
 import argparse
+import ast
 import codeop
 import contextlib
 import sys
@@ -27,8 +28,8 @@ from sandbox.mcp_client.client import MCPClient, MCPError
 with contextlib.suppress(ImportError):
     import readline  # noqa: F401
 
-PROMPT = ">>> "
-CONTINUATION = "... "
+PS1 = ">>> "
+PS2 = "... "
 EXIT_COMMANDS = {"exit", "exit()"}
 
 
@@ -104,7 +105,7 @@ def read_entry():
     """
     lines = []
     while True:
-        lines.append(input(CONTINUATION if lines else PROMPT))
+        lines.append(input(PS2 if lines else PS1))
         source = "\n".join(lines)
         if not source.strip():
             return ""
@@ -131,16 +132,28 @@ def show(result):
 
 
 def run_script(sandbox):
-    """Run piped-in code as one block, not as a line-by-line REPL.
+    """Run piped-in code (`cat prog.py | uv run sandbox`).
 
-    When stdin is not a terminal (`cat prog.py | uv run sandbox`), the
-    whole input is one program: splitting it on blank lines, as the REPL
-    does, would break any block that contains one. So it is read and run
-    in a single call.
+    Splitting on blank lines, as the REPL does, would break any block
+    that contains one, so the lines are not the unit. But running the
+    whole file as one call would stop at the first error or timeout,
+    whereas the REPL goes on. So the file is split into top-level
+    statements with `ast` and each is run in turn: blocks with blank
+    lines stay intact, and later statements still run after a failure.
     """
     source = sys.stdin.read()
-    if source.strip():
+    if not source.strip():
+        return
+    try:
+        statements = ast.parse(source).body
+    except SyntaxError:
+        # Let the sandbox report the syntax error, as it would any other.
         show(sandbox.run(source, interactive=False))
+        return
+    for statement in statements:
+        segment = ast.get_source_segment(source, statement)
+        if segment:
+            show(sandbox.run(segment, interactive=False))
 
 
 def repl(sandbox):
