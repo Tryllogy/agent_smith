@@ -6,6 +6,7 @@ import time
 from contextlib import redirect_stderr, redirect_stdout
 
 from core.models import SandboxConfig
+from sandbox.manual import render_manual
 from sandbox.mcp_client.client import MCPError
 from sandbox.mcp_client.wrappers import build_namespace, tool_spec
 from sandbox.security.ast_guard import check_code
@@ -128,7 +129,7 @@ def run_one(code, ns, interactive, requests):
     return (error, is_final, answer)
 
 
-def worker(jobs, requests, answers, config: SandboxConfig, specs):
+def worker(jobs, requests, answers, config: SandboxConfig, specs, manual):
     """The child: lock itself down once, then run entries until told to stop.
 
     The namespace is built once and kept, so a variable set by one entry
@@ -147,6 +148,10 @@ def worker(jobs, requests, answers, config: SandboxConfig, specs):
     # server's tools, and final_answer.
     ns = build_namespace(specs, make_dispatch(requests, answers))
     ns["final_answer"] = final_answer
+    # The manual is also reachable from inside the sandbox, so code can
+    # look up what it may call without leaving the namespace.
+    ns["sandbox_manual"] = manual
+    ns["get_manual"] = lambda: manual
     ns["__builtins__"] = builtins_dict
 
     while True:
@@ -291,6 +296,9 @@ class Sandbox:
         self.config = config if config is not None else SandboxConfig()
         self.client = client
         self.specs = [tool_spec(t) for t in client.tools] if client else []
+        # Built once from the connected server, and handed to the child
+        # so `sandbox_manual` / `get_manual()` are available in the code.
+        self.manual = render_manual(client) if client else ""
         self.p = None
 
     def start(self):
@@ -302,7 +310,7 @@ class Sandbox:
         self.p = mp.Process(
             target=worker,
             args=(self.jobs, self.requests, self.answers,
-                  self.config, self.specs),
+                  self.config, self.specs, self.manual),
             daemon=True,
         )
         self.p.start()

@@ -24,12 +24,15 @@ route, removes the container and the copy. Containers are named
             ...
 """
 
+import atexit
 import contextlib
 import shlex
 import shutil
+import signal
 import subprocess
 import tempfile
 import uuid
+import weakref
 from pathlib import Path
 
 # Where every SWE-bench image keeps the repository.
@@ -40,6 +43,50 @@ SERVER = Path(__file__).resolve().parents[1] / "mcp_tools_swebench.py"
 
 # Pulling a SWE-bench image means several gigabytes.
 PULL_TIMEOUT = 1800
+
+# Every container currently started, so the safety net below can remove
+# them even when the normal `with` exit is skipped.
+_LIVE = weakref.WeakSet()
+_NET_INSTALLED = False
+
+
+def _install_safety_net():
+    """Arrange to remove live containers even on an abrupt exit.
+
+    The `with` block cleans up on any normal return or exception, but not
+    when the process is killed outright -- the moulinette's own timeout
+    sends SIGTERM. atexit covers a plain interpreter exit; the SIGTERM
+    handler covers the kill, then chains to whatever was there before so
+    the process still ends. Installed once.
+    """
+    global _NET_INSTALLED
+    if _NET_INSTALLED:
+        return
+    _NET_INSTALLED = True
+
+    atexit.register(_cleanup_all)
+
+    previous = signal.getsignal(signal.SIGTERM)
+
+    def handle(signum, frame):
+        _cleanup_all()
+        if callable(previous):
+            previous(signum, frame)
+        else:
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
+            signal.raise_signal(signal.SIGTERM)
+
+    # Only the main thread may install a signal handler; a worker thread
+    # still gets the atexit net.
+    with contextlib.suppress(ValueError):
+        signal.signal(signal.SIGTERM, handle)
+
+
+def _cleanup_all():
+    """Remove every container still live. Never raises."""
+    for box in list(_LIVE):
+        with contextlib.suppress(Exception):
+            box.stop()
 
 
 class DockerError(Exception):
@@ -93,6 +140,8 @@ class TaskContainer:
             DockerError: If any step failed. Whatever was already set up
                 is removed before the error propagates.
         """
+        _install_safety_net()
+        _LIVE.add(self)
         try:
             self.pull()
             self.workdir = Path(tempfile.mkdtemp(prefix="agent_smith_"))
@@ -151,6 +200,7 @@ class TaskContainer:
         if self.workdir is not None:
             shutil.rmtree(self.workdir, ignore_errors=True)
             self.workdir = None
+        _LIVE.discard(self)
 
     def __enter__(self):
         return self.start()

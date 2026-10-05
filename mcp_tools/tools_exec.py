@@ -3,15 +3,10 @@ import subprocess
 
 from mcp_tools.config import get_config
 
-# run_tests() gets a longer budget than run_command(): an evaluation
-# script walks a whole test suite.
 EVAL_TIMEOUT = 600
 
-# Exit code of a command `timeout -s KILL` had to kill: 128 + SIGKILL.
 TIMEOUT_EXIT = 137
 
-# Extra seconds given to docker itself on top of the command's own limit,
-# so that the limit inside the container is the one that fires.
 DOCKER_GRACE = 30
 
 

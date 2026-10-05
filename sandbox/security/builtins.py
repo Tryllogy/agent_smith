@@ -50,6 +50,8 @@ SAFE = [
     "issubclass",
     "type",
     "callable",
+    # Namespace: lists the names in scope, including the injected tools.
+    "dir",
     # Sortie
     "print",
     # Exceptions (le code legitime en leve et en attrape)

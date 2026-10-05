@@ -9,6 +9,13 @@ manual rewrites itself.
 primitive of the sandbox rather than a tool, and stays whatever is
 connected.
 
+The manual lists the tools, which the subject asks to generate from the
+tool schemas, and final_answer. It leaves out resources and prompts on
+purpose: the sandbox namespace holds exactly those two kinds of
+callable, so a resource or a prompt is nothing the model could call from
+its code. The client still exposes them (read_resource, get_prompt), and
+the CLI shows them at startup.
+
 The first section translates JSON Schema into Python names and
 signatures. It is the single source of truth for that translation: the
 generated wrappers must define exactly what the manual announces, or the
@@ -102,9 +109,11 @@ def signature(tool) -> str:
     Returns:
         A line such as "read_file(filepath: str, start_line: int)".
     """
+    # inputSchema in the mcp SDK 1.x, input_schema in 2.x; accept both.
+    schema = (getattr(tool, "inputSchema", None)
+              or getattr(tool, "input_schema", None))
     rendered = []
-    for name, json_type, is_required in parameters(
-            getattr(tool, "input_schema", None)):
+    for name, json_type, is_required in parameters(schema):
         shown = f"{name}: {_render_type(json_type)}"
         rendered.append(shown if is_required else f"{shown} = ...")
     return f"{python_name(tool.name)}({', '.join(rendered)})"
@@ -131,24 +140,6 @@ def _tool_entry(tool) -> str:
     if not description:
         return signature(tool)
     return f"{signature(tool)}\n{description}"
-
-
-def _resource_entry(resource) -> str:
-    """Render one resource as a line the model can act on."""
-    description = (getattr(resource, "description", "") or "").strip()
-    line = str(getattr(resource, "uri", ""))
-    return f"{line} -- {description}" if description else line
-
-
-def _prompt_entry(prompt) -> str:
-    """Render one prompt, with the arguments it takes."""
-    arguments = ", ".join(
-        getattr(argument, "name", "")
-        for argument in getattr(prompt, "arguments", None) or []
-    )
-    description = (getattr(prompt, "description", "") or "").strip()
-    line = f"{getattr(prompt, 'name', '')}({arguments})"
-    return f"{line} -- {description}" if description else line
 
 
 def _section(title: str, items, render) -> str:
@@ -184,8 +175,6 @@ def render_manual(client) -> str:
     sections = [
         HEADER,
         _section("Tools", client.tools, _tool_entry),
-        _section("Resources", client.resources, _resource_entry),
-        _section("Prompts", client.prompts, _prompt_entry),
         FINAL_ANSWER,
     ]
     return "\n\n".join(section for section in sections if section)

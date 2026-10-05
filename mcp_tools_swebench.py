@@ -1,4 +1,4 @@
-from mcp.server import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 from mcp_tools.config import configure_from_argv
 from mcp_tools.tools_exec import get_patch, run_command, run_tests
@@ -9,7 +9,7 @@ from mcp_tools.tools_search import (
     search_function_or_class_definition_in_code,
 )
 
-mcp = MCPServer("swebench-tools")
+mcp = FastMCP("swebench-tools")
 mcp.add_tool(read_file)
 mcp.add_tool(edit_file)
 mcp.add_tool(list_files)
@@ -23,6 +23,8 @@ mcp.add_tool(run_command)
 if __name__ == "__main__":
     args = configure_from_argv("swebench")
     if args.transport == "streamable-http":
-        mcp.run(transport="streamable-http", host=args.host, port=args.port)
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        mcp.run(transport="streamable-http")
     else:
         mcp.run(transport="stdio")
