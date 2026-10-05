@@ -3,7 +3,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp_tools.config import configure_from_argv
 from mcp_tools.tools_mbpp import run_tests
 
-mcp = FastMCP("mbpp-tools")
+mcp = FastMCP("mbpp-tools", log_level="WARNING")
 mcp.add_tool(run_tests)
 
 if __name__ == "__main__":

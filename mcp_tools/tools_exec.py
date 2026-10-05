@@ -1,7 +1,7 @@
 import shlex
 import subprocess
 
-from mcp_tools.config import get_config
+from mcp_tools.config import PathError, get_config, to_host
 
 EVAL_TIMEOUT = 600
 
@@ -9,12 +9,22 @@ TIMEOUT_EXIT = 137
 
 DOCKER_GRACE = 30
 
+# The eval script wraps the real test run between these two lines. Its
+# own exit code is the last git checkout's, not the tests', so the model
+# must be shown what is between the markers, not that code.
+START_MARKER = ">>>>> Start Test Output"
+END_MARKER = ">>>>> End Test Output"
 
-def _run(command: str, workdir: str, timeout: int):
+
+def _run(command: str, workdir: str, timeout: int, merge: bool = False):
     """Run a command line through a shell and return the finished process.
 
     Private because it returns a CompletedProcess: each public tool turns
     it into the text its caller expects.
+
+    Args:
+        merge: Send stderr into stdout, so a traced script's markers and
+            its test output stay in the order they were written.
 
     Raises:
         subprocess.TimeoutExpired: If the command outlived `timeout`.
@@ -23,14 +33,15 @@ def _run(command: str, workdir: str, timeout: int):
     return subprocess.run(
         command,
         shell=True,
-        capture_output=True,
         text=True,
         timeout=timeout,
         cwd=workdir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT if merge else subprocess.PIPE,
     )
 
 
-def _in_container(shell_args, workdir, timeout, stdin=None):
+def _in_container(shell_args, workdir, timeout, stdin=None, merge=False):
     """Run a command inside the task's container and return the process.
 
     `bash -l` loads the image's profile, which activates the conda
@@ -61,9 +72,10 @@ def _in_container(shell_args, workdir, timeout, stdin=None):
     return subprocess.run(
         args,
         input=stdin,
-        capture_output=True,
         text=True,
         timeout=timeout + DOCKER_GRACE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT if merge else subprocess.PIPE,
     )
 
 
@@ -100,8 +112,12 @@ def run_command(command: str, workdir: str = "", timeout: int = 60) -> str:
             cwd = workdir or str(config.repo_alias)
             proc = _in_container(["-lc", command], cwd, timeout)
         else:
-            cwd = workdir or str(config.repo_root)
+            # No container: a /testbed workdir from the model is on the
+            # host copy, so translate it like the file tools do.
+            cwd = str(to_host(workdir)) if workdir else str(config.repo_root)
             proc = _run(command, cwd, timeout)
+    except PathError as exc:
+        return f"Error: {exc}"
     except subprocess.TimeoutExpired:
         return f"Command timed out after {timeout}s"
     except OSError as exc:
@@ -125,22 +141,58 @@ def run_tests() -> str:
         return (f"Error: no evaluation script at '{config.eval_script}'. "
                 "Start the tool server with --eval-script pointing at "
                 "the task's eval_script.")
-    if not config.container:
-        return run_command(
-            f"bash {shlex.quote(str(config.eval_script))}",
-            workdir=str(config.repo_root),
-            timeout=EVAL_TIMEOUT,
-        )
     try:
-        proc = _in_container(
-            ["-ls"], str(config.repo_alias), EVAL_TIMEOUT,
-            stdin=config.eval_script.read_text(),
-        )
+        if config.container:
+            proc = _in_container(
+                ["-ls"], str(config.repo_alias), EVAL_TIMEOUT,
+                stdin=config.eval_script.read_text(), merge=True,
+            )
+        else:
+            proc = _run(
+                f"bash {shlex.quote(str(config.eval_script))}",
+                str(config.repo_root), EVAL_TIMEOUT, merge=True,
+            )
     except subprocess.TimeoutExpired:
         return f"Tests timed out after {EVAL_TIMEOUT}s"
     except OSError as exc:
         return f"Tests could not be started: {exc}"
-    return _report(proc, EVAL_TIMEOUT)
+    return _test_report(proc)
+
+
+def _test_report(proc) -> str:
+    """Render run_tests output: the real test run, not the script's code.
+
+    The eval script ends with a git checkout, so its exit code says
+    nothing about the tests. The run between the markers is what matters,
+    and its own pass/fail summary is inside it.
+    """
+    if get_config().container and proc.returncode == TIMEOUT_EXIT:
+        return f"Tests timed out after {EVAL_TIMEOUT}s (or killed for memory)"
+    section = _between_markers(proc.stdout)
+    if section is not None:
+        return f"--- test output ---\n{section}"
+    return (f"No test-output markers in the script's output; the full "
+            f"output follows (the exit code {proc.returncode} is the "
+            f"script's, not the tests'):\n{proc.stdout}")
+
+
+def _between_markers(text: str):
+    """Return what the eval script printed between its two markers.
+
+    Args:
+        text: The script's combined output.
+
+    Returns:
+        The text between the markers, or None if they are not both there.
+    """
+    start = text.find(START_MARKER)
+    if start == -1:
+        return None
+    start = text.find("\n", start)
+    end = text.find(END_MARKER, start + 1) if start != -1 else -1
+    if start == -1 or end == -1:
+        return None
+    return text[start + 1:text.rfind("\n", start, end)].strip()
 
 
 def get_patch() -> str:

@@ -73,6 +73,20 @@ SAFE = [
     "NotImplementedError",
     "LookupError",
     "FloatingPointError",
+    # Legitimate code catches these (e.g. `try: import x except
+    # ImportError`); they are exception classes, not capabilities.
+    "ImportError",
+    "ModuleNotFoundError",
+    "MemoryError",
+    "RecursionError",
+    "OSError",
+    "PermissionError",
+    "FileNotFoundError",
+    "IsADirectoryError",
+    "TimeoutError",
+    "UnicodeError",
+    "UnicodeDecodeError",
+    "UnicodeEncodeError",
     # Constantes
     "True",
     "False",
