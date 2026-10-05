@@ -172,8 +172,8 @@ if report.startswith("success: true"):
 ```<end_code>
 Observation: success: false (1 of 2 tests passed)
 1. PASS  assert smallest_abs([3, -1, 5]) == 1
-2. FAIL  assert smallest_abs([-5, 2]) == 2
-Thought: Test 2 fails: `min` picks -5 because it is the smallest signed value, and abs only runs afterwards. I must map abs over the list first, then take the minimum.
+2. FAIL  assert smallest_abs([-5, 2]) == 2  (got 5)
+Thought: Test 2 fails: my function returned 5 instead of 2. `min` picks -5 because it is the smallest signed value, and abs only runs afterwards. I must map abs over the list first, then take the minimum.
 Code:
 ```python
 solution = r"""def smallest_abs(a):

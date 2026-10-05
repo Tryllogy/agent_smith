@@ -72,6 +72,7 @@ class Loop:
         self.elided_indices: set[int] = set()
         self.code_history: dict[str, list[tuple[int, str]]] = {}
         self.repeat_note: str = ""
+        self.seen_text: list[str] = []
         if config_sandbox is None:
             self.config_sandbox: SandboxConfig = SandboxConfig()
         else:
@@ -163,6 +164,18 @@ class Loop:
             )
             return False
         self.sandbox_input: str = self.code["code"]
+        unread: str | None = self.check_unread_edits(self.sandbox_input)
+        if unread is not None:
+            self.sandbox_output = ""
+            not_run: str = (
+                "Not run: edit_file's old_str contains a line that no"
+                f" earlier observation showed: {unread[:120]!r}. Read those"
+                " lines first with read_file, then copy old_str from that"
+                " output, indentation included."
+            )
+            self.repeat_note = self.check_repeat(self.sandbox_input, not_run)
+            self.add_observation(not_run)
+            return False
         stdout, stderr, error, is_final, answer = self.sandbox.run(
             self.sandbox_input,
             timeout=min(
@@ -173,6 +186,7 @@ class Loop:
         self.sandbox_output: str = (
             stdout + stderr + error if error else stdout + stderr
         )
+        self.seen_text.append(self.sandbox_output)
         self.repeat_note = self.check_repeat(
             self.sandbox_input, self.sandbox_output
         )
@@ -233,11 +247,54 @@ class Loop:
             return ""
         steps: str = ", ".join(str(step) for step in same)
         label: str = "step" if len(same) == 1 else "steps"
-        return (
-            f"[Repeated step: this code is the same as in {label} {steps}"
-            " and printed the same output. Running it again will not change"
-            " the result: change your approach.]"
+        start: str = (
+            "Repeated step again" if len(same) > 1 else "Repeated step"
         )
+        hint: str = (
+            "compare the value your function returned with the expected one"
+            " in the failing test, then change the logic"
+            if self.bench == constants.MBPP
+            else "if an edit failed, read the exact lines again and copy"
+            " old_str from that output; otherwise try something else"
+        )
+        return (
+            f"[{start}: this code is the same as in {label} {steps} and"
+            " printed the same output. Running it again will not change the"
+            f" result: {hint}.]"
+        )
+
+    def check_unread_edits(self, code: str) -> str | None:
+        """Return a line of a literal edit_file old_str never shown before.
+
+        The prompt asks to copy every old_str from an earlier read_file
+        observation: an old_str written from memory either fails or
+        recites a known fix. The task turn and the raw outputs of earlier
+        steps count as shown. None when every line was shown, or when
+        old_str is not a literal string and cannot be checked.
+        """
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            return None
+        seen: str = "\n".join(self.seen_text)
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and getattr(node.func, "id", "") == "edit_file"
+            ):
+                continue
+            old = next(
+                (k.value for k in node.keywords if k.arg == "old_str"),
+                node.args[1] if len(node.args) > 1 else None,
+            )
+            if not (
+                isinstance(old, ast.Constant) and isinstance(old.value, str)
+            ):
+                continue
+            for line in old.value.splitlines():
+                if line.strip() and line.strip() not in seen:
+                    return line.strip()
+        return None
 
     def truncate_output(self, output: str) -> str:
         """Return output cut to the bench's observation_max_chars.
@@ -400,6 +457,11 @@ class Loop:
 
     def run_steps(self, task_id: str) -> SolutionOutput:
         """Run the Thought -> Code -> Observation steps of run()."""
+        self.seen_text = [
+            message["content"]
+            for message in self.prompt.prompt
+            if message["role"] == "user"
+        ]
         self.iteration: int = 0
         self.task_id: str = task_id
         self.retries: int = 0
