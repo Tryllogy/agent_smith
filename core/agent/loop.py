@@ -30,6 +30,7 @@ class Loop:
         config_sandbox: SandboxConfig | None = None,
         answer_tests: list[str] | None = None,
         mcp_client: MCPClient | None = None,
+        start_time: float | None = None,
     ) -> None:
         """Bind the client, prompt and benchmark limits.
 
@@ -37,7 +38,9 @@ class Loop:
         lines run after the final answer, alone in the sandbox, before it
         is accepted (MBPP: test_imports then test_list). mcp_client is the
         connected MCP server whose tools the model's code may call; None
-        leaves final_answer alone in the sandbox.
+        leaves final_answer alone in the sandbox. start_time is when the
+        agent started: the time limit and total_time_seconds run from it,
+        since the evaluation times the whole agent. None means now.
         """
         self.client: FallbackClient = client
         self.mcp_client: MCPClient | None = mcp_client
@@ -74,6 +77,9 @@ class Loop:
         self.requests: int = 0
         self.turn_requests: int = 0
         self.last_llm_error: str = ""
+        self.start_time: float = (
+            time.time() if start_time is None else start_time
+        )
 
     def thought(self, timeout_max: float, max_tokens: int):
         """Send the conversation to the LLM and append its answer.
@@ -360,7 +366,6 @@ class Loop:
 
     def run_steps(self, task_id: str) -> SolutionOutput:
         """Run the Thought -> Code -> Observation steps of run()."""
-        self.start_time: float = time.time()
         self.iteration: int = 0
         self.task_id: str = task_id
         self.retries: int = 0

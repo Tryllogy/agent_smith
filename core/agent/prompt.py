@@ -1,6 +1,6 @@
 from core.constants import (
-    MBPP_PROMPT_EXEMPLE,
-    SWE_PROMPT_EXEMPLE,
+    MBPP_EXAMPLE,
+    SWE_EXAMPLE,
     Bench,
     BenchName,
 )
@@ -110,9 +110,16 @@ class Prompt:
                 f"{self.manual_section}"
                 "Here are the allowed imports you can use:\n"
                 f"{self.allowed_imports_str}\n"
-                "It is FORBIDDEN to git commit or make a patch empty."
+                "Never save your changes with git: get_patch() reads them"
+                " from the working tree, and an empty patch is FORBIDDEN."
                 " ONLY make 1 and ONLY 1 code block per step."
                 f"{print_rule}\n"
+                "The exit code run_tests() reports is that of the"
+                " evaluation script, whose last command restores the test"
+                " files: it is 0 even when tests fail. Judge the tests by"
+                " the results printed between '>>>>> Start Test Output' and"
+                " '>>>>> End Test Output', and never call the fix verified"
+                " while a test fails or errors there.\n"
                 "read_file() prefixes each line with '<line_number>: '."
                 " These prefixes are NOT part of the file content: never"
                 " include them in the old_str of edit_file(), which matches"
@@ -127,7 +134,7 @@ class Prompt:
                 " not apply a fix you remember for this repository: find"
                 " the cause in the code, then fix it.\n"
                 "Here is an example:\n"
-                f"{SWE_PROMPT_EXEMPLE}",
+                f"{SWE_EXAMPLE}",
             },
             {
                 "role": "user",
@@ -195,7 +202,7 @@ class Prompt:
                 "Here are the allowed imports you can use:\n"
                 f"{self.allowed_imports_str}\n"
                 "Here is an example:\n"
-                f"{MBPP_PROMPT_EXEMPLE}",
+                f"{MBPP_EXAMPLE}",
             },
             {
                 "role": "user",

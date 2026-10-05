@@ -22,6 +22,9 @@ FALLBACK_CONFIG_FILE = "configs/fallback.json"
 MBPP_MCP_SERVER = "mcp_tools_mbpp.py"
 SWE_MCP_SERVER = "mcp_tools_swebench.py"
 
+MBPP_DEFAULT_MODEL = "codestral-2508"
+SWE_DEFAULT_MODEL = "codestral-2508"
+
 PATCH_MARKERS = ("diff --git", "--- a/", "+++ b/", "@@")
 
 
@@ -79,7 +82,7 @@ MBPP = Bench(
     full_observations=None,
 )
 
-SWE_PROMPT_EXEMPLE = r"""Task: Fix the issue described in the problem statement.
+SWE_EXAMPLE = r"""Task: Fix the issue described in the problem statement.
 Repo: /testbed (acme/shopcart)
 
 Problem statement: Items added to one `Cart` also appear in every other `Cart` created without arguments.
@@ -142,7 +145,7 @@ tests/test_cart.py::test_carts_do_not_share_items PASSED
 
 Step 3
 
-Thought: The reproduction now prints `[]` and every test passes. I take the patch, check that it is not empty, and submit it.
+Thought: The reproduction now prints `[]`, and the test output between the markers ends with `12 passed` and no failure or error: the exit code alone would not have told me that. I take the patch, check that it is not empty, and submit it.
 
 ```python
 patch = get_patch()
@@ -151,7 +154,7 @@ final_answer(patch)
 ```<end_code>
 """
 
-MBPP_PROMPT_EXEMPLE = r'''Task:
+MBPP_EXAMPLE = r'''Task:
 task_definition: Return the smallest absolute value in a list of integers.
 function_definition: def smallest_abs(a):
 test_list: assert smallest_abs([3, -1, 5]) == 1
@@ -163,10 +166,11 @@ solution = r"""def smallest_abs(a):
     return abs(min(a))"""
 report = run_tests(code=solution)
 print(report)
-if "PASS" in report and "FAIL" not in report and "ERROR" not in report:
+if report.startswith("success: true"):
     final_answer(solution)
 ```<end_code>
-Observation: 1. PASS  assert smallest_abs([3, -1, 5]) == 1
+Observation: success: false (1 of 2 tests passed)
+1. PASS  assert smallest_abs([3, -1, 5]) == 1
 2. FAIL  assert smallest_abs([-5, 2]) == 2
 Thought: Test 2 fails: `min` picks -5 because it is the smallest signed value, and abs only runs afterwards. I must map abs over the list first, then take the minimum.
 Code:
@@ -175,7 +179,7 @@ solution = r"""def smallest_abs(a):
     return min(map(abs, a))"""
 report = run_tests(code=solution)
 print(report)
-if "PASS" in report and "FAIL" not in report and "ERROR" not in report:
+if report.startswith("success: true"):
     final_answer(solution)
 ```<end_code>
 '''

@@ -30,6 +30,7 @@ class AgentMBPP:
         output_file: str,
         model_name: str,
         provider_url: str,
+        start_time: float | None = None,
     ) -> None:
         """Load the task, then build the LLM client, tools, prompt and loop.
 
@@ -37,6 +38,8 @@ class AgentMBPP:
         API keys) or if the MCP tool server cannot start: no request is
         made here. The server is started last, once the configuration is
         known to be valid; the prompt relies on its run_tests().
+        start_time is when the agent started, from which the time limit
+        runs; None means now.
         """
         self.task: dict = get_task_from_file(task_file, MBPPTaskInput)
         self.output_file: str = output_file
@@ -82,8 +85,9 @@ class AgentMBPP:
                     *self.task.get("test_list", []),
                 ],
                 mcp_client=self.mcp_client,
+                start_time=start_time,
             )
-        except Exception:
+        except BaseException:
             self.close()
             raise
 

@@ -5,18 +5,22 @@ import time
 from agent_mbpp.cli import AgentMBPP
 from core.agent_cli_helper import (
     check_args,
+    find_provider_url_by_model,
+    interrupt_on_signals,
     read_task_id,
     write_failure_output,
 )
-from core.constants import MBPP
+from core.constants import MBPP, MBPP_DEFAULT_MODEL
 
 
 def main() -> int:
     """Parse the arguments, run the MBPP agent, return the exit code.
 
-    Any error still leaves a solution.json (success=false) at
-    --output, and the exit code is then 1.
+    Any error, or a SIGINT, SIGTERM or SIGHUP, still leaves a
+    solution.json (success=false) at --output, and the exit code is
+    then 1. The time limit runs from here.
     """
+    start_time: float = time.time()
     parser = argparse.ArgumentParser(description="Run the MBPP agent.")
     parser.add_argument(
         "--task-file", required=True, help="Path to the task file."
@@ -26,17 +30,18 @@ def main() -> int:
     )
     parser.add_argument(
         "--model-name",
-        required=True,
-        help="Name of the language model to use.",
+        default=MBPP_DEFAULT_MODEL,
+        help="Name of the language model to use (default: %(default)s).",
     )
     parser.add_argument(
         "--provider-url",
-        required=True,
-        help="URL of the LLM provider.",
+        default=None,
+        help="URL of the LLM provider (default: the provider that"
+        " declares the model in configs/models.json).",
     )
 
     args = parser.parse_args()
-    start_time: float = time.time()
+    interrupt_on_signals()
 
     try:
         check_args(args)
@@ -44,20 +49,26 @@ def main() -> int:
             task_file=args.task_file,
             output_file=args.output,
             model_name=args.model_name,
-            provider_url=args.provider_url,
+            provider_url=args.provider_url
+            or find_provider_url_by_model(args.model_name),
+            start_time=start_time,
         )
         agent_mbpp.run()
     except Exception as e:
-        sys.stderr.write(f"Error: {e}\n")
-        write_failure_output(
-            output_file=args.output,
-            bench=MBPP,
-            task_id=read_task_id(args.task_file, "task_id"),
-            error=str(e),
-            start_time=start_time,
-        )
-        return 1
-    return 0
+        error: str = str(e)
+    except KeyboardInterrupt as e:
+        error = f"Interrupted by {e or 'SIGINT'}"
+    else:
+        return 0
+    sys.stderr.write(f"Error: {error}\n")
+    write_failure_output(
+        output_file=args.output,
+        bench=MBPP,
+        task_id=read_task_id(args.task_file, "task_id"),
+        error=error,
+        start_time=start_time,
+    )
+    return 1
 
 
 if __name__ == "__main__":

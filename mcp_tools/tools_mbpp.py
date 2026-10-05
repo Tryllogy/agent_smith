@@ -43,34 +43,35 @@ for index, test in enumerate(job["tests"], start=1):
 """
 
 
-def run_tests(code: str) -> str:
+def run_tests(code: str, test_list: list[str] | None = None) -> str:
     """Run the task's test_list against your solution, in the sandbox.
 
     Args:
         code: The complete source of your solution, imports included,
             as you would pass it to final_answer().
+        test_list: Assertions to run instead of the task's test_list.
 
     Returns:
-        One line per assertion, PASS, FAIL or ERROR, or a message saying
-        why the tests could not run.
+        A first line "success: true" or "success: false" with the number
+        of tests passed, then one line per assertion, PASS, FAIL or
+        ERROR; or a message saying why the tests could not run.
     """
-    config = get_config()
-    if config.task_file is None:
-        return ("Error: no MBPP task. Start the tool server with "
-                "--task-file pointing at the task JSON.")
     if not code.strip():
         return "Error: code is empty. Pass the source of your solution."
     try:
-        task = MBPPTaskInput(**json.loads(config.task_file.read_text()))
+        imports, tests = load_tests(test_list)
     except (OSError, ValueError, TypeError) as exc:
         return f"Error: cannot load the task: {exc}"
-    if not task.test_list:
-        return "Error: this task carries no assertions."
+    if not tests:
+        return (
+            "Error: no assertions to run. Pass test_list, or start the"
+            " tool server with --task-file pointing at the task JSON."
+        )
 
     job = {
-        "imports": task.test_imports,
+        "imports": imports,
         "code": code,
-        "tests": task.test_list,
+        "tests": tests,
         "timeout": ASSERT_TIMEOUT,
     }
     try:
@@ -83,8 +84,40 @@ def run_tests(code: str) -> str:
             cwd=PROJECT_ROOT,
         )
     except subprocess.TimeoutExpired:
-        return (f"Tests timed out after {TEST_TIMEOUT}s: the solution "
-                "most likely loops forever.")
+        return (
+            f"Tests timed out after {TEST_TIMEOUT}s: the solution "
+            "most likely loops forever."
+        )
     if proc.returncode != 0:
         return f"The tests could not run:\n{proc.stderr.strip()}"
-    return proc.stdout or "No output: the assertions printed nothing."
+    return summarize(proc.stdout, len(tests))
+
+
+def load_tests(test_list: list[str] | None) -> tuple[list[str], list[str]]:
+    """Return the test imports and the assertions to run.
+
+    test_list, when given, replaces the task's; the task's test_imports
+    still apply when a task file is configured.
+
+    Raises:
+        OSError, ValueError, TypeError: If the task file cannot be read.
+    """
+    config = get_config()
+    task = None
+    if config.task_file is not None:
+        task = MBPPTaskInput(**json.loads(config.task_file.read_text()))
+    imports = task.test_imports if task is not None else []
+    if test_list is not None:
+        return imports, [str(test) for test in test_list]
+    return imports, task.test_list if task is not None else []
+
+
+def summarize(report: str, total: int) -> str:
+    """Put the verdict, with the number of tests passed, before report."""
+    passed = sum(
+        1
+        for line in report.splitlines()
+        if line.split(" ", 2)[1:2] == ["PASS"]
+    )
+    verdict = "true" if passed == total else "false"
+    return f"success: {verdict} ({passed} of {total} tests passed)\n{report}"
