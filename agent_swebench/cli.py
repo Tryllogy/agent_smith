@@ -31,6 +31,7 @@ class AgentSWEBENCH:
         output_file: str,
         model_name: str,
         provider_url: str,
+        start_time: float | None = None,
     ):
         """Load the task, then build the LLM client, tools, prompt and loop.
 
@@ -40,6 +41,9 @@ class AgentSWEBENCH:
         last, once the configuration is known to be valid: the container
         holds the repository at /testbed, the server's file tools work on
         a host copy of it and its commands run inside the container.
+        start_time is when the agent started, from which the time limit
+        runs, so pulling the image counts; None means now. Interrupted
+        while starting, the agent still removes what it started.
         """
         self.task: dict = get_task_from_file(task_file, SWEBenchTaskInput)
         self.output_file: str = output_file
@@ -93,8 +97,9 @@ class AgentSWEBENCH:
                 bench=SWE,
                 config_sandbox=sandbox,
                 mcp_client=self.mcp_client,
+                start_time=start_time,
             )
-        except Exception:
+        except BaseException:
             self.close()
             raise
 

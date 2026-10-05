@@ -1,6 +1,7 @@
 import json
 import os
 import shlex
+import signal
 import sys
 import time
 
@@ -13,6 +14,8 @@ from core.llm.client import LLMClient
 from core.llm.provider import Provider
 from core.models import MBPPTaskInput, SolutionOutput, SWEBenchTaskInput
 from sandbox.mcp_client.client import MCPClient, MCPError
+
+TERMINATION_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 
 
 def check_args(args):
@@ -79,6 +82,32 @@ def get_declared_model(
             " there, all free, are accepted."
         )
     return models[model_name]
+
+
+def find_provider_url_by_model(model_name: str) -> str:
+    """Return the url of the provider that declares model_name.
+
+    Used when --provider-url is not given. Raises ValueError if no
+    provider declares the model, or if several do.
+    """
+    models_config: dict = read_config_file(constants.MODELS_CONFIG_FILE)
+    urls: list[str] = [
+        entry.get("provider", {}).get("url", "")
+        for entry in models_config.values()
+        if isinstance(entry, dict) and model_name in entry.get("models", {})
+    ]
+    if not urls:
+        raise ValueError(
+            f"Model '{model_name}' is not declared in"
+            f" '{constants.MODELS_CONFIG_FILE}': only the models declared"
+            " there, all free, are accepted."
+        )
+    if len(urls) > 1:
+        raise ValueError(
+            f"Model '{model_name}' is declared by several providers"
+            f" ({', '.join(urls)}): choose one with --provider-url."
+        )
+    return urls[0]
 
 
 def find_provider_by_url(models_config: dict, url: str) -> str:
@@ -299,3 +328,27 @@ def write_failure_output(
             f.write(solution.model_dump_json(indent=4))
     except OSError as e:
         sys.stderr.write(f"Error: could not write '{output_file}': {e}\n")
+
+
+def interrupt_on_signals() -> None:
+    """Turn SIGINT, SIGTERM and SIGHUP into a KeyboardInterrupt.
+
+    The run then stops through its normal cleanup, which stops the tool
+    server and removes the task's container. Only the first signal
+    interrupts: the next ones are ignored, so a second Ctrl+C, which uv
+    relays, cannot cut that cleanup short. A process forked from this
+    one, like the sandbox, keeps the default behaviour of the signal.
+    """
+    owner: int = os.getpid()
+
+    def interrupt(signum, frame) -> None:
+        if os.getpid() != owner:
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+            return
+        for termination in TERMINATION_SIGNALS:
+            signal.signal(termination, signal.SIG_IGN)
+        raise KeyboardInterrupt(signal.Signals(signum).name)
+
+    for termination in TERMINATION_SIGNALS:
+        signal.signal(termination, interrupt)
