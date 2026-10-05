@@ -51,7 +51,7 @@ poste a Docker classique ou le `lchown` du rootless ne se produit pas.
 `xarray-4629` 4/4, `sympy-13480` 3/4, `sympy-14711` 1/4 (`codestral`
 seul). Metriques 12/12 valides. Revele un defaut de `run_tests` SWE : le
 resultat des tests est coupe sur sympy (P1, revue du 2026-10-04).
-**647 tests verts** (2026-10-05), `ruff check` : 0 erreur hors `exams/`
+**653 tests verts** (2026-10-05), `ruff check` : 0 erreur hors `exams/`
 (scripts du correcteur, 103 erreurs) ; `ruff format --check` : 11 fichiers de
 ndi-tull non formates (`agent_swebench/docker.py`,
 `mcp_tools/config.py`, `tools_exec.py`, `tools_fs.py`, `tools_search.py`,
@@ -700,7 +700,11 @@ anti-triche. 47 tests ajoutes ou mis a jour, 638 verts. Puis ce TODO et
 redirigee d'un bloc, filet `atexit` + SIGTERM ; conflit sur
 `mcp_tools/tools_mbpp.py` resolu en gardant la version de `thomas`) :
 `exam_sandbox.sh` a 11/14. Puis la **detection des etapes repetees** (P2.1),
-647 tests verts (**non commite**).
+647 tests verts. Puis **examen complet** sur `90ef54a` (sandbox 14/14 et
+bonus, MBPP 5/5, SWE 0/3 officiel et 1/3 reel en rootless, anti-triche 3
+avertissements dans un clone propre), et deux correctifs P2 qui en sortent :
+**`Observation:` en sequence d'arret** et **`iterations` = nombre d'etapes**
+(P2.1), 653 tests verts (**non commite**).
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -1266,6 +1270,48 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       note part a l'etape 2 (meme code, meme erreur), le modele change de
       code a l'etape 3 (tache echouee quand meme : guillemets puis plafond
       d'entree). **Effet sur les scores non mesure**
+- [x] **`Observation:` en sequence d'arret** (2026-10-05, non commite,
+      examen complet). `codestral` ferme parfois son bloc par ` ``` ` **sans
+      `<end_code>`** et enchaine `Observation:` : il invente les sorties,
+      les etapes suivantes, et jusqu'au « 12 passed » de l'exemple SWE. Rien
+      ne coupait la generation : sur `scikit-learn-13439`, une reponse de
+      6 260 tokens a epuise les 10 000 tokens de sortie. Dans les campagnes,
+      ces reponses font 5 % des etapes SWE de `codestral` mais **42 % de ses
+      tokens de sortie** (MBPP : 5 % des etapes de `ministral-14b`, 57 % de
+      `minimax-m3`). `constants.LLM_STOP_SEQUENCE` contient desormais
+      `"<end_code>", "Observation:"` : le fournisseur coupe avant
+      l'observation inventee, `cut_at_stop()` fait de meme pour les modeles
+      sans `stop` (`gpt-oss`), et l'extraction coupe un bloc non ferme au
+      meme endroit. Risque mesure : `Observation:` avant le premier bloc
+      dans 1 reponse sur 1 074, dans le raisonnement de `gpt-oss`, que la
+      coupe cote client ne touche pas. **Verifie** : 5 tests (dont le cas
+      reel rejoue), 1 mutation tuee, 653 tests verts ; rejeu hors ligne :
+      ~9 100 des 9 610 tokens de ces reponses `codestral` SWE evites ;
+      **run reel `scikit-learn-13439`** : aucune observation inventee, 239
+      tokens au plus par reponse, 1 459 en tout, succes en 15 iterations,
+      `RESOLVED_FULL` (notation de secours, F2P 1/1, P2P 40/40), la ou
+      l'examen l'avait perdue. Un seul tirage ; MBPP 295 rejoue sans
+      regression liee a la coupe (echec du modele, 3 soumissions
+      identiques)
+- [x] **`iterations` = nombre d'etapes** (2026-10-05, non commite, examen
+      complet, bareme Q10 et schema : *« steps: one entry per agent
+      iteration »*). Un tour qui sort sur une garde apres une requete
+      (plafond de sortie, de retries, d'entree, temps) posait son step sans
+      compter l'iteration : `scikit-learn-13439` rendait 7 iterations pour 8
+      steps. `exit_on_guard()` incremente desormais `iteration` quand il
+      pose le step. **Revient sur la convention du 2026-10-01** (« une
+      iteration = un aller-retour mene a son terme ») : les 2 tests qui la
+      fixaient sont reecrits, 1 test ajoute (sortie avant toute requete :
+      0 iteration, 0 step), 1 mutation tuee. Le plafond d'iterations ne peut
+      pas etre depasse : le tour n'existe que si `iteration < limite`
+- [ ] **Pistes de l'examen complet, non faites** : (1) les etapes
+      repetees d'affilee malgre la note (10 `read_file` identiques sur
+      `sympy-14711`, 3 soumissions identiques sur MBPP 295 ;
+      `moulinette_eval display` affiche « identical sandbox_input
+      (copy-paste?) ») : forme d'une reponse plus ferme a choisir et a
+      mesurer ; (2) `run_tests` MBPP : sur un FAIL, montrer la valeur
+      obtenue (`sum_div(12)` rend 28, pas 16) pour que le modele voie son
+      erreur
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -3211,11 +3257,13 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
       au 2026-10-05 : marqueur en tete du prompt systeme,
       `core/agent/prompt.py:88` (SWE) et `:170` (MBPP) ;
       `print('SANDBOX_MARKER_42')` avant le code, **pas dans `execute()`**
-      (`sandbox/executor.py:356`, que la boucle n'appelle plus depuis le
-      sandbox persistant) mais `core/agent/loop.py:162` ou `Sandbox.run()`
-      (`executor.py:310`) ; `# CORRECTOR_CHECK` en tete du code envoye,
-      `loop.py:162` ; `model_name` journalise, `core/llm/client.py:228`. Sur
-      une tache MBPP, puis `git checkout`
+      (que la boucle n'appelle plus depuis le sandbox persistant) mais
+      `Sandbox.run()` (`sandbox/executor.py:320`) ; `# CORRECTOR_CHECK` en
+      tete du code envoye, `core/agent/loop.py:165` ; `model_name`
+      journalise, `core/agent/loop.py:594` (`make_step_metrics()`) et **pas
+      `core/llm/client.py:228`**, le `model_name` du `LLMResponse` que les
+      `StepMetrics` n'utilisent pas (emplacements revus le 2026-10-05 au
+      soir, voir `RESUMEEVAL.md`). Sur une tache MBPP, puis `git checkout`
 
 ---
 
@@ -3369,7 +3417,7 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
 
 ### Le banc d'essai `tests/`
 
-**647 tests** (2026-10-05), gitignore, hors rendu — c'est un outil de travail,
+**653 tests** (2026-10-05), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

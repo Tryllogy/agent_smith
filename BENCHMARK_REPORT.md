@@ -113,6 +113,18 @@ tool, the MBPP agent now refuses to start without its MCP server.
   identical `edit_file` calls for `codestral` on `sympy-13480`), and 9
   times in MBPP; the same code with another output (tests rerun after an
   edit, 8 cases) is not flagged. The model is told, nothing is stopped.
+- `Observation:` is now a stop sequence, next to `<end_code>`. When a model
+  closes its block without `<end_code>` and goes on with `Observation:`, it
+  invents the outputs and the next steps: in the versioned runs, such
+  answers are 5 % of `codestral`'s SWE-bench steps but 42 % of its output
+  tokens, and in the 2026-10-05 exam one of them used up the whole 10,000
+  output tokens of `scikit-learn-13439`. Rerun once with the stop
+  sequence, that task passed (`RESOLVED_FULL` by the checker's grading
+  code, 1,459 output tokens);
+- `iterations` now counts the turn that ends on a guard after a request,
+  so that it always equals the number of steps, as the schema says ("one
+  entry per agent iteration"). Before, such a run reported one step more
+  than iterations.
 
 ### 1.2 How results are judged
 

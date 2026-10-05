@@ -545,10 +545,12 @@ class Loop:
     def exit_on_guard(self, error: str) -> SolutionOutput:
         """End the run with error, plus the last LLM error of the turn.
 
-        The turn is recorded as a step only if it sent a request.
+        The turn is recorded as a step only if it sent a request, and then
+        counts as an iteration, so that iterations matches the steps.
         """
         if self.turn_requests > 0:
             self.step_metrics.append(self.make_step_metrics())
+            self.iteration += 1
         if self.last_llm_error:
             error += f"; last LLM error: {self.last_llm_error}"
         return self.make_solution_output(error=error)
