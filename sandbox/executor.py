@@ -42,13 +42,13 @@ class QueueWriter(io.TextIOBase):
     and hand it back, as the subject requires for a timeout.
     """
 
-    def __init__(self, requests, tag):
-        self._requests = requests
+    def __init__(self, outbox, tag):
+        self._outbox = outbox
         self._tag = tag
 
     def write(self, text):
         if text:
-            self._requests.put((self._tag, text))
+            self._outbox.put((self._tag, text))
         return len(text)
 
 
@@ -61,18 +61,20 @@ class ToolError(Exception):
     """A tool call failed. Raised in the sandbox, for the model to read."""
 
 
-def final_answer(value):
-    raise FinalAnswer(value)
+def final_answer(answer):
+    # The parameter is named to match the manual, so the model may write
+    # final_answer(answer=...) as well as final_answer(...).
+    raise FinalAnswer(answer)
 
 
-def make_dispatch(requests, answers):
+def make_dispatch(outbox, answers):
     """Build the messenger the tool wrappers hand their calls to.
 
     It runs in the child, where the MCP client does not exist: it posts
     the call to the parent and blocks until the parent answers.
 
     Args:
-        requests: Queue to the parent.
+        outbox: Queue to the parent.
         answers: Queue from the parent.
 
     Returns:
@@ -81,7 +83,7 @@ def make_dispatch(requests, answers):
     """
 
     def dispatch(name, arguments):
-        requests.put(("call", name, arguments))
+        outbox.put(("call", name, arguments))
         succeeded, payload = answers.get()
         if not succeeded:
             raise ToolError(payload)
@@ -106,16 +108,16 @@ def compile_entry(code, interactive):
     return compile(code, "<sandbox>", "exec")
 
 
-def run_one(code, ns, interactive, requests):
+def run_one(code, ns, interactive, outbox):
     """Run one entry, streaming its output, and report the outcome.
 
-    stdout and stderr are streamed to the parent through `requests` as
+    stdout and stderr are streamed to the parent through `outbox` as
     they are written; only the outcome (error, is_final, answer) comes
     back here.
     """
     error, is_final, answer = None, False, None
-    out = QueueWriter(requests, "out")
-    err = QueueWriter(requests, "err")
+    out = QueueWriter(outbox, "out")
+    err = QueueWriter(outbox, "err")
     with redirect_stdout(out), redirect_stderr(err):
         try:
             check_code(code)
@@ -129,7 +131,7 @@ def run_one(code, ns, interactive, requests):
     return (error, is_final, answer)
 
 
-def worker(jobs, requests, answers, config: SandboxConfig, specs, manual):
+def worker(jobs, outbox, answers, config: SandboxConfig, specs, manual):
     """The child: lock itself down once, then run entries until told to stop.
 
     The namespace is built once and kept, so a variable set by one entry
@@ -146,7 +148,7 @@ def worker(jobs, requests, answers, config: SandboxConfig, specs, manual):
     builtins_dict["open"] = make_guarded_directory(config.allowed_directories)
     # Exactly two kinds of callables: the wrappers of the connected
     # server's tools, and final_answer.
-    ns = build_namespace(specs, make_dispatch(requests, answers))
+    ns = build_namespace(specs, make_dispatch(outbox, answers))
     ns["final_answer"] = final_answer
     # The manual is also reachable from inside the sandbox, so code can
     # look up what it may call without leaving the namespace.
@@ -159,10 +161,10 @@ def worker(jobs, requests, answers, config: SandboxConfig, specs, manual):
         if job is None:
             return
         code, interactive = job
-        requests.put(("result", run_one(code, ns, interactive, requests)))
+        outbox.put(("result", run_one(code, ns, interactive, outbox)))
 
 
-def serve(p, requests, answers, client, timeout):
+def serve(p, outbox, answers, client, timeout):
     """Answer the child's tool calls until it sends its result.
 
     The parent cannot just wait with p.join(): the child may need an
@@ -174,7 +176,7 @@ def serve(p, requests, answers, client, timeout):
 
     Args:
         p: The running child.
-        requests: Queue the child posts on.
+        outbox: Queue the child posts on.
         answers: Queue to post tool results on.
         client: Connected MCPClient, or None when no server is attached.
         timeout: Seconds of sandboxed execution allowed.
@@ -193,12 +195,12 @@ def serve(p, requests, answers, client, timeout):
             return output.finish(TIMEOUT.format(timeout), False, None)
 
         try:
-            message = requests.get(timeout=min(remaining, POLL_SECONDS))
+            message = outbox.get(timeout=min(remaining, POLL_SECONDS))
         except queue.Empty:
             if p.is_alive():
                 continue
             try:
-                message = requests.get(timeout=DRAIN_SECONDS)
+                message = outbox.get(timeout=DRAIN_SECONDS)
             except queue.Empty:
                 return output.finish(DIED, False, None)
 
@@ -304,12 +306,12 @@ class Sandbox:
     def start(self):
         # Fresh queues on every start: a dead child may have left a
         # message half-way that must not reach its successor.
-        self.jobs, self.requests, self.answers = (
+        self.jobs, self.outbox, self.answers = (
             mp.Queue(), mp.Queue(), mp.Queue()
         )
         self.p = mp.Process(
             target=worker,
-            args=(self.jobs, self.requests, self.answers,
+            args=(self.jobs, self.outbox, self.answers,
                   self.config, self.specs, self.manual),
             daemon=True,
         )
@@ -331,7 +333,7 @@ class Sandbox:
             self.start()
         self.jobs.put((code, interactive))
         stdout, stderr, error, is_final, answer = serve(
-            self.p, self.requests, self.answers, self.client, timeout
+            self.p, self.outbox, self.answers, self.client, timeout
         )
         if error in (TIMEOUT.format(timeout), DIED) or not self.p.is_alive():
             stop(self.p)

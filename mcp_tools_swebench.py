@@ -9,7 +9,7 @@ from mcp_tools.tools_search import (
     search_function_or_class_definition_in_code,
 )
 
-mcp = FastMCP("swebench-tools")
+mcp = FastMCP("swebench-tools", log_level="WARNING")
 mcp.add_tool(read_file)
 mcp.add_tool(edit_file)
 mcp.add_tool(list_files)
