@@ -51,8 +51,9 @@ poste a Docker classique ou le `lchown` du rootless ne se produit pas.
 `xarray-4629` 4/4, `sympy-13480` 3/4, `sympy-14711` 1/4 (`codestral`
 seul). Metriques 12/12 valides. Revele un defaut de `run_tests` SWE : le
 resultat des tests est coupe sur sympy (P1, revue du 2026-10-04).
-**638 tests verts** (2026-10-05), `ruff check` : 0 erreur ; `ruff format
---check` : 11 fichiers de ndi-tull non formates (`agent_swebench/docker.py`,
+**647 tests verts** (2026-10-05), `ruff check` : 0 erreur hors `exams/`
+(scripts du correcteur, 103 erreurs) ; `ruff format --check` : 11 fichiers de
+ndi-tull non formates (`agent_swebench/docker.py`,
 `mcp_tools/config.py`, `tools_exec.py`, `tools_fs.py`, `tools_search.py`,
 `sandbox/cli.py`, `executor.py`, `manual.py`, `mcp_client/client.py`,
 `wrappers.py`, `security/ast_guard.py`).
@@ -694,7 +695,12 @@ arguments de modele facultatifs, temps compte depuis le lancement de
 l'agent, SIGTERM et Ctrl+C nettoyes, `run_tests(code, test_list)` MBPP avec
 ligne `success:`, regle de l'`exit code` dans le prompt SWE, faux positifs
 anti-triche. 47 tests ajoutes ou mis a jour, 638 verts. Puis ce TODO et
-`BENCHMARK_REPORT.md` mis a jour (**non commite**).
+`BENCHMARK_REPORT.md` mis a jour (`7f48957`). Puis **merge d'`origin/ndi-tull`**
+(`7b48e6c` : `mcp>=1.22,<2` et FastMCP, `dir`, `TESTBED_PATH`, entree
+redirigee d'un bloc, filet `atexit` + SIGTERM ; conflit sur
+`mcp_tools/tools_mbpp.py` resolu en gardant la version de `thomas`) :
+`exam_sandbox.sh` a 11/14. Puis la **detection des etapes repetees** (P2.1),
+647 tests verts (**non commite**).
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -1238,6 +1244,28 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       d'examen ; en MBPP, le demarrage du serveur MCP (~1 s). Teste : un
       agent construit avec 120 s deja ecoulees sort sur `Timeout limit
       exceeded` sans requete
+- [x] **Etapes repetees signalees** (2026-10-05, non commite). Une etape
+      dont le code **et** la sortie sont identiques a une etape precedente
+      ne lui apprend rien, et le modele recommence quand meme : 32 etapes
+      ainsi dans la campagne SWE (`swebench/run1` a `run5`), sur 5 taches
+      dont **les 4 echecs** (`codestral` / `sympy-13480` : 11 fois le meme
+      `edit_file`), et 9 en MBPP sur 7 taches dont 6 echouees. Le meme code
+      avec une autre sortie (tests ou reproduction relances apres une
+      edition, 8 cas en SWE) est legitime et n'est pas signale.
+      `Loop.check_repeat()` garde par code (`.strip()`) les sorties deja vues
+      ; l'observation se termine alors par *« [Repeated step: this code is
+      the same as in step N and printed the same output. Running it again
+      will not change the result: change your approach.] »*, apres la
+      troncature, dans toutes les branches (sortie, erreur, `final_answer`
+      refuse). On previent, on ne coupe pas ; le `sandbox_output` du
+      `solution.json` reste la sortie brute. **Verifie** : 9 tests
+      (`TestRepeatedStepsArePointedOut`), 1 test d'elagage adapte (il
+      repetait le meme code), 5 mutations tuees, 647 tests verts ; rejeu sur
+      les `solution.json` versionnes : exactement 32 notes en SWE et 9 en
+      MBPP, aucune sur les 8 repetitions legitimes ; run reel MBPP 396 : la
+      note part a l'etape 2 (meme code, meme erreur), le modele change de
+      code a l'etape 3 (tache echouee quand meme : guillemets puis plafond
+      d'entree). **Effet sur les scores non mesure**
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -3341,7 +3369,7 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
 
 ### Le banc d'essai `tests/`
 
-**638 tests** (2026-10-05), gitignore, hors rendu — c'est un outil de travail,
+**647 tests** (2026-10-05), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

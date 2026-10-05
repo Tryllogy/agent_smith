@@ -106,6 +106,13 @@ tool, the MBPP agent now refuses to start without its MCP server.
   pulling the task's image and copying `/testbed` now count against
   SWE-bench's 900 s, as they do for the exam script, which times the whole
   process.
+- a step whose code **and** output are identical to an earlier step's now
+  ends its observation with a note saying so, and that running it again
+  will not change the result. In the versioned runs, that happens 32 times
+  in SWE-bench, on 5 tasks including all 4 failures of section 2.3 (11
+  identical `edit_file` calls for `codestral` on `sympy-13480`), and 9
+  times in MBPP; the same code with another output (tests rerun after an
+  edit, 8 cases) is not flagged. The model is told, nothing is stopped.
 
 ### 1.2 How results are judged
 
