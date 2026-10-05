@@ -11,7 +11,22 @@
 
 ---
 
-## Etat actuel — 2026-10-04
+## Etat actuel — 2026-10-05
+
+**2026-10-05 : examen blanc relu avec le bareme, corrections P2 (`89b76b0`).**
+L'examen blanc du 2026-10-04 au soir (scripts `exams/`, sur `4d0a580`,
+Docker classique) donne : sandbox **8/14, FAIL** (eliminatoire), MBPP
+**4/5, PASS**, SWE **1/3, FAIL** (premier faux succes, `sympy-14711`),
+anti-triche 4 avertissements. Croise avec le bareme (17 questions), 5
+questions echoueraient (Q2, Q6, Q15, Q16, Q17). **Cote P2, tout est corrige
+dans `89b76b0`** : arguments de modele facultatifs (Q2), temps compte
+depuis le lancement de l'agent, SIGTERM et Ctrl+C nettoyes (Q15, sauf
+`kill -9`), `run_tests(code, test_list)` MBPP (Q6, cause 3), regle du prompt
+SWE sur l'`exit code` de `run_tests` (Q16), faux positifs anti-triche de nos
+fichiers (Q12). **Le reste est cote P1** et fait toujours echouer le sandbox
+(Q6) : `dir()`, `mcp<2`, `TESTBED_PATH`, entree redirigee, evasion
+`random._os`. Detail dans « Examen blanc du 2026-10-04 » et « Revue du
+2026-10-05 » ci-dessous.
 
 **Cote P2 (tchemin) : la boucle appelle les outils MCP.** Les deux CLI
 lancent leur serveur MCP en stdio, inserent le manuel dans le prompt et
@@ -36,9 +51,11 @@ poste a Docker classique ou le `lchown` du rootless ne se produit pas.
 `xarray-4629` 4/4, `sympy-13480` 3/4, `sympy-14711` 1/4 (`codestral`
 seul). Metriques 12/12 valides. Revele un defaut de `run_tests` SWE : le
 resultat des tests est coupe sur sympy (P1, revue du 2026-10-04).
-**570 tests verts**, `ruff check` : 0 erreur ; `ruff format --check` : 8
-fichiers de ndi-tull non formates (`mcp_tools/*`, `sandbox/manual.py`,
-`sandbox/mcp_client/client.py`, `wrappers.py`).
+**638 tests verts** (2026-10-05), `ruff check` : 0 erreur ; `ruff format
+--check` : 11 fichiers de ndi-tull non formates (`agent_swebench/docker.py`,
+`mcp_tools/config.py`, `tools_exec.py`, `tools_fs.py`, `tools_search.py`,
+`sandbox/cli.py`, `executor.py`, `manual.py`, `mcp_client/client.py`,
+`wrappers.py`, `security/ast_guard.py`).
 
 **Merge d'`origin/ndi-tull` le 2026-10-04 (`ca8f0ad`)** : client MCP
 synchrone (`sandbox/mcp_client/client.py`), wrappers dans le namespace
@@ -55,13 +72,19 @@ modeles utilisables pour SWE, `nemotron-3-ultra` (NVIDIA) et `codestral-2508`,
 CLI SWE le 2026-10-02. Le sujet en demande **au moins 5** (*« at least 5
 models »*, ch. VI). **Mistral valide par l'equipe pedagogique le 2026-10-02**
 (credits mensuels offerts, sans carte ; le sujet le range d'ailleurs parmi
-les *« Cloud providers with free access »*, § V.6.1).
+les *« Cloud providers with free access »*, § V.6.1). **Regle le
+2026-10-04** : `qwen/qwen3.8-27b:free` (OpenRouter) est le 5e (dette 0
+ci-dessous).
 
 **`Makefile` : un modele par defaut par benchmark**, `codestral-2508`
 (Mistral) pour les deux : SWE depuis `560a18f`, MBPP depuis `3156144`
 (2026-10-03, a la place de `ministral-14b-2512`). **Seuls les modeles
 declares dans `configs/models.json` sont acceptes** (`c7727cc`) : un modele
-payant non declare est refuse avant toute requete.
+payant non declare est refuse avant toute requete. **Depuis le 2026-10-05
+(`89b76b0`), les deux CLI ont le meme defaut** : sans `--model-name`,
+`codestral-2508` (`constants.MBPP_DEFAULT_MODEL`, `SWE_DEFAULT_MODEL`) ;
+sans `--provider-url`, le fournisseur qui declare le modele dans
+`models.json`.
 
 **MBPP : campagne des 5 modeles sur l'agent branche MCP** (2026-10-04,
 `run45` a `run54`, memes 20 taches) : Groq 18/20, `nemotron-3-ultra` 16/20,
@@ -80,8 +103,10 @@ appele dans 112 etapes sur 126, et les reponses sont plus courtes (sortie
 
 **`BENCHMARK_REPORT.md` : partie MBPP a jour au 2026-10-04** (en anglais),
 sur les 60 campagnes `run5` a `run64` (ablation G comprise), **versionnees dans
-`benchmarks/mbpp/`** avec leurs `solution.json`. Les sections SWE gardent la
-structure du sujet et attendent Docker (P2.6).
+`benchmarks/mbpp/`** avec leurs `solution.json`. **Partie SWE ecrite le
+2026-10-04 au soir** (`benchmarks/swebench/run1` a `run5`), **mise a jour le
+2026-10-05** : examen blanc (§ 2.4), premier faux succes, changements de
+`89b76b0` decrits mais non mesures (§ 1.1) (P2.6).
 
 **Docker de la machine : rootless** (constate le 2026-10-04). Le compte
 n'est pas dans le groupe `docker` : le SDK Python `docker` (moulinette, et le
@@ -105,8 +130,9 @@ comptes** (`81bfa3b`), **et sequence d'arret retiree pour Groq
 
 > **Docker, le CLI `sandbox` et `sandbox_template.json` sont arrives le
 > 2026-10-04** (merge `2610650`). Restent sur le chemin critique : **la
-> securite du sandbox** (evasion toujours ouverte, P1), **`run_tests` SWE
-> qui cache le resultat des tests** (P1) et **le 5e modele SWE** (P2). ~~La
+> securite du sandbox** (evasion toujours ouverte, P1), **les 6 tests MCP
+> d'`exam_sandbox.sh`** (P1, examen blanc), **`run_tests` SWE qui cache le
+> resultat des tests** (P1) et **`sympy-14711` pour Qwen** (P2). ~~La
 > mise au point SWE sur les 3 taches, puis la partie SWE du rapport~~ —
 > faites le 2026-10-04 (P2.6, `BENCHMARK_REPORT.md` § 2.3 a 6.2).
 
@@ -117,7 +143,7 @@ comptes** (`81bfa3b`), **et sequence d'arret retiree pour Groq
    actions », 4 bis). **Trouve le 2026-10-04** : `qwen/qwen3.8-27b:free`
    (OpenRouter, P2.3 « Sondes du 2026-10-04 »), 2/2 sur `sympy-13480` et
    `xarray-4629` (`swebench/run5`) ; **reste `sympy-14711`**, quota
-   OpenRouter du jour epuise
+   OpenRouter du jour epuise ; toujours en attente le 2026-10-05
 1. ~~**Docker** : `agent_swebench/docker.py` est vide~~ — **reglee le
    2026-10-04** : `TaskContainer` de ndi-tull (`e9e5dd1`), branche dans
    l'agent SWE (P2.5), premier run reel le meme jour (P2.6)
@@ -125,6 +151,169 @@ comptes** (`81bfa3b`), **et sequence d'arret retiree pour Groq
    2026-10-02 (« Prochaines actions », 4 quater)
 3. ~~L'echeance de 30 s par appel est trop courte pour SWE~~ — reglee le
    2026-10-02 (« Prochaines actions », 4 ter)
+
+### Examen blanc du 2026-10-04 (scripts `exams/` et bareme de correction)
+
+Les quatre scripts de `exams/` lances comme le ferait le correcteur, le
+2026-10-04 a 22 h 10, sur `4d0a580` (meme code que `84d22b1`), poste a
+Docker classique, `codestral-2508` passe explicitement ; puis croises avec
+le bareme (17 questions, page intra du 2026-10-04). Comptes rendus complets
+hors depot (`EXAMRESUME.md`, `EVALRESUME.md`), sorties brutes dans
+`evaluations/` (non versionne) sur ce poste.
+
+| Examen | Resultat | Seuil | Statut |
+|---|---|---|---|
+| Sandbox (`exam_sandbox.sh`) | 8/14 + bonus layer 1 | tous | **FAIL** (eliminatoire) |
+| MBPP (`exam_mbpp.sh`) | 4/5 (MBPP 235 : pas de solution en 4 it., arret sur la garde d'entree) | 4/5 | PASS |
+| SWE (`exam_swebench.sh`) | 1/3 : `13480` PASS (3 it.), `14711` **faux succes** (11 it.), `scikit-learn-13439` plafond de 30 it. ; conteneurs supprimes | 2/3 | **FAIL** |
+| Anti-triche (`exam_anticheat.sh`) | 4 avertissements sur 6 | aucun | a expliquer |
+
+Consignes generales du bareme qui pesent : *« If a crash occurs during
+execution, the final grade is 0 »*, *« No modification of student code is
+allowed »*, *« Docker containers must be cleaned even after forced
+termination »*.
+
+**Cote P2 — corrige le 2026-10-05 (`89b76b0`)**, verifie a l'execution :
+
+- [x] **Q2 : les commandes du bareme ne passent ni `--model-name` ni
+      `--provider-url`**, que nos deux CLI exigeaient : chaque tache mourait
+      sur l'erreur d'argparse (code 2, aucun `solution.json`, aucune image
+      tiree). Desormais `--model-name` vaut `codestral-2508` par defaut
+      (`constants.MBPP_DEFAULT_MODEL`, `SWE_DEFAULT_MODEL`), et sans
+      `--provider-url` l'agent prend le fournisseur qui declare le modele
+      dans `models.json` (`find_provider_url_by_model()` ; aucun ou plusieurs
+      → `solution.json` en echec qui le dit). Verifie : MBPP 396 sans
+      argument de modele, PASSED / VALID par la moulinette
+- [x] **Le temps compte depuis le lancement de l'agent** : le script
+      d'examen chronometre tout le processus, pull de l'image compris
+      (`scikit-learn-13439` : 135 s dont le pull, pour 48 s de boucle).
+      `main()` passe son `start_time` a l'agent puis a `Loop` ; les gardes et
+      `total_time_seconds` (*« from agent start »*, dit le schema) en partent
+- [x] **Q15, SIGTERM et Ctrl+C** : SIGTERM laissait le conteneur orphelin
+      (aucun gestionnaire) ; Ctrl+C le supprimait, mais le second SIGINT
+      relaye par `uv` coupait la suppression de la copie `/tmp` (trace
+      `KeyboardInterrupt`, pas de `solution.json`).
+      `interrupt_on_signals()` (`core/agent_cli_helper.py`) : SIGINT, SIGTERM
+      et SIGHUP levent `KeyboardInterrupt`, le nettoyage normal tourne, les
+      signaux suivants sont ignores ; les processus forkes (sandbox) gardent
+      le comportement par defaut. `main()` ecrit un `solution.json`
+      « Interrupted by SIGTERM » et sort en 1 ; les deux `cli.py` nettoient
+      aussi sur une interruption au demarrage (`except BaseException`).
+      Verifie sur `sympy-13480` : SIGTERM a Python, puis SIGINT au groupe
+      `uv` + Python (au demarrage et en pleine boucle) → aucun conteneur
+      `sweb-`, aucune copie `/tmp/agent_smith_*`, aucune trace
+- [x] **Q6, cause 3 : `run_tests(code=..., test_list=[...])`** (test 6
+      d'`exam_sandbox.sh`, serveur lance sans `--task-file`) : voir P1.5.
+      Verifie avec le vrai test du correcteur : `success: true (3 of 3
+      tests passed)` ; le test echoue ensuite sur `dir()` (P1)
+- [x] **Q16 : faux succes de `sympy-14711`** : `run_tests()` affichait
+      `exit code: 0` (le `git checkout` final de l'`eval_script`) au-dessus
+      de « 3 passed, 1 exceptions », et le modele a ecrit « The fix now works
+      correctly ». Cote P2 : une regle du prompt SWE (l'`exit code` vaut 0
+      meme quand des tests echouent ; juger entre `>>>>> Start Test Output`
+      et `>>>>> End Test Output`), et l'exemple SWE lit le resume des tests.
+      **Non mesure.** Le vrai correctif reste l'outil (P1)
+- [x] **Q12, faux positifs anti-triche de nos fichiers** : `*_PROMPT_EXEMPLE`
+      (« PROMPT » contient « PR ») renommes `MBPP_EXAMPLE` / `SWE_EXAMPLE`,
+      regle « FORBIDDEN to git commit » reformulee sans « commit ». Reste
+      `PROMPT = ">>> "` (`sandbox/cli.py`, P1). Les avertissements `httpx`
+      (client LLM) et `swebench` (noms imposes par le sujet) sont
+      inevitables : a expliquer au correcteur
+- [ ] **Q13 / Q14** : `sympy-14711` pour Qwen, une ablation SWE (3★ : 2+
+      ablations, 7+ modeles ou 5+ taches), et des taches SWE de plus
+      (`django-11066`, `scikit-learn-13439`, `sympy-18189` sont dans le
+      tirage de l'examen et jamais mesurees en campagne)
+- [ ] **Q16 / Q17, qualite SWE** : `scikit-learn-13439` au plafond (deux
+      `edit_file` a `old_str` invente, puis 19 `read_file` par fenetres de 20
+      lignes sans nouvelle edition) : meme famille que les echecs de la
+      campagne (P2.6), message d'`edit_file`, action repetee, elagage
+- [ ] Versionner les sorties de l'examen blanc (`evaluations/` du poste a
+      Docker classique) sous `benchmarks/`, puisque le rapport les cite
+      (§ 2.4)
+- [ ] Un agent interrompu ecrit un `solution.json` sans ses etapes
+      (`write_failure_output`) ; garder celles de la boucle serait plus
+      lisible, sans effet sur la note
+
+**Cote P1 — a transmettre a ndi-tull** (sandbox 8/14, critere eliminatoire) :
+
+- [ ] **Q6 cause 1 : `dir()` absent des builtins** : les tests verifient les
+      outils par `'add' in dir()` (`NameError`). Seule cause de l'echec du
+      test HTTP, dont la connexion marche
+- [ ] **Q6 cause 2 : `mcp` 2.0.0** : le serveur de test du correcteur importe
+      `mcp.server.fastmcp`, absent en 2.0 ; notre sandbox le lance avec notre
+      Python et il meurt au demarrage (tests 9, 12, 13). Correctif propose :
+      `mcp>=1.22,<2` (la moulinette a 1.26) et nos serveurs sur `FastMCP`. A
+      verifier au passage : en 1.x, `Tool.input_schema` (lu par `manual.py`)
+      et `streamable_http_client` n'ont pas ces noms
+- [ ] **Q6 cause 4 : `TESTBED_PATH` ignore** par `mcp_tools_swebench.py`,
+      qui ne lit que `--repo-root`
+- [ ] **Q6 cause 5 : `cat test.py | uv run sandbox`** : une ligne vide ferme
+      le bloc, comme au REPL ; executer l'entree d'un bloc quand ce n'est pas
+      un terminal
+- [ ] Test 13 : exposer un manuel dans le namespace (`sandbox_manual`,
+      `tool_manual` ou `get_manual()`), le test s'en sert s'il existe
+- [ ] **`final_answer(answer=...)` leve `TypeError`** : le manuel annonce
+      `final_answer(answer)`, `executor.py` nomme le parametre `value` (vu
+      dans `test_mbpp_tools.py` du correcteur)
+- [ ] **Q15, `kill -9`** : le conteneur reste, aucun code ne peut tourner.
+      Correctif propose : `docker run --rm -i` sur un processus qui lit une
+      entree standard tenue ouverte par l'agent (`agent_swebench/docker.py`) ;
+      a la mort de l'agent, l'entree se ferme et le conteneur disparait
+- [ ] **Copies `/tmp/agent_smith_*`** : 23 (~450 Mo) restaient le 2026-10-04
+      au soir sur le poste a Docker classique, y compris en sortie normale :
+      fichiers ecrits par le conteneur, sans doute a root, que
+      `rmtree(..., ignore_errors=True)` ne supprime pas
+- [ ] **Q16 : `run_tests` SWE** doit rendre le resultat des tests (revue du
+      2026-10-04, « `run_tests` SWE cache le resultat des tests »). Quand il
+      changera, l'exemple SWE devra suivre : `tests/test_prompt.py` le rejoue
+      contre les vrais outils
+- [ ] **Q5 : evasion `random._os`** (revue du 2026-10-04, toujours ouverte)
+- [ ] Q12 : renommer la file `requests` d'`executor.py` (`requests.get(` est
+      cherche par l'anti-triche) et la constante `PROMPT` de `sandbox/cli.py`
+
+### Revue du 2026-10-05 (projet relu en entier avec ce TODO, verifie a l'execution)
+
+Faite sur `84d22b1`, avant `4d0a580` et `89b76b0`.
+
+**Nouveau, absent du TODO :**
+
+- [ ] **Les outils fichiers SWE ne sont pas confines a `/testbed`** :
+      `to_host` (`mcp_tools/config.py:72`) laisse passer tout chemin absolu.
+      Verifie : `read_file("/etc/hostname", 1, 1)` lit le fichier de l'hote ;
+      `edit_file`, `list_files` et `find_references` passent par la meme
+      fonction. Le modele pourrait lire le `.env` du projet, et les cles
+      finiraient dans `solution.json`. Consequence du choix (b) : la copie
+      de `/testbed` est sur l'hote. Correctif : refuser un chemin qui, une
+      fois resolu, sort de `repo_root` (P1)
+- [ ] **Resources et prompts MCP annonces mais inaccessibles** : le manuel
+      les liste (`sandbox/manual.py:186`), le broker (`executor.py:208`) ne
+      relaie que `call_tool`. Le § V.2.5 dit *« MCP tools, resources, and
+      prompts must be exposed »* ; P1.4 le cochait. Correctif : primitives
+      `read_resource(uri)` / `get_prompt(name, ...)` relayees par le broker
+      (P1)
+- [ ] Le manuel rend `test_list: any = ...` pour `run_tests` MBPP : il ne
+      lit pas le `anyOf` du schema (`list[str] | None`) (P1, `manual.py`)
+- [ ] `docker>=7` dans `pyproject.toml` alors que `docker.py` passe par la
+      commande `docker` : dependance inutile (la moulinette a la sienne)
+
+Le plafond de 20 000 caracteres qui ne garde que le debut (`executor.py`)
+etait deja note dans la revue du 2026-10-04 (« `run_tests` SWE cache le
+resultat des tests »).
+
+**Entrees perimees corrigees dans ce TODO** : retours du § V.1 (sortie
+partielle et syntaxe apres `edit_file` faites par `341a778`, reste le
+lint), troncature dans le sandbox, `sandbox_template.json`, Phase 0
+(`core/models.py` relu : champs, types et defauts identiques a
+`models_public.py`, sauf les defauts de `SandboxConfig`, deja notes ;
+`uv run sandbox` marche), P1.2, P1.5 (vrais conteneurs), P1.6 (duree du
+pull), P2.1 (`sandbox_output` plus entier), P2.5
+(`final_answer(get_patch())` teste), compteurs de tests et de formatage.
+
+**Reverifie, toujours ouvert** : evasion (`random._os.system('echo PWNED')`
+lance la commande, `typing.sys.modules['builtins'].open('/etc/hostname')`
+lit le fichier, `_socket` accessible) ; `get_patch` embarque les
+changements de mode (reproduit sur un depot temporaire : `old mode 100755
+/ new mode 100644`) ; `read_file(path)` leve `TypeError`.
 
 ### Revue du 2026-10-04 (sujet, TODO et code relus ; merge et branchement verifies a l'execution)
 
@@ -154,7 +343,7 @@ puis sur `ca8f0ad`.
       `exit`
 - [x] **Docker** : `agent_swebench/docker.py` vide — **regle le 2026-10-04**
       (`e9e5dd1`, branche cote P2, P2.5 et P1.6)
-- [ ] **Retours exiges par le § V.1 : 2 cas sur 5 manquent** (4 au moment de
+- [~] **Retours exiges par le § V.1 : 2 cas sur 5 manquent** (4 au moment de
       la revue, le decompte « 3 » ecrit alors etait faux). Aucun bloc → ✓.
       Bloc mal forme interprete quand meme → ✓ **depuis le 2026-10-04**
       (P2.2 ; avant, un bloc python sans fermeture rendait « No code block
@@ -162,7 +351,13 @@ puis sur `ca8f0ad`.
       sortie est perdue, meme avec le broker). Sortie tronquee → ✓ **depuis
       le 2026-10-04** (`3538fcf`, P2.1 : la boucle coupe l'observation et le
       dit ; avant, un `read_file` de 2 000 lignes rendait 21 685 caracteres
-      entiers). Erreur de syntaxe ou de lint apres `edit_file` → ✗
+      entiers). Erreur de syntaxe ou de lint apres `edit_file` → ✗.
+      **Mis a jour le 2026-10-05** : sortie partielle au timeout → ✓ et
+      erreur de syntaxe apres `edit_file` → ✓ depuis le merge `84d22b1`
+      (`341a778`, ndi-tull : sortie envoyee au parent au fil de l'eau,
+      avertissement de `compile()` apres l'edition), verifies a
+      l'execution ; le test 14 de l'examen blanc (« retours explicites »)
+      passe. **Reste le lint** (P1)
 
 **Risque absent jusqu'ici — le budget d'entree SWE est cumule :**
 
@@ -261,6 +456,10 @@ puis sur `ca8f0ad`.
 **Rendu :**
 
 - [ ] `en.subject.pdf` (2,2 Mo) est versionne, comme `moulinette.zip`
+- [ ] **`exams/` est versionne** (`4d0a580`) : ce sont les scripts du
+      correcteur, et `exam_anticheat.sh` signale
+      `exams/sandbox_tests/test_network_blocked.py` (URL GitHub). A retirer
+      du depot avant le rendu (decision commune)
 
 ### Revue du 2026-10-01 (sujet relu en entier, code relu, tout verifie a l'execution)
 
@@ -306,11 +505,18 @@ puis sur `ca8f0ad`.
       (`executor.py:57-71`), l'enfant attend que le parent lise, le parent
       attend que l'enfant finisse. **Regle par le broker de ndi-tull**
       (`331543a`, merge `ca8f0ad`) : 200 000 caracteres reviennent entiers,
-      verifie le 2026-10-04. Reste : aucune troncature (exigee, V.1)
-- [ ] **Timeout = sortie partielle perdue** (`StringIO` dans l'enfant tue) ;
-      le sujet exige de la renvoyer
-- [ ] `sandbox_template.json` fait 0 octet : `uv run sandbox
-      sandbox_template.json` plantera au parsing
+      verifie le 2026-10-04. Reste : aucune troncature (exigee, V.1) —
+      **faite depuis `84d22b1`** (`341a778`) : 20 000 caracteres par flux et
+      par resultat d'outil, signales au modele ; mais seul le debut est
+      garde (revue du 2026-10-04, `run_tests` SWE)
+- [x] **Timeout = sortie partielle perdue** (`StringIO` dans l'enfant tue) ;
+      le sujet exige de la renvoyer — **regle par `341a778`** (merge
+      `84d22b1`) : la sortie part au parent au fil de l'eau. Verifie le
+      2026-10-05 : `print('before')` puis une boucle infinie rendent
+      `before` avec l'erreur de timeout
+- [x] `sandbox_template.json` fait 0 octet : `uv run sandbox
+      sandbox_template.json` plantera au parsing — **regle le 2026-10-04**
+      (`da080c2`)
 - [x] **Signatures des outils `ndi-tull` non conformes au § V.5** — critere
       eliminatoire (*"All mandatory tools pass independent tests"*). **Calees
       par ndi-tull le 2026-10-04** (`9bc28dd`, merge `ca8f0ad`), sauf le
@@ -473,7 +679,22 @@ copies d'`eval_script` laissees dans `/tmp` par l'ancien helper
 supprimees ; le helper n'existe plus. Le tout commite dans `6a933b9`.
 Puis le **sandbox persistant** et le **timeout configure respecte** (P2.1,
 `84338df`), et un **deuxieme run SWE**, sur `sympy__sympy-13480`, resolu
-(P2.6). **Non commite** : `TODO.md`.
+(P2.6). `TODO.md` commite dans `f4b09fd`. **Le soir** : merge
+d'`origin/ndi-tull` (`84d22b1` : sortie partielle au timeout, plafond de
+20 000 caracteres, avertissement de syntaxe d'`edit_file`), **campagne SWE
+des 4 modeles** (`swebench/run1` a `run4`, 8/12, validee par la vraie
+moulinette sur un poste a Docker classique), **sondes du 5e modele** et
+`swebench/run5` (Qwen, 2/2), partie SWE du rapport, scripts du correcteur
+dans `exams/` : le tout commite dans `4d0a580`. Puis **examen blanc** sur
+`4d0a580` (voir « Examen blanc du 2026-10-04 »).
+
+**2026-10-05** : revue du projet (« Revue du 2026-10-05 »), puis
+**corrections P2 issues de l'examen blanc**, commitees dans `89b76b0` :
+arguments de modele facultatifs, temps compte depuis le lancement de
+l'agent, SIGTERM et Ctrl+C nettoyes, `run_tests(code, test_list)` MBPP avec
+ligne `success:`, regle de l'`exit code` dans le prompt SWE, faux positifs
+anti-triche. 47 tests ajoutes ou mis a jour, 638 verts. Puis ce TODO et
+`BENCHMARK_REPORT.md` mis a jour (**non commite**).
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -491,7 +712,7 @@ Puis le **sandbox persistant** et le **timeout configure respecte** (P2.1,
 
 ### Qui a du code
 
-Etat au 2026-10-04 (apres le merge `2610650`) :
+Etat au 2026-10-05 :
 
 | Ecrit | Encore vide |
 |---|---|
@@ -501,7 +722,7 @@ Etat au 2026-10-04 (apres le merge `2610650`) :
 | `mcp_tools/` (`tools_fs`, `tools_search`, `tools_exec`, `tools_mbpp`, `config`) + les 2 `mcp_tools_*.py` racine, signatures conformes depuis `9bc28dd` | `README.md` |
 | `agent_mbpp/`, `agent_swebench/`, branches sur MCP (et Docker pour SWE) le 2026-10-04 | |
 | `sandbox/executor.py`, `sandbox/manual.py`, `sandbox/mcp_client/` (`client.py`, `wrappers.py`, `transports.py`), `configs/` | |
-| `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` ; `BENCHMARK_REPORT.md` (partie MBPP) | |
+| `sandbox/security/` : `imports`, `builtins`, `filesystem`, `network`, `ast_guard` ; `BENCHMARK_REPORT.md` (MBPP et SWE) | |
 
 Trois modules supprimes, avec leur raison : **`usage.py`** (le suivi d'usage vit
 dans `Loop`, un module separe aurait duplique l'etat sans proprietaire),
@@ -524,7 +745,8 @@ mcp_tools/     + tools_fs.py  + tools_search.py  + tools_exec.py
 agent_mbpp/    + __main__.py  + cli.py
 agent_swebench/+ __main__.py  + cli.py  . docker.py
 configs/       + models.json  + fallback.json
-tests/         + banc d'essai local, gitignore, hors rendu (519 tests)
+tests/         + banc d'essai local, gitignore, hors rendu (638 tests)
+exams/         + scripts du correcteur (4d0a580), a retirer avant le rendu
 ```
 
 ### Deux fichiers de models Pydantic — le critere est « qui possede le schema »
@@ -543,8 +765,9 @@ validateurs de l'autre » — qui ne dit rien de ce qu'on peut ecrire dans chaqu
       512 Mo). C'est le seul des cinq models **jamais echange** avec la
       moulinette. Trois sorties, par ordre de preference — sous-classer comme le
       fait la moulinette elle-meme (`moulinette/moulinette/models.py:23`),
-      externaliser les valeurs dans `sandbox_template.json` (**vide
-      aujourd'hui**, alors que le `Makefile` le propose en `CONFIG=`), ou assumer
+      externaliser les valeurs dans `sandbox_template.json` (**rempli depuis
+      `da080c2`**, mais seul le CLI `sandbox` le lit : les agents prennent
+      `SandboxConfig()`), ou assumer
       la divergence en la commentant.
 
 ---
@@ -577,10 +800,16 @@ Setup uv, `pyproject.toml`, Python 3.10 (`.venv` en 3.10.20), Makefile,
 `execute(code, config) → (stdout, stderr, error, is_final, answer)` stabilisee et
 en service, chargement du `.env` et de `configs/models.json` dans les CLI.
 
-- [ ] **Relire `core/models.py` champ par champ contre le sujet (V.3 / V.4)**
+- [x] **Relire `core/models.py` champ par champ contre le sujet (V.3 / V.4)**
       avant d'aller plus loin. Une signature fausse casse les deux moities du
-      projet et n'est detectee qu'a la validation moulinette.
-- [ ] `uv run sandbox` ne marchera qu'une fois `sandbox/cli.py:main()` ecrit.
+      projet et n'est detectee qu'a la validation moulinette. **Fait le
+      2026-10-05** (comparaison des `model_fields` avec
+      `moulinette/models_public.py`) : memes champs, dans le meme ordre, memes
+      types, memes obligatoires et memes defauts ; seuls different les
+      defauts de `SandboxConfig` (les valeurs du sujet chez nous, des listes
+      vides chez la moulinette)
+- [x] `uv run sandbox` ne marchera qu'une fois `sandbox/cli.py:main()` ecrit.
+      **Ecrit le 2026-10-04** (`da080c2`)
 
 ### Dependances
 
@@ -606,6 +835,9 @@ transports sont obligatoires) : `ClientSession`, `StdioServerParameters`,
 C'est `list_tools()` qui alimente la generation du manuel. **Verifie le
 2026-10-03** : en `mcp` 2.0.0, `Tool.input_schema` est en snake_case, ce que
 lit `manual.py`, et le client HTTP s'appelle `streamable_http_client`.
+**Examen blanc du 2026-10-04** : le serveur de test du correcteur importe
+`mcp.server.fastmcp`, que notre `mcp` 2.0.0 n'a plus, et meurt au demarrage.
+Passer a `mcp>=1.22,<2` est a trancher cote P1 (Q6, cause 2).
 
 Dans le container SWE-bench (optionnel) : `jedi` (`find_references`), `ruff`
 (verification apres `edit_file`), `tree`.
@@ -664,8 +896,10 @@ hallucine ses observations.
   - [x] aucun bloc trouve, et **bloc malforme** (2026-10-04) : faits cote P2,
         dans l'extraction et la boucle (P2.2)
   - [x] **troncature** (2026-10-04) : faite cote P2, dans la boucle (P2.1)
-  - [ ] sortie partielle au timeout, verification apres `edit_file` :
-        restent cote P1 (sandbox et outils)
+  - [x] sortie partielle au timeout et erreur de syntaxe apres
+        `edit_file` : faites par ndi-tull (`341a778`, merge `84d22b1`),
+        verifiees le 2026-10-05
+  - [ ] lint apres `edit_file` : rien (P1)
 
 ### P1.3 — CLI sandbox
 
@@ -687,6 +921,9 @@ hallucine ses observations.
       un processus enfant ; ses appels d'outils remontent au parent, qui tient
       le client (broker d'`executor.py`), et le temps passe dans un outil est
       rendu a l'echeance du sandbox
+- [ ] **Resources et prompts** : listes dans le manuel, mais aucun moyen de
+      les lire depuis le sandbox (le broker ne relaie que `call_tool`). Voir
+      la revue du 2026-10-05
 - [x] Generation dynamique du **sandbox manual** depuis les schemas du serveur
       — `sandbox/manual.py` (ndi-tull, `2b4ddb3`). Verifie le 2026-10-03 sur
       les deux vrais serveurs : 9 outils cote SWE (signature, puis docstring),
@@ -745,11 +982,12 @@ de l'agent lance le serveur (`connect_mcp_server()`), rend le manuel avec
       diff unifie), `run_command(command, workdir)`
 
   **Signatures et comportements cales sur le § V.5 le 2026-10-04**
-  (`9bc28dd`). Restent (revue du 2026-10-04) : le `git add -A` de
-  `get_patch`, `read_file` sans valeurs par defaut, aucune verification
-  apres `edit_file` (la troncature des sorties est faite dans la boucle
-  depuis le 2026-10-04, P2.1). Rien n'a tourne contre un vrai conteneur
-  SWE.
+  (`9bc28dd`). Restent : le `git add -A` de `get_patch`, `read_file` sans
+  valeurs par defaut, le `run_tests` SWE qui cache le resultat des tests
+  (revue du 2026-10-04) et les chemins hors `/testbed` (revue du
+  2026-10-05). Faits depuis : avertissement de syntaxe apres `edit_file`
+  (`341a778`), et les 9 outils ont tourne contre de vrais conteneurs
+  (campagne SWE du 2026-10-04, P2.6).
 - [x] `mcp_tools_mbpp.py` et `mcp_tools_swebench.py` a la **racine** : le
       serveur SWE enregistre les 9 outils, le serveur MBPP `run_tests`
 
@@ -776,6 +1014,16 @@ impose.
       l'`eval_script` du conteneur ; cote MBPP il n'y a pas d'`eval_script`, la
       specification ce sont les `test_list`. Meme nom, deux sources de verite —
       un outil parametre ou deux implementations ?
+- [x] **`run_tests(code, test_list=None)`** (2026-10-05, `89b76b0`, examen
+      blanc, Q6 cause 3) : `exam_sandbox.sh` appelle `run_tests(code=...,
+      test_list=[...])` sur un serveur lance sans `--task-file`. Une
+      `test_list` passee remplace celle de la tache (les `test_imports` de
+      la tache restent) ; sans tache ni `test_list`, l'outil le dit. Le
+      rapport commence par `success: true|false (N of M tests passed)` : le
+      test du correcteur cherche « success » et « true » dans le resultat,
+      et l'exemple MBPP soumet si le rapport commence par `success: true`
+      (avant, il cherchait `FAIL` et `ERROR`, mots qu'un test peut contenir).
+      Manuel MBPP : +158 caracteres (~50 tokens) par tour
 
 ### P1.6 — Docker / SWE-bench
 
@@ -812,9 +1060,17 @@ impose.
 - [x] Le branchement P2 lancait le serveur SWE sur l'hote avec
       `--repo-root /testbed` : **remplace le 2026-10-04** par le conteneur de
       la tache (P2.5)
-- [ ] La duree du pull et de la copie (~110 s pour `sympy__sympy-14711`)
+- [x] La duree du pull et de la copie (~110 s pour `sympy__sympy-14711`)
       n'entre pas dans `total_time_seconds`, mais un script d'examen peut
-      avoir son propre delai : envisager de tirer les images a l'avance
+      avoir son propre delai : envisager de tirer les images a l'avance —
+      **confirme par l'examen blanc** (le script chronometre tout le
+      processus, 900 s) et **regle le 2026-10-05** (`89b76b0`, P2) : la
+      boucle compte depuis le lancement de l'agent
+- [~] **Interruption** (Q15 du bareme : *« containers must be cleaned even
+      after forced termination »*). SIGTERM et Ctrl+C : faits cote P2 le
+      2026-10-05 (`89b76b0`, examen blanc). Restent cote P1 : `kill -9`
+      (conteneur lie a la vie de l'agent) et les copies `/tmp` laissees avec
+      un Docker classique (examen blanc)
 
 ### P1.7 — Tests de securite
 
@@ -929,7 +1185,8 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
     tests) et le dit au modele (*« [Output truncated: N characters, only
     the first X and the last Y are shown. Print a smaller part…] »*) — le
     signalement exige par le § V.1. Le `sandbox_output` du `solution.json`
-    garde la sortie entiere
+    gardait la sortie entiere ; depuis `84d22b1`, le sandbox la coupe deja a
+    20 000 caracteres par flux, en gardant le debut
   - `full_observations` (SWE 3, MBPP `None`) : au-dela des 3 dernieres, une
     observation est remplacee par *« [Output of step S elided to save tokens
     (N characters). Run the code again if you need it.] »*. Prompt systeme,
@@ -973,6 +1230,14 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       MCP reste rendu a l'echeance : un `run_tests()` SWE de plusieurs
       minutes n'est pas coupe a 30 s. 2 tests ; l'ancien calcul fait echouer
       celui du delai configure
+- [x] **Le temps compte depuis le lancement de l'agent** (2026-10-05,
+      `89b76b0`, examen blanc). `Loop(start_time=)` recoit l'heure de debut
+      de `main()` (par defaut, la construction de la boucle) ; les gardes de
+      temps et `total_time_seconds` en partent. En SWE, le pull de l'image et
+      la copie de `/testbed` entrent dans les 900 s, comme pour le script
+      d'examen ; en MBPP, le demarrage du serveur MCP (~1 s). Teste : un
+      agent construit avec 120 s deja ecoulees sort sur `Timeout limit
+      exceeded` sans requete
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -2014,6 +2279,24 @@ Sources : [yangmao.ai — NVIDIA Build](https://yangmao.ai/en/providers/nvidia-b
       l'aveugle sur 8** (2 a 3 par campagne avant), mais un nouvel echec —
       l'import oublie de 451, rattrape depuis par la boucle (P2.1)
 
+- [x] **Regle de l'`exit code` de `run_tests()` dans le prompt SWE**
+      (2026-10-05, `89b76b0`). Examen blanc, `sympy-14711` : `exit code: 0`
+      (le `git checkout` final de l'`eval_script`) au-dessus de « 3 passed, 1
+      exceptions », et le modele a soumis un faux correctif. Le prompt dit
+      maintenant que ce code vaut 0 meme quand des tests echouent, de juger
+      entre `>>>>> Start Test Output` et `>>>>> End Test Output`, et de ne
+      jamais dire le correctif verifie tant qu'un test y echoue ; la derniere
+      etape de l'exemple lit le resume des tests. Prompt SWE +486 caracteres
+      (~150 tokens) par tour. **Effet non mesure**
+- [x] **Faux positifs anti-triche** (2026-10-05, `89b76b0`) :
+      `exam_anticheat.sh` signale toute ligne qui contient `pull`, `PR`,
+      `issue` ou `commit` et, chemin compris, `prompt`, `system` ou
+      `message`. `MBPP_PROMPT_EXEMPLE` / `SWE_PROMPT_EXEMPLE` deviennent
+      `MBPP_EXAMPLE` / `SWE_EXAMPLE`, et « It is FORBIDDEN to git commit or
+      make a patch empty » devient « Never save your changes with git:
+      get_patch() reads them from the working tree, and an empty patch is
+      FORBIDDEN ». Un test rejoue ces motifs sur nos fichiers
+
 → **Methode :** resoudre une tache a la main avec seulement les outils de
 l'agent, et transcrire ce raisonnement dans le prompt.
 
@@ -2029,13 +2312,20 @@ sur toutes les taches mesurees.
 **Helpers factorises** dans `core/agent_cli_helper.py` — la frontiere se defend :
 le helper lit l'environnement et les fichiers, les CLI cablent les objets.
 
-- [ ] `final_answer(get_patch())` est enseigne dans le prompt mais **non teste en
+- [x] `final_answer(get_patch())` est enseigne dans le prompt mais **non teste en
       execution** : `get_patch()` est appelable depuis le 2026-10-04, mais
       aucun conteneur SWE n'existe (P1.6). Jusqu'au 2026-10-01 la boucle
       l'aurait de toute facon **refuse** (`ast.parse` sur un diff) — corrige,
-      voir la revue du 2026-10-01
+      voir la revue du 2026-10-01. **Teste depuis le 2026-10-04** : 10
+      patchs `RESOLVED_FULL` dans la campagne SWE (P2.6)
+- [x] **`--model-name` et `--provider-url` facultatifs** (2026-10-05,
+      `89b76b0`, examen blanc, Q2) : voir « Examen blanc du 2026-10-04 ».
+      Le `Makefile` garde ses propres defauts, identiques
+- [x] **Interruption propre** (2026-10-05, `89b76b0`, Q15) :
+      `interrupt_on_signals()` dans les deux `main()`, nettoyage meme sur une
+      interruption au demarrage. Voir « Examen blanc du 2026-10-04 »
 
-#### Branchement MCP (2026-10-04, non commite)
+#### Branchement MCP (2026-10-04)
 
 Les deux agents lancent leur serveur MCP, mettent son manuel dans le prompt
 et passent le client a la boucle. En cinq pieces :
@@ -2868,7 +3158,10 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
       les sondes, 2.3, 3.2, 4.2, 5, 6.2, Backing data), `sympy-14711`
       marquee *pending* : a completer apres le run
 - [ ] Rejouer apres le correctif de `run_tests` SWE (P1) : c'est
-      l'ablation SWE naturelle (meme modeles, memes taches, une variable)
+      l'ablation SWE naturelle (meme modeles, memes taches, une variable).
+      **Depuis `89b76b0`, la regle de l'`exit code` du prompt SWE est une
+      autre variable** : la mesurer seule d'abord, ou mesurer les deux
+      ensemble et le dire
 - [ ] Un seul tirage par modele : `codestral` a resolu `13480` l'apres-midi
       et l'a ratee le soir ; rejouer avant de conclure sur un classement
 
@@ -2886,6 +3179,15 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
 - [ ] **Ne pas inclure :** images Docker, poids de modeles, outputs generes
 - [ ] **Relire le code de l'autre** : en soutenance on doit savoir modifier
       l'agent en 2-5 min sur une tache MBPP. Prevoir 2 sessions de passation
+- [ ] **Repeter les 4 modifications en direct du bareme (Q11)**, emplacements
+      au 2026-10-05 : marqueur en tete du prompt systeme,
+      `core/agent/prompt.py:88` (SWE) et `:170` (MBPP) ;
+      `print('SANDBOX_MARKER_42')` avant le code, **pas dans `execute()`**
+      (`sandbox/executor.py:356`, que la boucle n'appelle plus depuis le
+      sandbox persistant) mais `core/agent/loop.py:162` ou `Sandbox.run()`
+      (`executor.py:310`) ; `# CORRECTOR_CHECK` en tete du code envoye,
+      `loop.py:162` ; `model_name` journalise, `core/llm/client.py:228`. Sur
+      une tache MBPP, puis `git checkout`
 
 ---
 
@@ -2904,7 +3206,8 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
        `sympy__sympy-13480` / `pydata__xarray-4629` — 2026-10-04, 4 modeles,
        2/3 chacun, validation officielle (P2.6)
 7. [~] `BENCHMARK_REPORT.md` une fois les 2 benchmarks fonctionnels — MBPP
-       et SWE ecrits le 2026-10-04 ; manque le 5e modele SWE
+       et SWE ecrits le 2026-10-04, examen blanc ajoute le 2026-10-05 ;
+       manque `sympy-14711` pour Qwen et une ablation SWE
 8. [ ] `README.md` + relecture croisee
 
 ### Prochaines actions (cote tchemin), par rentabilite
@@ -2929,7 +3232,9 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
        par l'equipe pedagogique le 2026-10-02**. **Le 2026-10-03, NVIDIA
        retire `nemotron-3-super` : 4 modeles, il en faut un 5e** pour le
        rapport (« at least 5 models »). A sonder : les nouveaux modeles du
-       catalogue NVIDIA, d'autres modeles Mistral
+       catalogue NVIDIA, d'autres modeles Mistral. **Trouve le
+       2026-10-04** : `qwen/qwen3.8-27b:free` (OpenRouter, 50 requetes par
+       jour), 2/2 ; reste `sympy-14711`
 4 ter. [x] **Echeance par appel propre a SWE** — fait le 2026-10-02
        (`11cae12`). La constante globale `LLM_TIMEOUT_SECONDS = 30` est
        supprimee ; `Bench` porte `llm_timeout`, a cote des autres limites du
@@ -2977,7 +3282,9 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
        outils sont appelables depuis le 2026-10-04) : 5 modeles × 3 taches (`sympy__sympy-14711`,
        `sympy__sympy-13480`, `pydata__xarray-4629`), les deux metriques
        propres a SWE, et de preference une ablation SWE. **Chaque nouvelle
-       campagne va directement dans `benchmarks/`**, pas dans `cache/`
+       campagne va directement dans `benchmarks/`**, pas dans `cache/`.
+       **Partie SWE ecrite le 2026-10-04** (5 modeles, une case en attente),
+       examen blanc ajoute le 2026-10-05 ; reste l'ablation SWE
 4 septies. [~] **Repli entre fournisseurs** — fait le 2026-10-02
        (`19e17be`, P2.3, « Repli de provider »). Reste a **decider** des
        erreurs qui declenchent le repli, de l'ordre des listes, et du repli
@@ -2991,7 +3298,10 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
        (`c7727cc`, P2.5 bis) ; relecture du sujet faite (P2.3, « Ce que dit
        le sujet du payant »). Restent : le test `:free` pour OpenRouter, et
        **demander a l'equipe pedagogique comment les scripts d'examen
-       choisissent `--model-name`**
+       choisissent `--model-name`** — **repondu par `exams/`** : ils ne
+       transmettent `--model-name` et `--provider-url` que si le correcteur
+       les donne ; sans eux, l'agent prend `codestral-2508` depuis
+       `89b76b0`
 4 decies. [x] **Sandbox manual dans le prompt** — cote `Prompt`, fait le
        2026-10-03, doublons retires (P2.4) ; **branche dans les deux CLI le
        2026-10-04** (P2.5, « Branchement MCP »)
@@ -3023,10 +3333,15 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
      schemas du serveur via le manuel de P1.4. Ce que P2 controle, c'est la mise
      en forme et les consignes autour (quand appeler, dans quel ordre, avant
      `final_answer`)
+6. [ ] **Rejouer l'examen blanc** (`exams/`, poste a Docker classique) une
+       fois les correctifs P1 de Q6 faits : sandbox, puis MBPP et SWE **sans**
+       `--model-name` (verifie le defaut), puis un `kill -9` pendant une
+       tache SWE (Q15). C'est aussi la premiere mesure des changements de
+       `89b76b0`
 
 ### Le banc d'essai `tests/`
 
-**570 tests** (2026-10-04), gitignore, hors rendu — c'est un outil de travail,
+**638 tests** (2026-10-05), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 
@@ -3073,6 +3388,8 @@ ce fichier, les deux passaient inapercus.
   2026-10-01** : la boucle verifie deja le `final_answer` contre `test_list`
   (P2.1). L'outil sert le modele *avant* de soumettre, la verification
   protege *a la soumission* — **les deux coexistent** depuis le 2026-10-04 :
-  `run_tests(code)` avant, la boucle a la soumission.
+  `run_tests(code)` avant, la boucle a la soumission. Signature au
+  2026-10-05 : `run_tests(code, test_list=None)`, pour le test du
+  correcteur.
 - MBPP end-to-end **avant** de toucher a Docker.
 - Ne pas optimiser (tokens, choix de modele) avant que l'approche soit prouvee.

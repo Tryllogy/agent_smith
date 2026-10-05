@@ -1,12 +1,15 @@
 # Benchmark Report
 
-> **Status — 2026-10-04.** The MBPP part is complete and backed by the runs
+> **Status — 2026-10-05.** The MBPP part is complete and backed by the runs
 > listed in [Backing data](#backing-data). The SWE-bench part is written
 > from the campaign of 2026-10-04: **five models × the three recommended
 > tasks**, every verdict from the official checker, each model running each
 > task once. **One cell is still pending**: the fifth model, Qwen, was found
 > the same evening, and its `sympy-14711` run waits for its provider's daily
-> quota to reset (section 2.3).
+> quota to reset (section 2.3). A mock exam the same night (section 2.4)
+> passed MBPP but not SWE-bench, with the agent's first false success; the
+> agent changes it led to on 2026-10-05 (section 1.1) have not been
+> measured by any campaign yet.
 
 ## 1. Setup
 
@@ -82,6 +85,27 @@ tool, the MBPP agent now refuses to start without its MCP server.
   (`"send_stop": false` in `configs/models.json`): the provider applied it to
   the reasoning too and cut the answer before it was written (section 3.1).
   The client cuts the answer at `<end_code>` itself.
+
+**Since 2026-10-05** (commit `89b76b0`, after the mock exam of section 2.4;
+**no run of this report used it**):
+
+- the SWE-bench prompt says that the exit code `run_tests()` prints is the
+  evaluation script's, whose last command restores the test files, so it
+  is 0 even when tests fail: the model must judge the tests by what is
+  printed between `>>>>> Start Test Output` and `>>>>> End Test Output`,
+  and never call a fix verified while a test fails there. The last step of
+  the example now reads the test summary. The SWE-bench system prompt grows
+  by 486 characters, about 150 tokens per turn;
+- the MBPP `run_tests` tool takes an optional `test_list`, which replaces
+  the task's (the evaluators' sandbox test calls it that way), and its
+  report starts with a verdict line, `success: true (2 of 2 tests passed)`.
+  The example submits when the report starts with `success: true`, instead
+  of searching it for `FAIL` and `ERROR`, words a test could contain. About
+  50 more input tokens per MBPP turn;
+- the time limit runs from the agent's start instead of the loop's:
+  pulling the task's image and copying `/testbed` now count against
+  SWE-bench's 900 s, as they do for the exam script, which times the whole
+  process.
 
 ### 1.2 How results are judged
 
@@ -442,7 +466,8 @@ Same three tasks (section 1.3), same agent (commit `84d22b1`: Docker, MCP
 tools, persistent sandbox), one run per model, 2026-10-04. The task images
 were pulled beforehand: *agent time* is the `total_time_seconds` the
 checker limits to 900 s; *wall-clock* adds the copy of `/testbed` and the
-container start, about 2 s.
+container start, about 2 s. (Since 2026-10-05, `total_time_seconds` itself
+counts from the agent's start, section 1.1.)
 
 | Model | Task | Pass/Fail | Iterations | Input tokens | Output tokens | Agent time | Wall-clock |
 |---|---|---|---|---|---|---|---|
@@ -499,6 +524,47 @@ and these runs sent requests of up to 19,071 tokens. NVIDIA retired
 (section 1.4). **Qwen's `sympy-14711` is pending**: the probes and these
 two tasks used most of the account's 50 free requests for 2026-10-04, and a
 `sympy-14711` run can take up to 30.
+
+### 2.4 Mock exam (2026-10-04)
+
+The four scripts the evaluators use (`exams/`) were run the same night on
+commit `4d0a580`, whose agent is the one of section 2.3 (`84d22b1`), on the
+machine with a regular Docker daemon, with `codestral-2508` given
+explicitly. The scripts draw their own tasks: five random MBPP tasks, and
+three SWE-bench tasks out of a pool of six. Their raw output is not
+versioned yet (section 6.2).
+
+| Exam | Task | Result | Iterations | Input / output tokens | Agent time |
+|---|---|---|---|---|---|
+| MBPP | 92 | **PASS** | 1 | 935 / 253 | 2.7 s |
+| MBPP | 290 | **PASS** | 1 | 984 / 241 | 2.4 s |
+| MBPP | 116 | **PASS** | 1 | 939 / 147 | 2.1 s |
+| MBPP | 235 | FAIL | 4 | 5,242 / 746 | 9.4 s |
+| MBPP | 441 | **PASS** | 1 | 929 / 131 | 1.9 s |
+| SWE-bench | `sympy__sympy-13480` | **PASS** | 3 | 13,271 / 358 | 13.5 s |
+| SWE-bench | `sympy__sympy-14711` | FAIL, **false success** | 11 | 55,869 / 1,333 | 23.7 s |
+| SWE-bench | `scikit-learn__scikit-learn-13439` | FAIL | 30 | 172,882 / 4,733 | 48.3 s (135 s with the image pull) |
+
+**MBPP passes, 4/5**, the bar: MBPP 235 found no solution in 4 iterations,
+and the loop stopped before a request that would have crossed the input
+limit, with valid metrics. **SWE-bench fails, 1/3** against a bar of 2/3;
+every container was removed after its task.
+
+**`sympy-14711` is the agent's first false success.** It claimed success
+and submitted a patch that makes `_check_vector` turn a scalar into
+`Vector([(other, None)])`, which the checker rejects (`RESOLVED_NO`). Just
+before, `run_tests()` printed `exit code: 0` at the top and "3 passed, 1
+exceptions" further down, and the model wrote "The fix now works
+correctly". That exit code is the evaluation script's last command, a `git
+checkout` (section 4.2). `scikit-learn-13439`, never tried before, went to
+the 30-iteration cap: two `edit_file` calls with an `old_str` it had not
+read (steps 5 and 11), then 19 steps of `read_file` through `pipeline.py`
+in 20-line windows, without another edit.
+
+The exam also showed that the evaluators' commands may leave out
+`--model-name` and `--provider-url`, which both agents required: since
+2026-10-05 the model defaults to `codestral-2508`, and the provider is the
+one that declares the model in `configs/models.json`.
 
 ## 3. Provider reliability
 
@@ -746,6 +812,10 @@ precisely so that test summaries survive, but it now receives text that
 has already been cut. On the other sympy task, a summary was visible but
 the report printed `exit code: 0` above "0 passed, 4 exceptions": that code
 belongs to the script's last command, a `git checkout`, not to the tests.
+In the mock exam (section 2.4) the same misleading code cost a task:
+`codestral` read it as a pass and submitted a wrong patch. Since
+2026-10-05 the SWE-bench prompt warns about it (section 1.1); the tool
+itself, which should return only the test output, is not fixed yet.
 
 **Partial progress**, where the summaries are visible: `codestral` on
 `sympy-14711` goes from "3 passed, 1 exceptions" (steps 10, 13, 15) to "4
@@ -923,6 +993,10 @@ evaluation script prints between its start and end markers, with the
 tests' own result) instead of the first 20,000 characters of the whole
 script. The rerun would use the same five models and the same three tasks.
 It mostly bears on `sympy-13480`, where 15 of the 24 test runs were blind.
+Since 2026-10-05 the prompt also warns that the exit code `run_tests()`
+prints is not the tests' (section 1.1). That is a second variable: it can
+be measured alone first, or together with the tool's fix and reported as
+such.
 
 ## 6. Conclusions
 
@@ -969,6 +1043,8 @@ It mostly bears on `sympy-13480`, where 15 of the 24 test runs were blind.
 - On these 20 tasks the ceiling is about 19/20: MBPP 400 (hidden test)
   defeats nearly every model, and MBPP 462 (output cap) only passes with
   short answers.
+- **The mock exam** (section 2.4) drew five other tasks and gave 4/5 with
+  `codestral-2508`, exactly the bar.
 
 ### 6.2 SWE-bench (provisional)
 
@@ -977,11 +1053,15 @@ It mostly bears on `sympy-13480`, where 15 of the 24 test runs were blind.
   verdict `RESOLVED_FULL` from the official checker and every metric
   within its limits. The fifth, Qwen, has passed the two tasks it has run;
   its `sympy-14711` is pending. One run per model per task, so this says
-  the bar is reachable, not which model is best.
-- **It never submits a wrong patch.** Every claimed success is real, and
-  every failure is the 30-iteration cap with nothing submitted. What the
-  failures cost is iterations and tokens: 164,287 to 266,950 input tokens
-  each, against 9,772 to 122,628 for the successes.
+  the bar is reachable, not which model is best. **The mock exam's draw
+  gave 1/3** with `codestral-2508` (section 2.4): reaching the bar is not
+  yet reliable.
+- **In the campaign, it never submits a wrong patch.** Every claimed
+  success is real, and every failure is the 30-iteration cap with nothing
+  submitted. What the failures cost is iterations and tokens: 164,287 to
+  266,950 input tokens each, against 9,772 to 122,628 for the successes.
+  **The mock exam broke that**: on `sympy-14711`, the model trusted the
+  `exit code: 0` of `run_tests()` and submitted a wrong fix.
 - **Difficulty follows how local the fix is**, not how well the statement
   points at it: `xarray-4629` 5/5 and `sympy-13480` 4/5 are one-line
   fixes at the place the statement names; `sympy-14711` 1/4 needs the
@@ -1006,14 +1086,18 @@ It mostly bears on `sympy-13480`, where 15 of the 24 test runs were blind.
   it can be used for this report but not as the exam model.
 - **The next gains are on the agent's side, not the model's**, from the
   failures of section 4.2: (1) make `run_tests()` show the test results
-  (15 of 24 runs were blind, and the exit code shown is not the tests');
+  (15 of 24 runs were blind, and the exit code shown is not the tests',
+  which the mock exam paid for; the prompt warns about it since
+  2026-10-05, the tool is still to fix);
   (2) make a failed `edit_file` say why (closest lines, indentation) and
   have the loop notice an action repeated word for word; (3) let
   `edit_file` create a file, or say in the manual how to; (4) check
   whether keeping only 3 whole observations makes models reread what they
   have already seen.
-- **Still missing**: Qwen's `sympy-14711` run (section 2.3), and a second
-  run of each model before ranking them.
+- **Still missing**: Qwen's `sympy-14711` run (section 2.3), a second run
+  of each model before ranking them, the raw output of the mock exam (kept
+  outside the repository so far) under `benchmarks/`, and a run of the
+  2026-10-05 agent.
 
 ## Backing data
 
@@ -1045,6 +1129,10 @@ files and which checker output is authoritative for each run.
 | swebench/run3 | Mistral `ministral-8b-2512` |
 | swebench/run4 | NVIDIA `nemotron-3-ultra` |
 | swebench/run5 | OpenRouter `qwen/qwen3.8-27b:free` (`sympy-14711` pending) |
+
+Since 2026-10-05 `--model-name` and `--provider-url` can be left out: the
+model defaults to `codestral-2508`, and the provider is the one that
+declares the model in `configs/models.json`.
 
 To rerun one SWE-bench task and check it (Docker running, the task's image
 is pulled on first use):
