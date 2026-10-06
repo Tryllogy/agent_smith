@@ -62,6 +62,7 @@ class LLMClient:
         timeout_max: float,
         messages: list,
         max_tokens: int,
+        temperature: float | None = None,
     ) -> None:
         """Thread target: POST the request into thread_result.
 
@@ -73,7 +74,7 @@ class LLMClient:
             request: httpx.Response = httpx.post(
                 url=self.url,
                 headers={**header},
-                json=self.request_body(messages, max_tokens),
+                json=self.request_body(messages, max_tokens, temperature),
                 timeout=timeout_max,
             )
             request.raise_for_status()
@@ -82,11 +83,17 @@ class LLMClient:
             return
         thread_result["request"] = request
 
-    def request_body(self, messages: list, max_tokens: int) -> dict:
+    def request_body(
+        self,
+        messages: list,
+        max_tokens: int,
+        temperature: float | None = None,
+    ) -> dict:
         """Return the JSON body: extra_body, then the loop-owned keys.
 
         The stop sequence is left out when the model asks for it with
-        send_stop=False.
+        send_stop=False. A temperature, when given, overrides the
+        provider's default (and extra_body's) for this request only.
         """
         body: dict = {
             **self.model_config.extra_body,
@@ -96,6 +103,8 @@ class LLMClient:
         }
         if self.model_config.send_stop:
             body["stop"] = self.stop_sequence
+        if temperature is not None:
+            body["temperature"] = temperature
         return body
 
     def cut_at_stop(self, content: str) -> str:
@@ -116,6 +125,7 @@ class LLMClient:
         timeout_max: float,
         messages: list,
         max_tokens: int,
+        temperature: float | None = None,
     ) -> tuple[dict, float]:
         """Run the request in a daemon thread bounded by timeout_max.
 
@@ -129,7 +139,13 @@ class LLMClient:
         }
         thread = threading.Thread(
             target=self.get_reponses,
-            args=(thread_result, timeout_max, messages, max_tokens),
+            args=(
+                thread_result,
+                timeout_max,
+                messages,
+                max_tokens,
+                temperature,
+            ),
             daemon=True,
         )
         thread.start()
@@ -149,10 +165,13 @@ class LLMClient:
         timeout_max: float,
         messages: list,
         max_tokens: int,
+        temperature: float | None = None,
     ) -> LLMResponse:
         """Send messages to the LLM and return the parsed LLMResponse.
 
-        Raises TransientLLMResponseError or PermanentLLMResponseError.
+        temperature, when given, replaces the provider's default for this
+        request. Raises TransientLLMResponseError or
+        PermanentLLMResponseError.
         """
         if not self.api_keys:
             raise errors.PermanentLLMResponseError(
@@ -165,6 +184,7 @@ class LLMClient:
                 timeout_max=timeout_max,
                 messages=messages,
                 max_tokens=max_tokens,
+                temperature=temperature,
             )
             self.record_token_rate(request.headers)
             data: dict = request.json()

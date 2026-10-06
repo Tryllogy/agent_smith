@@ -9,6 +9,7 @@ LLM_STOP_SEQUENCE = [
     "Observation:",
     "```\n\n",
 ]
+STUCK_TEMPERATURE = 1.0
 LLM_START_SEQUENCE = [
     "```python",
 ]

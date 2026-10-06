@@ -1,5 +1,6 @@
 import ast
 import math
+import re
 import sys
 import time
 
@@ -73,6 +74,9 @@ class Loop:
         self.code_history: dict[str, list[tuple[int, str]]] = {}
         self.repeat_note: str = ""
         self.seen_text: list[str] = []
+        self.attempts: list[tuple[int, str, str]] = []
+        self.reports: dict[str, int] = {}
+        self.stuck_step: int | None = None
         if config_sandbox is None:
             self.config_sandbox: SandboxConfig = SandboxConfig()
         else:
@@ -92,11 +96,22 @@ class Loop:
         """
         self.requests += 1
         self.turn_requests += 1
+        temperature: float | None = (
+            None if self.stuck_step is None else constants.STUCK_TEMPERATURE
+        )
         llm_response: LLMResponse = self.client.get_llm_reponse(
             timeout_max=timeout_max,
             messages=self.prompt.prompt,
             max_tokens=max_tokens,
+            temperature=temperature,
         )
+        if temperature is not None:
+            sys.stderr.write(
+                f"LLM temperature {temperature} on step {self.iteration + 1}:"
+                f" the attempt of step {self.stuck_step} repeated an earlier"
+                " one\n"
+            )
+            self.stuck_step = None
         text: str = self.close_cut_fence(llm_response.content)
         self.request_time_ms = llm_response.request_time_ms
         self.usage_input += llm_response.input_tokens
@@ -208,6 +223,7 @@ class Loop:
         self.repeat_note = self.check_repeat(
             self.sandbox_input, self.sandbox_output
         )
+        self.check_stuck(self.sandbox_input, self.sandbox_output)
         shown: str = self.truncate_output(self.sandbox_output)
         if error is None and is_final:
             refusal: str | None = self.check_final_answer(answer)
@@ -280,6 +296,95 @@ class Loop:
             " printed the same output. Running it again will not change the"
             f" result: {hint}.]"
         )
+
+    def check_stuck(self, code: str, output: str) -> None:
+        """Record a failed MBPP attempt; flag the next request if stuck.
+
+        An attempt is stuck when it repeats an earlier step (same code and
+        output, so repeat_note is set) or when run_tests rejects it with
+        the very same report as an earlier step, whatever the code. On the
+        exams, codestral then resubmitted the same function until the
+        input limit. The next request is made differently: the attempts
+        are collapsed into one summary and the temperature is raised.
+        """
+        if self.bench != constants.MBPP:
+            return
+        report: str = self.failing_report(output)
+        if not report:
+            return
+        step: int = self.iteration + 1
+        self.attempts.append((step, self.solution_of(code), report))
+        if self.repeat_note or report in self.reports:
+            self.stuck_step = step
+        self.reports.setdefault(report, step)
+
+    @staticmethod
+    def failing_report(output: str) -> str:
+        """Return the verdict and failing lines of a run_tests report.
+
+        "" when the output holds no "success: false" verdict.
+        """
+        lines: list[str] = [line.strip() for line in output.splitlines()]
+        if not any(line.startswith("success: false") for line in lines):
+            return ""
+        return "\n".join(
+            line
+            for line in lines
+            if line.startswith("success: false")
+            or re.match(r"\d+\. (FAIL|ERROR)", line)
+        )
+
+    @staticmethod
+    def solution_of(code: str) -> str:
+        """Return the solution string a step tested, or the step's code."""
+        match = re.search(r'solution\s*=\s*r?"""(.*?)"""', code, re.DOTALL)
+        return (match.group(1) if match else code).strip()
+
+    def collapse_attempts(self) -> None:
+        """Replace every turn after the task by one summary of the attempts.
+
+        After a stuck attempt the model copies its own last answer, and
+        every turn kept is paid again on each request: replayed on the six
+        loops of the exams and of run58, the summary made codestral write
+        a different function 20 times out of 30 instead of 2, with 32 %
+        fewer input tokens. The system and task turns stay; the removed
+        characters count as elided, so the next input estimate stays on
+        the safe side.
+        """
+        summary: str = self.attempts_summary()
+        removed: int = sum(
+            len(message["content"]) for message in self.prompt.prompt[2:]
+        )
+        self.prompt.prompt[2:] = [{"role": "user", "content": summary}]
+        self.elided_chars += max(0, removed - len(summary))
+        self.observation_indices = [(2, self.iteration + 1)]
+        self.elided_indices = set()
+
+    def attempts_summary(self) -> str:
+        """Return the observation that lists the failed attempts."""
+        lines: list[str] = [
+            "Observation: every attempt so far was rejected by run_tests:"
+        ]
+        shown: list[tuple[int, str]] = []
+        for step, code, report in self.attempts:
+            same: list[int] = [
+                earlier
+                for earlier, seen in shown
+                if " ".join(seen.split()) == " ".join(code.split())
+            ]
+            if same:
+                lines.append(
+                    f"Step {step}: the same code as step {same[0]} again,"
+                    " same failures."
+                )
+                continue
+            shown.append((step, code))
+            lines.append(f"Step {step}:\n```python\n{code}\n```\n{report}")
+        lines.append(
+            "Do not submit any of these again. Find what they get wrong on"
+            " the failing tests, then write a different function."
+        )
+        return "\n".join(lines)
 
     def check_unread_edits(self, code: str) -> str | None:
         """Return a line of a literal edit_file old_str never shown before.
@@ -650,6 +755,8 @@ class Loop:
                 self.step_metrics.append(self.make_step_metrics())
                 self.iteration += 1
                 return self.make_solution_output()
+            if self.stuck_step is not None:
+                self.collapse_attempts()
             self.step_metrics.append(self.make_step_metrics())
             self.iteration += 1
             self.retries = 0

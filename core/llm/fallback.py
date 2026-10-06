@@ -38,12 +38,14 @@ class FallbackClient:
         timeout_max: float,
         messages: list,
         max_tokens: int,
+        temperature: float | None = None,
     ) -> LLMResponse:
         """Send the request to the client in use; its errors propagate."""
         return self.current.get_llm_reponse(
             timeout_max=timeout_max,
             messages=messages,
             max_tokens=max_tokens,
+            temperature=temperature,
         )
 
     def fall_back(self) -> bool:
