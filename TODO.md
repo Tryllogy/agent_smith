@@ -11,7 +11,30 @@
 
 ---
 
-## Etat actuel — 2026-10-05
+## Etat actuel — 2026-10-06
+
+**2026-10-06 apres-midi : rapport de benchmark complete** (§ 2.4, 2.5,
+3.2, 4.2, 5 H et I, 6.2). Seconde campagne SWE sur `f27644a` : 5 modeles
+(`ministral-3b-2512` ajoute a `configs/models.json`, Qwen gratuit retire)
+x les 6 taches du pool d'examen, deux fois (run6 a run15) : 18/30 puis
+22/30, et 12 verdicts sur 30 changent entre deux runs du meme agent. Les
+examens blancs du 10-05 et du 10-06 sont sous `benchmarks/exams/`.
+
+**2026-10-06 : fusion de ndi-tull (`f27644a`) et examen complet**
+(`RESUMEEXAM.md`, `RESUMEEVAL.md`). Sandbox **14/14 + bonus**, MBPP **4/5,
+PASS** (un premier passage a 0/5 : `/goinfre` vide, l'image
+`python:3.11-slim` de la validation manquait ; revalide, 4/5), SWE **0/3
+officiel** (rootless, `lchown`) et **2/3 reel** (`xarray-4629`,
+`sympy-13480` `RESOLVED_FULL`), anti-triche 3 avertissements. Les
+`CLEANUP: FAILED` viennent du conteneur de validation de la moulinette,
+preuve par `docker ps` horodate. Les trois correctifs P2 du 2026-10-05 au
+soir (`5c0fbf3` : valeur obtenue dans `run_tests` MBPP, edition non lue
+refusee, note de repetition avec consigne) sont mesures : la valeur sert
+une fois sur deux, le refus ne s'est pas declenche, **la note est ignoree
+28 fois sur 28**. Les deux echecs (MBPP 138, `sympy-14711`) sont des
+boucles sur un meme code (P2.1). Cote P1, evasion par chaine, `kill -9`
+et fin des sorties de tests sont corriges ; le changement de mode reste
+dans `get_patch`.
 
 **2026-10-05 : examen blanc relu avec le bareme, corrections P2 (`89b76b0`).**
 L'examen blanc du 2026-10-04 au soir (scripts `exams/`, sur `4d0a580`,
@@ -51,7 +74,7 @@ poste a Docker classique ou le `lchown` du rootless ne se produit pas.
 `xarray-4629` 4/4, `sympy-13480` 3/4, `sympy-14711` 1/4 (`codestral`
 seul). Metriques 12/12 valides. Revele un defaut de `run_tests` SWE : le
 resultat des tests est coupe sur sympy (P1, revue du 2026-10-04).
-**653 tests verts** (2026-10-05), `ruff check` : 0 erreur hors `exams/`
+**689 tests verts** (2026-10-06), `ruff check` : 0 erreur hors `exams/`
 (scripts du correcteur, 103 erreurs) ; `ruff format --check` : 11 fichiers de
 ndi-tull non formates (`agent_swebench/docker.py`,
 `mcp_tools/config.py`, `tools_exec.py`, `tools_fs.py`, `tools_search.py`,
@@ -220,17 +243,29 @@ termination »*.
       `PROMPT = ">>> "` (`sandbox/cli.py`, P1). Les avertissements `httpx`
       (client LLM) et `swebench` (noms imposes par le sujet) sont
       inevitables : a expliquer au correcteur
-- [ ] **Q13 / Q14** : `sympy-14711` pour Qwen, une ablation SWE (3★ : 2+
+- [x] **Q13 / Q14** : `sympy-14711` pour Qwen, une ablation SWE (3★ : 2+
       ablations, 7+ modeles ou 5+ taches), et des taches SWE de plus
       (`django-11066`, `scikit-learn-13439`, `sympy-18189` sont dans le
-      tirage de l'examen et jamais mesurees en campagne)
+      tirage de l'examen et jamais mesurees en campagne). **Fait le
+      2026-10-06** (`BENCHMARK_REPORT.md` § 2.4, 3.2, 4.2, 5, 6.2) : seconde
+      campagne SWE, 5 modeles x les 6 taches du pool, deux fois (run6 a
+      run15, `f27644a`), notee par le code de notation de la moulinette
+      (rootless ; recale 14/14 sur les verdicts officiels du 10-04).
+      Ablation H (refus des editions non lues : 2 refus en 30 runs, donc
+      mesure du bruit, 12 verdicts sur 30 changent) et I (agent du 10-04
+      contre celui du 10-06 : `run_tests` aveugles 14/22 -> 3/15 et 0/9).
+      Qwen gratuit retire par OpenRouter : sa case reste vide, expliquee ;
+      5e modele `ministral-3b-2512`. `nemotron` en 503 tout l'apres-midi :
+      10 taches sur 12 finies par le modele de repli, signale
 - [ ] **Q16 / Q17, qualite SWE** : `scikit-learn-13439` au plafond (deux
       `edit_file` a `old_str` invente, puis 19 `read_file` par fenetres de 20
       lignes sans nouvelle edition) : meme famille que les echecs de la
       campagne (P2.6), message d'`edit_file`, action repetee, elagage
 - [ ] Versionner les sorties de l'examen blanc (`evaluations/` du poste a
       Docker classique) sous `benchmarks/`, puisque le rapport les cite
-      (§ 2.4)
+      (§ 2.5). Les trois examens suivants (10-05 15 h 37 et 16 h 18, 10-06
+      13 h 49) sont dans `benchmarks/exams/` depuis le 2026-10-06 ; reste
+      celui du 10-04, reste sur l'autre poste
 - [ ] Un agent interrompu ecrit un `solution.json` sans ses etapes
       (`write_failure_output`) ; garder celles de la boucle serait plus
       lisible, sans effet sur la note
@@ -256,19 +291,28 @@ termination »*.
 - [ ] **`final_answer(answer=...)` leve `TypeError`** : le manuel annonce
       `final_answer(answer)`, `executor.py` nomme le parametre `value` (vu
       dans `test_mbpp_tools.py` du correcteur)
-- [ ] **Q15, `kill -9`** : le conteneur reste, aucun code ne peut tourner.
+- [x] **Q15, `kill -9`** : le conteneur reste, aucun code ne peut tourner.
       Correctif propose : `docker run --rm -i` sur un processus qui lit une
       entree standard tenue ouverte par l'agent (`agent_swebench/docker.py`) ;
-      a la mort de l'agent, l'entree se ferme et le conteneur disparait
+      a la mort de l'agent, l'entree se ferme et le conteneur disparait.
+      **Fait par ndi-tull** (`5f27c08`, fusionne le 2026-10-06) : a
+      l'examen du 2026-10-06, le conteneur tourne en
+      `sh -c 'cat >/dev/null 2>&1'` et disparait avant la validation.
+      **`kill -9` pas encore essaye en direct**
 - [ ] **Copies `/tmp/agent_smith_*`** : 23 (~450 Mo) restaient le 2026-10-04
       au soir sur le poste a Docker classique, y compris en sortie normale :
       fichiers ecrits par le conteneur, sans doute a root, que
       `rmtree(..., ignore_errors=True)` ne supprime pas
-- [ ] **Q16 : `run_tests` SWE** doit rendre le resultat des tests (revue du
+- [x] **Q16 : `run_tests` SWE** doit rendre le resultat des tests (revue du
       2026-10-04, « `run_tests` SWE cache le resultat des tests »). Quand il
       changera, l'exemple SWE devra suivre : `tests/test_prompt.py` le rejoue
-      contre les vrais outils
-- [ ] **Q5 : evasion `random._os`** (revue du 2026-10-04, toujours ouverte)
+      contre les vrais outils. **Fait par ndi-tull** (`2331b77`) : une
+      sortie longue est coupee par le debut ; a l'examen du 2026-10-06,
+      `sympy-13480` lit `tests finished: 45 passed`
+- [x] **Q5 : evasion `random._os`** (revue du 2026-10-04). Puis
+      `operator.attrgetter('_os')(random)` et `string.Formatter().get_field`
+      (examen du 2026-10-05) : **fermees par ndi-tull** (`bdb27cd`), refusees
+      a la main le 2026-10-06, `operator.add` et `str.format` passent
 - [ ] Q12 : renommer la file `requests` d'`executor.py` (`requests.get(` est
       cherche par l'anti-triche) et la constante `PROMPT` de `sandbox/cli.py`
 
@@ -384,8 +428,11 @@ puis sur `ca8f0ad`.
       **Tranche le 2026-10-04 : on ne les fait pas** (voir P2.2). Reste
       obligatoire, lui : le « bloc malforme interprete quand meme » (§ V.1,
       *must*)
-- [ ] **`get_patch` fait `git add -A`** (`mcp_tools/tools_exec.py`) :
-      scripts de repro ecrits dans le depot et fichiers de test crees par
+- [ ] **`get_patch` fait `git add -A`** (`mcp_tools/tools_exec.py`).
+      **Le changement de mode reste apres `2331b77`** : a l'examen du
+      2026-10-06, le patch de `sympy-13480` embarque encore
+      `old mode 100755` / `new mode 100644` sur `test_hyperbolic.py`
+      (verdict inchange, `RESOLVED_FULL`). Probleme d'origine : scripts de repro ecrits dans le depot et fichiers de test crees par
       l'`eval_script` entreraient dans le patch, qui risque de ne plus
       s'appliquer a la validation. **Constate le 2026-10-04**
       (`sympy__sympy-13480`) : le patch embarque un changement de mode
@@ -704,7 +751,12 @@ redirigee d'un bloc, filet `atexit` + SIGTERM ; conflit sur
 bonus, MBPP 5/5, SWE 0/3 officiel et 1/3 reel en rootless, anti-triche 3
 avertissements dans un clone propre), et deux correctifs P2 qui en sortent :
 **`Observation:` en sequence d'arret** et **`iterations` = nombre d'etapes**
-(P2.1), 653 tests verts (**non commite**).
+(P2.1), 653 tests verts (`1453d0c`). Puis **examen complet** sur `1453d0c`
+(MBPP 3/5, SWE 2/3 reel) et trois correctifs P2 contre les boucles :
+**valeur obtenue dans `run_tests` MBPP**, **edition non lue refusee**,
+**note de repetition avec consigne** (`5c0fbf3`, 667 tests verts). Le
+2026-10-06, fusion de ndi-tull (`f27644a`) et **examen complet** : sandbox
+14/14, MBPP 4/5, SWE 0/3 officiel et 2/3 reel, note ignoree 28 fois.
 
 ### Trois bugs du 2026-09-01 qui valent d'etre sus
 
@@ -1304,14 +1356,82 @@ abandon propre ; rien ne sort des deux familles, 16 cas parametres).
       fixaient sont reecrits, 1 test ajoute (sortie avant toute requete :
       0 iteration, 0 step), 1 mutation tuee. Le plafond d'iterations ne peut
       pas etre depasse : le tour n'existe que si `iteration < limite`
-- [ ] **Pistes de l'examen complet, non faites** : (1) les etapes
-      repetees d'affilee malgre la note (10 `read_file` identiques sur
-      `sympy-14711`, 3 soumissions identiques sur MBPP 295 ;
-      `moulinette_eval display` affiche « identical sandbox_input
-      (copy-paste?) ») : forme d'une reponse plus ferme a choisir et a
-      mesurer ; (2) `run_tests` MBPP : sur un FAIL, montrer la valeur
-      obtenue (`sum_div(12)` rend 28, pas 16) pour que le modele voie son
-      erreur
+- [x] **`run_tests` MBPP montre la valeur obtenue** (2026-10-05, `5c0fbf3`,
+      `mcp_tools/tools_mbpp.py`). Sur un `assert X == Y` en echec, le
+      lanceur rejoue `print(repr(X))` dans le meme sandbox et la ligne
+      devient `2. FAIL  assert sum_div(12)==16  (got 28)`, valeur coupee a
+      200 caracteres. Les 80 assertions visibles de nos taches ont cette
+      forme ; seules les assertions visibles sont concernees. L'exemple MBPP
+      du prompt montre `(got 5)`. 6 tests. **Mesure a l'examen du
+      2026-10-06** : utile sur MBPP 462 (tuples → listes au tour 2), sans
+      effet sur MBPP 138 (le modele lit `(got False)` et resoumet)
+- [x] **Une edition non lue n'est pas executee** (2026-10-05, `5c0fbf3`,
+      `Loop.check_unread_edits()`). La boucle garde le texte vu par le
+      modele (tour `user` initial, puis chaque `sandbox_output`). Avant
+      d'executer, un `edit_file` dont l'`old_str` litteral contient une
+      ligne jamais vue rend « Not run: edit_file's old_str contains a line
+      that no earlier observation showed … » ; l'etape est comptee. Impose
+      la regle anti-recitation du prompt (bareme Q12 partie C). Rejeu hors
+      ligne : 19 editions refusees sur 60 dans les runs SWE, 16 qui
+      echouaient et 3 reussies de memoire (`sympy-14711`), 0 edition lue
+      refusee. 7 tests. **Examen du 2026-10-06** : 0 refus, les 2 editions
+      portaient sur des lignes lues
+- [x] **Note de repetition avec consigne** (2026-10-05, `5c0fbf3`,
+      `Loop.check_repeat()`) : « compare the value your function returned
+      with the expected one in the failing test, then change the logic »
+      (MBPP), « if an edit failed, read the exact lines again and copy
+      old_str from that output; otherwise try something else » (SWE) ;
+      « [Repeated step again: » des le 3e passage. Le code reste execute
+      (marqueur de Q11). **Examen du 2026-10-06 : emise 28 fois (MBPP 138,
+      `sympy-14711`), ignoree 28 fois**
+- [x] **`final_answer` SWE n'accepte que la sortie de `get_patch()`**
+      (campagne du 2026-10-06) : `ministral-3b` a soumis 4 diffs tapes a
+      la main (3 inapplicables, 1 « reussi » par `patch --fuzz=5` sans que
+      le depot ait change). La boucle verifie que `get_patch()` n'est pas
+      vide, pas que la chaine soumise est sa sortie. **Fait le 2026-10-06**
+      (non commite) : `Loop.current_patch()` appelle `get_patch` par le
+      client MCP avant d'accepter une reponse SWE ; une reponse differente
+      (espaces de bord exceptes) est refusee, avec un message distinct si le
+      depot n'a aucun changement. Si l'appel echoue, la reponse n'est pas
+      comparee. 7 tests, 1 mutation tuee. Run reel `ministral-3b` /
+      `sympy-13480` : diff tape refuse a l'etape 21, `get_patch()` soumis a
+      la 22, `RESOLVED_FULL` (faux succes dans run10)
+- [x] **Couper une reponse au 2e bloc de code** : 52 a 72 % des reponses
+      des `ministral` ont plusieurs blocs (73 a 87 % de leurs tokens de
+      sortie), et `codestral` enchaine « ```Step 144 / Thought: » sans
+      `<end_code>` ; ces reponses font les 6 plafonds de sortie des 60 runs.
+      La note « only the first one was run » est ignoree. **Fait le
+      2026-10-06** (non commite) : `"```\n\n"` (fence fermante + ligne
+      vide) devient une sequence d'arret, et `Loop.close_cut_fence()` remet
+      la fence que le provider emporte. Simule sur les 2 139 reponses
+      versionnees : 491 des 565 reponses a plusieurs blocs coupees avant le
+      2e, 18 % des caracteres de sortie economises, 1 reponse coupee avant la
+      fin de son 1er bloc (un bloc `bash` en tete). `"```\n"` seul en
+      abimait 34 (blocs ouverts sans `python`). Verifie en reel (Mistral
+      `ministral-8b` et `codestral` : arret apres le 1er bloc, 18 tokens).
+      Run reel `ministral-8b` / `sympy-18189` : 0 reponse a plusieurs blocs,
+      5 iterations et 629 tokens de sortie, `RESOLVED_FULL` (run8 : echec a
+      30 iterations, 9 077 tokens). **Reste** : une fence suivie d'un seul
+      saut de ligne (« ```\nI will also… », 7 etapes sur 22 chez
+      `ministral-3b`) et « ```Step 144 » ne sont pas coupes. Effet de bord :
+      un bloc non ferme n'est plus signale par la boucle (la fence est
+      remise), l'extraction seule le signale toujours
+- [x] **Le refus des editions non lues ignore le `new_str`** d'une edition
+      reussie : il a bloque une ligne que `codestral` venait d'ecrire
+      (`sympy-14711`, run6, etape 5). **Fait le 2026-10-06** (non commite) :
+      `Loop.written_by_edits()` ajoute au texte vu le `new_str` litteral de
+      chaque `edit_file` dont la sortie porte « Edited <filepath>: » (toute
+      ligne « Edited » si le chemin n'est pas litteral). Une edition ratee
+      ne compte pas. `Loop.edit_file_calls()` lit les arguments pour les
+      deux controles. 5 tests, 1 mutation tuee
+- [ ] **Les boucles sur un meme code ne sont toujours pas cassees**
+      (examen du 2026-10-06, `RESUMEEXAM.md`) : MBPP 138 (meme code 3 fois)
+      et `sympy-14711` (chemin invente `/sympy/sympy/physics/vector/vector.py`
+      au lieu de `/testbed/...`, deux blocs identiques alternes 26 fois).
+      Pistes : ne pas executer un bloc identique deja essaye (attention au
+      marqueur de Q11, « in every step »), changer la `temperature` sur une
+      repetition, etendre la consigne SWE aux appels d'outil en erreur.
+      Cote P1 : un chemin refuse devrait dire ou est le depot
 
 ### P2.2 — Extraction de code *(faite)*
 
@@ -3258,9 +3378,10 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
       `core/agent/prompt.py:88` (SWE) et `:170` (MBPP) ;
       `print('SANDBOX_MARKER_42')` avant le code, **pas dans `execute()`**
       (que la boucle n'appelle plus depuis le sandbox persistant) mais
-      `Sandbox.run()` (`sandbox/executor.py:320`) ; `# CORRECTOR_CHECK` en
-      tete du code envoye, `core/agent/loop.py:165` ; `model_name`
-      journalise, `core/agent/loop.py:596` (`make_step_metrics()`) et **pas
+      `Sandbox.run()` (`sandbox/executor.py:333` depuis la fusion du
+      2026-10-06) ; `# CORRECTOR_CHECK` en tete du code envoye,
+      `core/agent/loop.py:166` ; `model_name`
+      journalise, `core/agent/loop.py:658` (`make_step_metrics()`) et **pas
       `core/llm/client.py:228`**, le `model_name` du `LLMResponse` que les
       `StepMetrics` n'utilisent pas (emplacements revus le 2026-10-05 au
       soir, voir `RESUMEEVAL.md`). Sur une tache MBPP, puis `git checkout`
@@ -3417,7 +3538,7 @@ de la boucle, le temps mur ajoute ~2 s de demarrage.
 
 ### Le banc d'essai `tests/`
 
-**653 tests** (2026-10-05), gitignore, hors rendu — c'est un outil de travail,
+**689 tests** (2026-10-06), gitignore, hors rendu — c'est un outil de travail,
 pas un livrable. Les tests parametres sur les fournisseurs du JSON couvrent
 chaque nouveau fournisseur sans modification : brancher Mistral en a ajoute 7.
 

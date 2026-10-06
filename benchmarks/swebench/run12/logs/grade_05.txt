@@ -1,0 +1,16 @@
+RESOLVED_FULL | applique par git apply --verbose, FAIL_TO_PASS 1/1, PASS_TO_PASS 3/3, 6 s
+warning: `VIRTUAL_ENV=/home/tchemin/Documents/agent_smith/.venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+/home/tchemin/Documents/agent_smith/moulinette/.venv/lib/python3.10/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.0.0)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+2026-10-06 15:07:22,660 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-10-06 15:07:22,661 - huggingface_hub.utils._http - WARNING - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-10-06 15:07:22,675 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/SWE-bench/SWE-bench_Verified/78f471bf655a3137b2e8a75af1501690ec009ec3/README.md "HTTP/1.1 200 OK"
+2026-10-06 15:07:22,781 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/resolve/78f471bf655a3137b2e8a75af1501690ec009ec3/SWE-bench_Verified.py "HTTP/1.1 404 Not Found"
+2026-10-06 15:07:23,085 - httpx - INFO - HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/SWE-bench/SWE-bench_Verified/SWE-bench/SWE-bench_Verified.py "HTTP/1.1 404 Not Found"
+2026-10-06 15:07:23,215 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/datasets/SWE-bench/SWE-bench_Verified/revision/78f471bf655a3137b2e8a75af1501690ec009ec3 "HTTP/1.1 200 OK"
+2026-10-06 15:07:23,322 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/resolve/78f471bf655a3137b2e8a75af1501690ec009ec3/.huggingface.yaml "HTTP/1.1 404 Not Found"
+2026-10-06 15:07:23,461 - httpx - INFO - HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=SWE-bench/SWE-bench_Verified "HTTP/1.1 200 OK"
+2026-10-06 15:07:23,575 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/datasets/SWE-bench/SWE-bench_Verified/tree/78f471bf655a3137b2e8a75af1501690ec009ec3/data?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-10-06 15:07:23,682 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/datasets/SWE-bench/SWE-bench_Verified/tree/78f471bf655a3137b2e8a75af1501690ec009ec3?recursive=false&expand=false "HTTP/1.1 200 OK"
+2026-10-06 15:07:23,794 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/resolve/78f471bf655a3137b2e8a75af1501690ec009ec3/dataset_infos.json "HTTP/1.1 404 Not Found"

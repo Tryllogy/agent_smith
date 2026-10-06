@@ -1,15 +1,16 @@
 # Benchmark Report
 
-> **Status — 2026-10-05.** The MBPP part is complete and backed by the runs
-> listed in [Backing data](#backing-data). The SWE-bench part is written
-> from the campaign of 2026-10-04: **five models × the three recommended
-> tasks**, every verdict from the official checker, each model running each
-> task once. **One cell is still pending**: the fifth model, Qwen, was found
-> the same evening, and its `sympy-14711` run waits for its provider's daily
-> quota to reset (section 2.3). A mock exam the same night (section 2.4)
-> passed MBPP but not SWE-bench, with the agent's first false success; the
-> agent changes it led to on 2026-10-05 (section 1.1) have not been
-> measured by any campaign yet.
+> **Status — 2026-10-06.** Complete. The MBPP part is backed by the runs
+> listed in [Backing data](#backing-data). The SWE-bench part rests on two
+> campaigns: on 2026-10-04, **five models × the three recommended tasks**
+> with the official checker (section 2.3); on 2026-10-06, **five models ×
+> the six tasks the exam can draw, run twice** (sections 2.4 and 5,
+> ablation H), graded by the checker's own grading code because the
+> machine's rootless Docker cannot run `validate swebench` (section 1.2).
+> Four mock exams (section 2.5) show the agent as the evaluators will run
+> it. Each model runs each task once per campaign arm: section 5 shows
+> that this is too few to rank the models, and says what it measures
+> instead.
 
 ## 1. Setup
 
@@ -86,8 +87,9 @@ tool, the MBPP agent now refuses to start without its MCP server.
   the reasoning too and cut the answer before it was written (section 3.1).
   The client cuts the answer at `<end_code>` itself.
 
-**Since 2026-10-05** (commit `89b76b0`, after the mock exam of section 2.4;
-**no run of this report used it**):
+**Since 2026-10-05** (commit `89b76b0`, after the mock exam of section 2.5;
+no MBPP run of this report used it; the second SWE-bench campaign, section
+2.4, runs with it and with everything below):
 
 - the SWE-bench prompt says that the exit code `run_tests()` prints is the
   evaluation script's, whose last command restores the test files, so it
@@ -126,6 +128,54 @@ tool, the MBPP agent now refuses to start without its MCP server.
   entry per agent iteration"). Before, such a run reported one step more
   than iterations.
 
+Since the evening of 2026-10-05 (commit `5c0fbf3`, after the mock exams
+of that day; measured by the second SWE-bench campaign only, and the
+second bullet by ablation H):
+
+- on a failed `assert X == Y`, the MBPP `run_tests` report also shows the
+  value the function returned, computed in the same sandbox and cut at 200
+  characters: `2. FAIL  assert sum_div(12)==16  (got 28)`. All 80 visible
+  tests of the versioned MBPP tasks have that form. Only the visible tests
+  are concerned, so nothing new about the hidden ones is revealed. The
+  prompt's example shows it;
+- an `edit_file` call whose `old_str` holds a line that no earlier
+  observation (or the task itself) showed is not run: the model is told
+  to read those lines first and copy `old_str` from that output. This
+  enforces the prompt's rule against reciting code from memory. Replayed
+  on the 60 SWE-bench edits of the versioned runs and mock exams, it
+  refuses 19: 16 that failed with "old_str not found" and 3 that
+  succeeded from memory (`sympy-14711`);
+- the repeated-step note now says what to do instead of "change your
+  approach": compare the returned value with the expected one (MBPP), or
+  read the lines again before editing (SWE-bench). From the third
+  identical step, it says the step was repeated again.
+
+Since the evening of 2026-10-06 (after the second campaign; **not
+measured by the campaigns**), three changes from section 4.2:
+
+- `"```\n\n"`, a closing fence followed by a blank line, is a third stop
+  sequence, so that an answer ends after its first code block; the loop
+  gives back the closing fence the provider drops with it. Replayed on
+  the 2,139 versioned answers, it cuts 491 of the 565 multi-block answers
+  before their second block and 18 % of all output characters, and cuts
+  one answer before the end of its first block (a `bash` block placed
+  first). A fence followed by a single line break is not caught;
+- a SWE-bench `final_answer()` is refused unless it is what `get_patch()`
+  returns at that moment (surrounding whitespace aside): a diff typed by
+  the model is refused, with a separate message when the repository holds
+  no change;
+- the refusal of unread edits counts as seen the `new_str` of every
+  `edit_file` call whose output reports it done, so that a model can edit
+  again a line it wrote itself.
+
+The second SWE-bench campaign (2026-10-06, commit `f27644a`) also runs with
+the tool and sandbox changes merged on 2026-10-05 and 2026-10-06: the
+SWE-bench `run_tests()` returns only what the evaluation script prints
+between its start and end markers, cut from the start when it is long so
+that the test summary survives (`8db5195`, `2331b77`); the file tools are
+confined to the repository; the task's container is tied to the agent's
+process, so that even a `kill -9` removes it (`5f27c08`).
+
 ### 1.2 How results are judged
 
 Every MBPP verdict in this report comes from the official checker:
@@ -163,6 +213,19 @@ none). The checker writes `/tmp/patch.diff` and
 `/tmp/eval.sh` at fixed paths, so the campaign script ran the validations
 one at a time.
 
+**The second campaign (2026-10-06) ran on rootless Docker**, where
+`validate swebench` fails on `lchown` before running any test. Its
+verdicts come from **the checker's own grading code, called outside
+`moulinette_eval`**: a fresh container from the task's image, the patch
+copied in as base64 text instead of a tar archive (the step that fails),
+the checker's three apply methods in the same order, the task's
+evaluation script, then the checker's functions `get_logs_eval`,
+`get_eval_tests_report` and `get_resolution_status` on the log. Only the
+copy differs. Run on the 14 solutions of the first campaign, it gives the
+official verdict all 14 times (10 `RESOLVED_FULL`, 4 without a patch).
+Its output is in `logs/grade_XX.txt`. The metrics are checked against the
+checker's SWE-bench limits (`MetricsLimits.swebench_defaults`).
+
 ### 1.3 Tasks
 
 | Set | Dump | MBPP task ids |
@@ -197,6 +260,24 @@ self` just above the failing call. The `14711` fix is less local, though:
 the scalar `0` must be accepted by `__add__` (or `_check_vector`) without
 breaking the other operators that rely on the same check.
 
+The second campaign (2026-10-06, section 2.4) adds the three other tasks
+of the checker's exam pool (`EXAM_POOL` in `moulinette/swebench/
+interact.py`), so that it covers **every task the exam can draw**. They
+were taken from the dumps of the mock exams of 2026-10-05, which drew them:
+
+| Task | Repository | What is broken |
+|---|---|---|
+| `sympy__sympy-18189` | sympy | `diophantine(..., syms=(n, m), permute=True)` returns 1 solution instead of 8: the recursive call drops `permute` |
+| `django__django-11066` | django | `RenameContentType._rename()` saves the content type without `using=db`, on the default database |
+| `scikit-learn__scikit-learn-13439` | scikit-learn | `len(pipe)` raises `TypeError`: `Pipeline` has no `__len__` |
+
+They differ from the first three in how much the task gives away. The
+`hints_text` of `18189` holds the fix itself, as a diff of lines 182–185
+(`diophantine(eq, param, permute=permute)`), and the `11066` statement
+quotes the faulty line and suggests `using=db`. `13439` is the only task
+of the six whose fix is new code (a method to add) rather than a changed
+line, and its statement names the class but no line.
+
 ### 1.4 Models and providers
 
 | Provider | Model | Free access | MBPP runs |
@@ -211,9 +292,11 @@ breaking the other operators that rely on the same check.
 | Mistral | `ministral-14b-2512` | idem | run21, 22, 35, 36, 49, 50, 59, 60 |
 | Mistral | `ministral-8b-2512` | idem | run23, 24, 37, 38, 51, 52, 61, 62 |
 
-SWE-bench runs (`benchmarks/swebench/`): `codestral-2508` run1,
-`ministral-14b-2512` run2, `ministral-8b-2512` run3, `nemotron-3-ultra`
-run4, OpenRouter `qwen/qwen3.8-27b:free` run5.
+SWE-bench runs (`benchmarks/swebench/`). First campaign (2026-10-04):
+`codestral-2508` run1, `ministral-14b-2512` run2, `ministral-8b-2512` run3,
+`nemotron-3-ultra` run4, OpenRouter `qwen/qwen3.8-27b:free` run5. Second
+campaign (2026-10-06): the same first four models in run6 to run9, Mistral
+`ministral-3b-2512` in run10; ablation H in run11 to run15, same order.
 
 The two NVIDIA models run with reasoning disabled
 (`chat_template_kwargs` in `configs/models.json`): with reasoning on,
@@ -252,6 +335,29 @@ context:
   in the expected format and was kept. It is from a third family
   (Alibaba), and the free tier allows 50 requests a day, about one
   three-task campaign.
+
+**The fifth model of the second campaign** (probed on 2026-10-06). Qwen is
+gone: OpenRouter now answers "This model is unavailable for free. The paid
+version is available now", and a paid model is out of the subject's rules.
+So its `sympy-14711` run of the first campaign will not be made.
+
+- **NVIDIA**: `gemma-4-31b-it`, `deepseek-v4.1-flash`, `kimi-k3`,
+  `glm-5.3` and `glm-5.3-flash` gave no answer within 90 s to a one-word
+  prompt; `kimi-k2.6` and `mistral-large-2-instruct` returned HTTP 404.
+  `openai/gpt-oss-20b` answered in 0.5 s, but on the real SWE-bench prompt
+  it writes a native tool call inside its reasoning (`{"cmd":["bash","-lc",
+  "ls -R"]}`) and leaves `content` empty, with or without the stop
+  sequence and with `reasoning_effort: low`: in our agent, its first turn
+  was retried 5 times and the task went to the fallback model.
+- **OpenRouter**: 16 `:free` models remain. 10 are served without `stop`
+  (Gemma 4 among them). Of the 6 with `stop`, two were rejected on
+  2026-10-04 (`inkling`, `north-mini-code`) and four were not probed. In
+  any case, 50 requests a day cannot cover six tasks (up to 180).
+- **Mistral**: on our free account, Small, Medium, Magistral and Vibe are
+  still closed (`x-ratelimit-limit-req-minute: 0`), but **`ministral-3b-
+  2512`** is open (750 requests and 1,300,000 tokens a minute). It was
+  kept. It is a fourth Mistral model, but it completes a size series of
+  one family on identical tasks (14B, 8B, 3B), which section 2.4 uses.
 
 ## 2. Results
 
@@ -479,7 +585,7 @@ are the sum of the per-task agent times.
 OpenRouter's free `nemotron-3-super` against 10/10 on Groq's `gpt-oss-120b`.
 Four of the six `run5` failures hit the 1,500-token output cap.
 
-### 2.3 SWE-bench — model comparison
+### 2.3 SWE-bench — first campaign (2026-10-04)
 
 Same three tasks (section 1.3), same agent (commit `84d22b1`: Docker, MCP
 tools, persistent sandbox), one run per model, 2026-10-04. The task images
@@ -502,7 +608,7 @@ counts from the agent's start, section 1.1.)
 | `nemotron-3-ultra` | `sympy-14711` | FAIL | 30 | 168,424 | 1,802 | 108.2 s | 110.3 s |
 | `nemotron-3-ultra` | `sympy-13480` | **PASS** | 5 | 14,750 | 300 | 23.3 s | 25.4 s |
 | `nemotron-3-ultra` | `xarray-4629` | **PASS** | 15 | 98,746 | 2,028 | 57.8 s | 59.6 s |
-| `qwen3.8-27b` | `sympy-14711` | *pending* | | | | | |
+| `qwen3.8-27b` | `sympy-14711` | *not run* | | | | | |
 | `qwen3.8-27b` | `sympy-13480` | **PASS** | 10 | 47,678 | 772 | 48.0 s | 50.1 s |
 | `qwen3.8-27b` | `xarray-4629` | **PASS** | 8 | 34,064 | 521 | 28.8 s | 30.7 s |
 
@@ -512,7 +618,7 @@ counts from the agent's start, section 1.1.)
 | `ministral-14b-2512` | F 30 | **P** 3 | **P** 7 | **2/3** | 103,480 | 3,855 |
 | `ministral-8b-2512` | F 30 | **P** 6 | **P** 6 | **2/3** | 73,207 | 3,480 |
 | `nemotron-3-ultra` | F 30 | **P** 5 | **P** 15 | **2/3** | 93,973 | 1,377 |
-| `qwen3.8-27b` | *pending* | **P** 10 | **P** 8 | **2/2** so far | 40,871 (2 tasks) | 647 (2 tasks) |
+| `qwen3.8-27b` | *not run* | **P** 10 | **P** 8 | **2/2** | 40,871 (2 tasks) | 647 (2 tasks) |
 | **Tasks passed** | 1/4 | 4/5 | 5/5 | **10/14** | | |
 
 **Every model resolves at least two tasks out of three**, the exam's pass
@@ -540,18 +646,113 @@ on the agent just before commit `84d22b1`. Groq's free tier stays out of
 reach for SWE-bench: it rejects any request above 8,000 tokens (HTTP 413),
 and these runs sent requests of up to 19,071 tokens. NVIDIA retired
 `nemotron-3-super` on 2026-10-03, and Qwen replaced it as the fifth model
-(section 1.4). **Qwen's `sympy-14711` is pending**: the probes and these
-two tasks used most of the account's 50 free requests for 2026-10-04, and a
-`sympy-14711` run can take up to 30.
+(section 1.4). **Qwen's `sympy-14711` was never run**: the probes and
+these two tasks used most of the account's 50 free requests for
+2026-10-04, and when the quota came back OpenRouter no longer served the
+model for free (section 1.4). The second campaign (section 2.4) replaces
+Qwen with `ministral-3b-2512`.
 
-### 2.4 Mock exam (2026-10-04)
+### 2.4 SWE-bench — second campaign (2026-10-06, six tasks)
 
-The four scripts the evaluators use (`exams/`) were run the same night on
-commit `4d0a580`, whose agent is the one of section 2.3 (`84d22b1`), on the
-machine with a regular Docker daemon, with `codestral-2508` given
-explicitly. The scripts draw their own tasks: five random MBPP tasks, and
-three SWE-bench tasks out of a pool of six. Their raw output is not
-versioned yet (section 6.2).
+The six tasks of the exam pool (section 1.3), five models, the agent of
+commit `f27644a` (every change of section 1.1), one run per model per task,
+2026-10-06 from 14:29 to 15:04. The task images were pulled beforehand,
+three or four runs went in parallel on a 4-core machine, and the verdicts
+come from the checker's grading code (section 1.2). ↪ *n*: the task
+switched to the fallback model, `ministral-14b-2512`, at step *n*
+(section 3.2); ✗: claimed success, rejected by the checker.
+
+| Model | Task | Pass/Fail | Iterations | Input tokens | Output tokens | Agent time | Wall-clock |
+|---|---|---|---|---|---|---|---|
+| `codestral-2508` | `sympy-14711` | FAIL | 30 | 178,800 | 4,697 | 81.5 s | 83.5 s |
+| `codestral-2508` | `sympy-13480` | **PASS** | 3 | 10,933 | 360 | 24.3 s | 26.1 s |
+| `codestral-2508` | `xarray-4629` | **PASS** | 3 | 13,132 | 644 | 33.6 s | 35.4 s |
+| `codestral-2508` | `sympy-18189` | **PASS** | 4 | 15,759 | 379 | 48.1 s | 49.9 s |
+| `codestral-2508` | `django-11066` | **PASS** | 3 | 12,105 | 328 | 24.8 s | 26.9 s |
+| `codestral-2508` | `sklearn-13439` | FAIL | 18 | 80,924 | 10,000 | 101.2 s | 102.9 s |
+| `ministral-14b-2512` | `sympy-14711` | FAIL, **false success** | 18 | 126,331 | 5,994 | 115.6 s | 117.5 s |
+| `ministral-14b-2512` | `sympy-13480` | **PASS** | 13 | 62,615 | 1,983 | 70.2 s | 76.7 s |
+| `ministral-14b-2512` | `xarray-4629` | **PASS** | 5 | 30,155 | 1,398 | 36.2 s | 38.7 s |
+| `ministral-14b-2512` | `sympy-18189` | FAIL | 30 | 261,425 | 10,000 | 160.1 s | 161.8 s |
+| `ministral-14b-2512` | `django-11066` | FAIL | 30 | 231,561 | 7,224 | 116.2 s | 118.4 s |
+| `ministral-14b-2512` | `sklearn-13439` | **PASS** | 13 | 65,333 | 2,709 | 62.4 s | 64.4 s |
+| `ministral-8b-2512` | `sympy-14711` | FAIL | 21 | 157,361 | 10,000 | 108.6 s | 111.4 s |
+| `ministral-8b-2512` | `sympy-13480` | **PASS** | 19 | 113,438 | 5,049 | 90.7 s | 92.9 s |
+| `ministral-8b-2512` | `xarray-4629` | **PASS** | 9 | 56,640 | 2,169 | 54.4 s | 56.1 s |
+| `ministral-8b-2512` | `sympy-18189` | FAIL | 30 | 216,598 | 9,077 | 133.2 s | 135.3 s |
+| `ministral-8b-2512` | `django-11066` | FAIL | 30 | 251,632 | 8,522 | 138.7 s | 140.5 s |
+| `ministral-8b-2512` | `sklearn-13439` | **PASS** | 9 | 47,412 | 2,129 | 42.0 s | 44.4 s |
+| `nemotron-3-ultra` | `sympy-14711` | **PASS** ↪ 23 | 24 | 117,858 | 2,794 | 481.1 s | 483.1 s |
+| `nemotron-3-ultra` | `sympy-13480` | **PASS** ↪ 14 | 17 | 66,613 | 1,453 | 285.4 s | 287.5 s |
+| `nemotron-3-ultra` | `xarray-4629` | **PASS** ↪ 4 | 8 | 33,823 | 866 | 91.5 s | 95.2 s |
+| `nemotron-3-ultra` | `sympy-18189` | FAIL | 30 | 186,521 | 3,203 | 607.8 s | 611.2 s |
+| `nemotron-3-ultra` | `django-11066` | **PASS** ↪ 13 | 30 | 152,746 | 2,250 | 297.8 s | 299.9 s |
+| `nemotron-3-ultra` | `sklearn-13439` | **PASS** ↪ 15 | 16 | 73,255 | 1,490 | 302.4 s | 304.5 s |
+| `ministral-3b-2512` | `sympy-14711` | FAIL | 15 | 103,951 | 10,000 | 60.3 s | 62.0 s |
+| `ministral-3b-2512` | `sympy-13480` | FAIL, **false success** | 16 | 70,177 | 4,304 | 36.3 s | 37.9 s |
+| `ministral-3b-2512` | `xarray-4629` | **PASS** | 6 | 25,726 | 1,550 | 19.1 s | 20.7 s |
+| `ministral-3b-2512` | `sympy-18189` | **PASS** | 10 | 43,387 | 1,637 | 19.9 s | 21.5 s |
+| `ministral-3b-2512` | `django-11066` | **PASS** | 22 | 127,621 | 5,096 | 39.5 s | 41.3 s |
+| `ministral-3b-2512` | `sklearn-13439` | FAIL | 20 | 97,071 | 10,000 | 63.4 s | 66.3 s |
+
+| Model | `sympy-14711` | `sympy-13480` | `xarray-4629` | `sympy-18189` | `django-11066` | `sklearn-13439` | Pass | Input (mean) | Output (mean) |
+|---|---|---|---|---|---|---|---|---|---|
+| `codestral-2508` | F 30 | **P** 3 | **P** 3 | **P** 4 | **P** 3 | F 18 | **4/6** | 51,942 | 2,735 |
+| `ministral-14b-2512` | F 18 ✗ | **P** 13 | **P** 5 | F 30 | F 30 | **P** 13 | **3/6** | 129,570 | 4,885 |
+| `ministral-8b-2512` | F 21 | **P** 19 | **P** 9 | F 30 | F 30 | **P** 9 | **3/6** | 140,514 | 6,158 |
+| `nemotron-3-ultra` | **P** 24 ↪ | **P** 17 ↪ | **P** 8 ↪ | F 30 | **P** 30 ↪ | **P** 16 ↪ | **5/6** | 105,136 | 2,009 |
+| `ministral-3b-2512` | F 15 | F 16 ✗ | **P** 6 | **P** 10 | **P** 22 | F 20 | **3/6** | 77,989 | 5,431 |
+| **Tasks passed** | 1/5 | 4/5 | 5/5 | 2/5 | 3/5 | 3/5 | **18/30** | | |
+
+**18 of the 30 runs pass, and every model passes at least half of the
+six tasks.** `codestral-2508` passes 4 with the fewest input tokens
+(51,942 per task) and the shortest successes (3 or 4 iterations each). `nemotron-3-ultra` shows 5 passes, but NVIDIA was overloaded that
+afternoon: 5 of its 6 tasks went to the fallback model before the end.
+`nemotron` itself wrote the fix of `sympy-14711`, `sympy-13480` and
+`sklearn-13439` (the fallback only ran the tests and submitted), while
+`ministral-14b` wrote the fix of `xarray-4629` and `django-11066`; its
+only task without a switch, `sympy-18189`, failed. Its own record is
+therefore 3 fixes, 1 failure and 2 tasks it did not finish.
+
+**Difficulty is not where the first campaign put it.** `xarray-4629`
+passes 5/5 again and `sympy-13480` 4/5, but `sympy-18189`, whose hint
+holds the fix as a diff, passes only 2/5: `ministral-14b` and
+`ministral-8b` read the right lines at step 1 and 7, then never manage
+the one-word edit, and spend the 30 iterations in repeated steps (18 and 9)
+and multi-block answers (section 4.2). `sympy-14711` stays the hardest
+(1/5, and that one through the fallback switch).
+
+**Two false successes**, the second kind of failure besides the cap:
+`ministral-14b` submitted a real but wrong fix of `sympy-14711` in the
+same block as its reproduction and its `run_tests()`, so without reading
+either: the reproduction still raised the `TypeError` and the tests printed
+"3 passed, 1 exceptions". `ministral-3b`
+submitted a diff **it wrote by hand** for `sympy-13480`. Its `sed` command
+had changed nothing, so `get_patch()` was empty and the agent's assertion
+stopped the submission; the model then typed a diff in a string and passed
+it to `final_answer()`. That diff has no `diff --git` header and the wrong
+indentation, and none of the checker's three methods can apply it.
+
+**The size series of one family** (`ministral` 14B, 8B and 3B on the same
+tasks, the same agent, the same day) shows no order on six tasks: 3, 3 and
+3 passes here, 5, 3 and 4 in the second run of section 5. The 3B model
+answers as fast as `codestral` (1.8 s per answer, section 3.2), but it
+wrote all four hand-made diffs of the 60 runs of this campaign and its
+ablation.
+
+**Six runs out of 60 ended on the 10,000-token output cap**, and none of
+them on the input or time limit. They come from answers that go on after
+their code block (section 4.2).
+
+### 2.5 Mock exams (2026-10-04 to 2026-10-06)
+
+The four scripts the evaluators use (`exams/`) were first run on the
+night of 2026-10-04, on commit `4d0a580`, whose agent is the one of
+section 2.3 (`84d22b1`), on the machine with a regular Docker daemon, with
+`codestral-2508` given explicitly. The scripts draw their own tasks: five
+random MBPP tasks, and three SWE-bench tasks out of the pool of six. The
+raw output of that first exam stayed on that machine and is not
+versioned; the three later ones are (`benchmarks/exams/`).
 
 | Exam | Task | Result | Iterations | Input / output tokens | Agent time |
 |---|---|---|---|---|---|
@@ -584,6 +785,42 @@ The exam also showed that the evaluators' commands may leave out
 `--model-name` and `--provider-url`, which both agents required: since
 2026-10-05 the model defaults to `codestral-2508`, and the provider is the
 one that declares the model in `configs/models.json`.
+
+**Three more full exams** followed on rootless Docker, each on the commit
+of the day, without `--model-name` (so with `codestral-2508`). The
+checker's SWE-bench validation fails there on `lchown` (section 1.2), so
+the official SWE-bench result is 0/3 each time; the *real* column grades
+the same patches with the checker's grading code, as in section 2.4.
+
+| Exam | Commit | Sandbox | MBPP | SWE-bench tasks drawn | SWE-bench, real |
+|---|---|---|---|---|---|
+| 2026-10-04, 22:10 | `4d0a580` | 8/14 | **4/5** | `sympy-13480` P, `sympy-14711` F ✗, `sklearn-13439` F | 1/3 (official) |
+| 2026-10-05, 15:37 | `90ef54a` | **14/14** + bonus | **5/5** (17, 232, 295, 390, 96) | `sympy-18189` P, `sympy-14711` F, `sklearn-13439` F | 1/3 |
+| 2026-10-05, 16:18 | `1453d0c` | **14/14** + bonus | 3/5 (245 F, 430 F) | `sympy-18189` P, `django-11066` P, `sklearn-13439` F | **2/3** |
+| 2026-10-06, 13:49 | `f27644a` | **14/14** + bonus | **4/5** (138 F) | `xarray-4629` P, `sympy-13480` P, `sympy-14711` F | **2/3** |
+
+- **MBPP** passes three exams out of four, **16/20 tasks**. Every task
+  passed is passed in 1 or 2 iterations. The three failures since
+  2026-10-05 (MBPP 245, 430, 138) are the model resubmitting the same
+  wrong code, despite the repeated-step note, until the loop stops it
+  before the input limit.
+- **SWE-bench** reaches the exam bar of 2/3 in the last two exams. Since
+  the prompt rule of 2026-10-05 on the exit code of `run_tests()`, every
+  success claimed in an exam is real, and every failure is the
+  30-iteration or the 10,000-token cap without a patch. `sklearn-13439`
+  and `sympy-14711` failed each of the three times they were drawn.
+- **`CLEANUP: FAILED`** appears on every task whose patch the checker tried
+  to validate on rootless Docker, and on no other. A `docker ps` taken every
+  2 s during the 2026-10-06 exam shows the agent's container gone at
+  13:57:17 and a container running `tail -f /dev/null` from 13:57:21: the
+  checker's own validation container, left behind when its copy fails on
+  `lchown`. On the regular Docker daemon of 2026-10-04, the three tasks
+  were `CLEANUP: OK`.
+- **The first MBPP exam of 2026-10-06 gave 0/5**: the machine's Docker
+  storage had been wiped, so the checker's `python:3.11-slim` image was
+  missing and every solution failed validation in 3 to 7 s. Re-validated
+  once the image was pulled, the same five solutions give 4/5
+  (`benchmarks/exams/2026-10-06_13-49/mbpp_first_pass/`).
 
 ## 3. Provider reliability
 
@@ -703,6 +940,35 @@ Preliminary latency on a single 56,000-token request (synthetic history,
 `ministral-14b-2512` 4.1 s, `ministral-8b-2512` 6.0 s. One NVIDIA answer in
 six exceeds 30 s: the per-call deadline of SWE-bench was raised to 60 s on
 2026-10-02.
+
+**Second campaign** (2026-10-06, section 2.4 and ablation H, both runs of
+each model; same definitions; *fallback*: tasks switched to the fallback
+model after 5 failed attempts in a row):
+
+| Provider / model | Runs | Tasks | Attempts | Retries | Availability | Response time (mean / median / max) | Tasks lost | Fallback |
+|---|---|---|---|---|---|---|---|---|
+| Mistral `codestral-2508` | 6, 11 | 12 | 113 | 0 | **100 %** | **1.9 / 1.2 / 42.0 s** | 0 | 0 |
+| Mistral `ministral-14b-2512` | 7, 12 | 12 | 199 | 1 | 99 % | 4.0 / 3.5 / 18.5 s | 0 | 0 |
+| Mistral `ministral-8b-2512` | 8, 13 | 12 | 219 | 0 | **100 %** | 3.6 / 3.0 / 27.0 s | 0 | 0 |
+| Mistral `ministral-3b-2512` | 10, 15 | 12 | 200 | 0 | **100 %** | **1.8 / 1.4 / 29.1 s** | 0 | 0 |
+| NVIDIA `nemotron-3-ultra` | 9, 14 | 12 | 295 | 171 | **42 %** | 6.4 / 4.4 / 48.2 s | 0 | **10** |
+
+**NVIDIA was overloaded all afternoon**: 168 of its 171 failures are HTTP
+503 "Service temporarily overloaded", the other 3 are 60 s deadline
+overruns. 10 of its 12 tasks went to the fallback model, some at the first
+step (`django-11066` in run14 was done entirely by `ministral-14b`). No
+task was lost, which is what the fallback is for, but these runs measure
+`nemotron` only up to the switch (section 2.4). A probe after the campaign
+still got three 503 out of five requests. On 2026-10-04 the same model
+answered all its 50 requests: availability depends on the hour, not on
+the model.
+
+The four Mistral models answered 730 of their 731 attempts; the one failure is
+an HTTP 429 (rate limit) of `ministral-14b`, retried. A first
+`ministral-14b` run of `sympy-14711`, started at 14:29, hit six 60 s
+deadline overruns in a row and switched to `nemotron`; it was stopped and
+the model's six tasks rerun from 14:38 (run7), when a 13,000-token prompt
+took 1 s. The stopped run is kept in `run7/aborted/`.
 
 ## 4. Intermediary metrics
 
@@ -831,10 +1097,11 @@ precisely so that test summaries survive, but it now receives text that
 has already been cut. On the other sympy task, a summary was visible but
 the report printed `exit code: 0` above "0 passed, 4 exceptions": that code
 belongs to the script's last command, a `git checkout`, not to the tests.
-In the mock exam (section 2.4) the same misleading code cost a task:
+In the mock exam (section 2.5) the same misleading code cost a task:
 `codestral` read it as a pass and submitted a wrong patch. Since
 2026-10-05 the SWE-bench prompt warns about it (section 1.1); the tool
-itself, which should return only the test output, is not fixed yet.
+itself has returned only the test output since 2026-10-05 (`8db5195`):
+see the second campaign below and ablation I.
 
 **Partial progress**, where the summaries are visible: `codestral` on
 `sympy-14711` goes from "3 passed, 1 exceptions" (steps 10, 13, 15) to "4
@@ -875,9 +1142,98 @@ blind or untested runs leave nothing to measure.
 266,950 input tokens, 5,476 to 8,898 per iteration. None was cut by the
 300,000 limit, which a 2026-10-04 simulation expected around turn 26.
 
+
+**Second campaign** (section 2.4, the 30 runs of run6 to run10). Same
+metrics, plus *unread edits*: steps whose `edit_file` had an `old_str`
+line that no earlier observation showed, which this agent refuses to run
+(section 1.1). An `edit_file` whose result was not printed counts as an
+edit when nothing says it failed. *Blind* now covers every `run_tests()`
+call whose report the model did not see a summary of: not printed, in a
+block that did not run, or cut.
+
+| Model | Task | Result | First read | First edit | `run_tests()` (blind) | Green → `final_answer` | Repeated steps | Unread edits |
+|---|---|---|---|---|---|---|---|---|
+| `codestral-2508` | `sympy-14711` | F | 2 | 3 | 2 (0) | never green | 25 | 1 |
+| `codestral-2508` | `sympy-13480` | **P** | 1 | 2 | 1 (0) | 2 → 3: **1** | 0 | 0 |
+| `codestral-2508` | `xarray-4629` | **P** | 1 | 2 | 1 (0) | 2 → 3: **1** | 0 | 0 |
+| `codestral-2508` | `sympy-18189` | **P** | 1 | 2 | 1 (0) | 3 → 4: **1** | 0 | 0 |
+| `codestral-2508` | `django-11066` | **P** | 1 | 2 | 1 (0) | 2 → 3: **1** | 0 | 0 |
+| `codestral-2508` | `sklearn-13439` | F | 1 | — | 0 (0) | — | 1 | 1 |
+| `ministral-14b-2512` | `sympy-14711` | F ✗ | 2 | 3 | 3 (2) | never green | 1 | 0 |
+| `ministral-14b-2512` | `sympy-13480` | **P** | 3 | 12 | 3 (0) | 12 → 13: **1** | 2 | 0 |
+| `ministral-14b-2512` | `xarray-4629` | **P** | 2 | 3 | 1 (0) | 4 → 5: **1** | 0 | 0 |
+| `ministral-14b-2512` | `sympy-18189` | F | 1 | — | 0 (0) | — | 18 | 0 |
+| `ministral-14b-2512` | `django-11066` | F | 2 | — | 0 (0) | — | 11 | 0 |
+| `ministral-14b-2512` | `sklearn-13439` | **P** | 2 | 9 | 1 (0) | 12 → 13: **1** | 0 | 0 |
+| `ministral-8b-2512` | `sympy-14711` | F | — | — | 0 (0) | — | 0 | 0 |
+| `ministral-8b-2512` | `sympy-13480` | **P** | 1 | 16 | 1 (0) | 18 → 19: **1** | 8 | 0 |
+| `ministral-8b-2512` | `xarray-4629` | **P** | 5 | 6 | 1 (0) | 8 → 9: **1** | 0 | 0 |
+| `ministral-8b-2512` | `sympy-18189` | F | 7 | — | 0 (0) | — | 9 | 0 |
+| `ministral-8b-2512` | `django-11066` | F | 1 | 10 | 2 (0) | never green | 11 | 0 |
+| `ministral-8b-2512` | `sklearn-13439` | **P** | 2 | 7 | 0 (0) | — | 0 | 0 |
+| `nemotron-3-ultra` | `sympy-14711` | **P** ↪ | 2 | 11 | 0 (0) | — | 2 | 0 |
+| `nemotron-3-ultra` | `sympy-13480` | **P** ↪ | 3 | 7 | 1 (1) | never green | 4 | 0 |
+| `nemotron-3-ultra` | `xarray-4629` | **P** ↪ | 5 | 6 | 1 (0) | 7 → 8: **1** | 0 | 0 |
+| `nemotron-3-ultra` | `sympy-18189` | F | 1 | 21 | 0 (0) | — | 5 | 0 |
+| `nemotron-3-ultra` | `django-11066` | **P** ↪ | 12 | 15 | 2 (1) | 29 → 30: **1** | 0 | 0 |
+| `nemotron-3-ultra` | `sklearn-13439` | **P** ↪ | 8 | 12 | 1 (0) | 15 → 16: **1** | 2 | 0 |
+| `ministral-3b-2512` | `sympy-14711` | F | 1 | — | 0 (0) | — | 0 | 0 |
+| `ministral-3b-2512` | `sympy-13480` | F ✗ | — | 4 | 0 (0) | — | 4 | 0 |
+| `ministral-3b-2512` | `xarray-4629` | **P** | 1 | 4 | 0 (0) | — | 0 | 0 |
+| `ministral-3b-2512` | `sympy-18189` | **P** | 1 | 2 | 0 (0) | — | 0 | 0 |
+| `ministral-3b-2512` | `django-11066` | **P** | 2 | 20 | 0 (0) | — | 3 | 0 |
+| `ministral-3b-2512` | `sklearn-13439` | F | — | — | 0 (0) | — | 3 | 0 |
+
+**Submission discipline is the clearest change since the first
+campaign.** 12 of the 18 successes were submitted one iteration after a
+`run_tests()` whose summary showed no failure, against 3 of 10 on
+2026-10-04; 5 never called `run_tests()` (three of them `ministral-3b`),
+and one submitted after a call it did not print. Only 4 of the 23 calls
+are blind, against 15 of 24: the tool now returns the test output itself
+(section 1.1). The cost is small: a passing run adds one test step.
+
+**Repeated steps are now concentrated in the failures**: 88 of the 109
+repeated steps of the campaign are in its 12 failures (288 steps). The
+note the loop adds when a step repeats both the code and the output of an
+earlier one (section 1.1) changes nothing: `codestral` on `sympy-14711`
+alternates the same two blocks from step 6 to step 30, and 25 of its 30
+steps are repeats.
+
+**Answers with several code blocks** are the main waste of the
+`ministral` models. Only the first block runs, and the loop says so after
+each such answer ("Your answer had N code blocks: only the first one was
+run"). Over both runs of each model, they make 72 % of `ministral-14b`'s
+steps and 84 % of its output tokens, 70 % and 87 % for `ministral-8b`,
+52 % and 73 % for `ministral-3b`, against 4 % of `codestral`'s steps
+and 10 % of `nemotron`'s. The models write a plan as a series of blocks,
+then react to the output of the first as if all had run. A related form
+ends `codestral`'s `sklearn-13439`: a code block closed without
+`<end_code>`, followed by "Step 144", "Thought:" and another block, over
+and over, until the answer alone used 6,266 tokens and the task its
+10,000. Neither stop sequence (`<end_code>`, `Observation:`) catches it.
+These answers explain the six runs that ended on the output cap.
+
+**Unread edits are rare in this campaign**: 2 refusals in 30 runs, both
+`codestral`, and none in the 30 runs of ablation H, where the refusal was
+off. Section 5 shows what that means for the ablation. One of the two
+refusals (`sympy-14711`, step 5) blocked a line the model had written
+itself two steps earlier with `edit_file`: the refusal counts the outputs
+it has shown, not the `new_str` of a successful edit. The model read the
+lines at step 6 and edited them at step 7.
+
+**Hand-written diffs.** `ministral-3b` four times passed `final_answer()`
+a diff it typed instead of the output of `get_patch()` (once in run10,
+three times in run15). Three do not apply anywhere; the fourth
+(`sympy-14711`, run15), with a made-up `index abc1234567…` line, applies
+only through the checker's third method (`patch --fuzz=5`) and resolves
+the task, although the repository never held the change. The agent checks
+that `get_patch()` is not empty, but not that the submitted string is what
+`get_patch()` returned.
+
 ## 5. Ablation studies
 
-All on MBPP, same task files, same model, one change at a time.
+A to G are on MBPP, same task files, same model, one change at a time.
+H and I, on SWE-bench, are at the end of the section.
 
 | | Change | Model, tasks | Before | After |
 |---|---|---|---|---|
@@ -1005,21 +1361,68 @@ they show is in section 2.1: every model copies the raw string, none calls
   fewer output tokens per task and `nemotron-3-ultra` 2.7 times fewer.
   Discipline stays at 0 for every submission, with no blind submission.
 
-**SWE-bench ablation — not run yet.** The campaign of section 2.3 is the
-baseline. Section 4.2 points at the one-variable change to measure first:
-make the SWE-bench `run_tests()` return the test output itself (what the
-evaluation script prints between its start and end markers, with the
-tests' own result) instead of the first 20,000 characters of the whole
-script. The rerun would use the same five models and the same three tasks.
-It mostly bears on `sympy-13480`, where 15 of the 24 test runs were blind.
-Since 2026-10-05 the prompt also warns that the exit code `run_tests()`
-prints is not the tests' (section 1.1). That is a second variable: it can
-be measured alone first, or together with the tool's fix and reported as
-such.
+**SWE-bench ablations.** Two, both against the campaigns of sections
+2.3 and 2.4.
+
+| | Change | Models, tasks | Before | After |
+|---|---|---|---|---|
+| H | An `edit_file` whose `old_str` holds a line no earlier observation showed is not run (`5c0fbf3`) | 5 models, the 6 tasks of section 2.4 | run11–15, refusal off: **22/30**, 0 unread edits | run6–10, refusal on: **18/30**, 2 refusals |
+| I | The agent of 2026-10-04 (`84d22b1`) against that of 2026-10-06 (`f27644a`): `run_tests()` returning the test output, the exit-code rule, the stop on `Observation:`, the repeated-step note, H | 4 models, the 3 recommended tasks | run1–4: **8/12**, 14 of 22 `run_tests()` blind, 2 of 8 successes submitted after green tests | run6–9: **9/12**, 3 of 15 blind, 7 of 9; run11–14: **10/12**, 0 of 9 blind, 9 of 10 |
+
+**H** was run as the same agent with `Loop.check_unread_edits()`
+replaced by a function that never refuses (a wrapper around
+`agent_swebench`, outside the repository); everything else, commit,
+configuration and tasks, is identical. `META.txt` says which arm a run
+belongs to.
+
+| Model, no refusal | `sympy-14711` | `sympy-13480` | `xarray-4629` | `sympy-18189` | `django-11066` | `sklearn-13439` | Pass | Input (mean) | Output (mean) |
+|---|---|---|---|---|---|---|---|---|---|
+| `codestral-2508` | **P** 7 | **P** 3 | **P** 4 | **P** 4 | **P** 4 | F 30 | **5/6** | 40,822 | 920 |
+| `ministral-14b-2512` | **P** 16 | **P** 3 | **P** 5 | F 30 | **P** 19 | **P** 16 | **5/6** | 101,566 | 3,873 |
+| `ministral-8b-2512` | F 27 | **P** 5 | F 30 | **P** 4 | **P** 5 | F 30 | **3/6** | 101,501 | 4,403 |
+| `nemotron-3-ultra` | **P** 24 ↪ | **P** 6 | **P** 15 ↪ | **P** 22 ↪ | **P** 12 ↪ | F 30 ↪ | **5/6** | 84,920 | 2,235 |
+| `ministral-3b-2512` | **P** 20 | F 28 ✗ | **P** 13 | **P** 18 | F 12 ✗ | **P** 20 | **4/6** | 93,052 | 4,148 |
+| **Tasks passed** | 4/5 | 4/5 | 4/5 | 4/5 | 4/5 | 2/5 | **22/30** | | |
+
+| Model | With the refusal (run) | Without (run) | Refusals | Unread edits run without it | Verdicts that differ |
+|---|---|---|---|---|---|
+| `codestral-2508` | 4/6 (run6) | 5/6 (run11) | 2 | 0 | 1: sympy-14711 |
+| `ministral-14b-2512` | 3/6 (run7) | 5/6 (run12) | 0 | 0 | 2: sympy-14711, django-11066 |
+| `ministral-8b-2512` | 3/6 (run8) | 3/6 (run13) | 0 | 0 | 4: xarray-4629, sympy-18189, django-11066, sklearn-13439 |
+| `nemotron-3-ultra` | 5/6 (run9) | 5/6 (run14) | 0 | 0 | 2: sympy-18189, sklearn-13439 |
+| `ministral-3b-2512` | 3/6 (run10) | 4/6 (run15) | 0 | 0 | 3: sympy-14711, django-11066, sklearn-13439 |
+
+- **The refusal almost never fires, so H measures the noise.** It refused
+  2 steps in 30 runs, both `codestral`, and with the refusal off no model
+  wrote a single unread edit in 30 runs. On 2026-10-04 and 2026-10-05,
+  19 of 60 edits were unread (section 1.1); on these six tasks, with this
+  prompt, the models read before they edit. So in 28 of the 30 pairs the
+  two arms ran **the same agent on the same task**, and still **12 of the
+  30 verdicts differ** (9 of the 22 pairs of the four Mistral models
+  without a refusal). The 18 → 22 gap is the variance of a single run,
+  not the effect of the refusal.
+- **One run per model and task cannot rank the models.** Between the two
+  arms, `ministral-14b` goes from 3/6 to 5/6, `ministral-3b` from 3/6 to
+  4/6, `codestral` from 4/6 to 5/6. Pooled over both arms (12 runs each),
+  `codestral` passes 9, `ministral-14b` 8, `ministral-3b` 7,
+  `ministral-8b` 6, and `nemotron` 10 with most of its tasks finished by
+  the fallback. Only `codestral`'s lead in efficiency is stable: its 9
+  successes take 3 to 7 iterations.
+- **The tasks keep their order better than the models**: over the ten
+  runs of each, `xarray-4629` passes 9, `sympy-13480` 8, `django-11066` 7,
+  `sympy-18189` 6, `sympy-14711` and `sklearn-13439` 5.
+- **I** changes several things at once, so it is a before/after of the
+  agent, not of one change. Its pass rate moves within the noise H
+  measures (8/12 → 9/12 and 10/12). What moves clearly is what the agent
+  shows the model: blind test runs fall from 14 of 22 to 3 of 15 and 0
+  of 9, and successes submitted after a visibly green run rise from 2 of 8
+  to 7 of 9 and 9 of 10 (section 4.2). The first campaign's false-success
+  trap, an exit code of 0 above failing tests (section 2.5), cannot happen
+  with the new `run_tests()`.
 
 ## 6. Conclusions
 
-### 6.1 MBPP (provisional)
+### 6.1 MBPP
 
 - **Validating through `run_tests(code)`** (ablation G) is the best agent
   of this report: 81/100 over five models, 19/20 for Groq and 18/20 for
@@ -1062,61 +1465,67 @@ such.
 - On these 20 tasks the ceiling is about 19/20: MBPP 400 (hidden test)
   defeats nearly every model, and MBPP 462 (output cap) only passes with
   short answers.
-- **The mock exam** (section 2.4) drew five other tasks and gave 4/5 with
+- **The mock exam** (section 2.5) drew five other tasks and gave 4/5 with
   `codestral-2508`, exactly the bar.
 
-### 6.2 SWE-bench (provisional)
+### 6.2 SWE-bench
 
-- **The agent passes the SWE-bench bar with each of the four models that
-  ran all three tasks**: 2 of the 3 recommended tasks each, 8/12, every
-  verdict `RESOLVED_FULL` from the official checker and every metric
-  within its limits. The fifth, Qwen, has passed the two tasks it has run;
-  its `sympy-14711` is pending. One run per model per task, so this says
-  the bar is reachable, not which model is best. **The mock exam's draw
-  gave 1/3** with `codestral-2508` (section 2.4): reaching the bar is not
-  yet reliable.
-- **In the campaign, it never submits a wrong patch.** Every claimed
-  success is real, and every failure is the 30-iteration cap with nothing
-  submitted. What the failures cost is iterations and tokens: 164,287 to
-  266,950 input tokens each, against 9,772 to 122,628 for the successes.
-  **The mock exam broke that**: on `sympy-14711`, the model trusted the
-  `exit code: 0` of `run_tests()` and submitted a wrong fix.
-- **Difficulty follows how local the fix is**, not how well the statement
-  points at it: `xarray-4629` 5/5 and `sympy-13480` 4/5 are one-line
-  fixes at the place the statement names; `sympy-14711` 1/4 needs the
-  scalar `0` accepted without breaking the other operators of `Vector`.
-- **Mistral `codestral-2508` stays the SWE-bench default of the
-  `Makefile`**: one of the two fastest models (1.8 s per answer, without
-  the rate limits Qwen hits), the only one to
-  solve `sympy-14711`, and it solved `sympy-13480` the same afternoon. Its
-  failure that evening is an identical edit repeated eleven times, which
-  the agent could catch.
-- **NVIDIA `nemotron-3-ultra`** wrote the fewest output tokens of the
-  models that ran all three tasks (1,377 per task) and did not fail once in
-  50 requests, unlike its MBPP runs.
-  `ministral-14b` came closest to a limit (9,739 of 10,000 output tokens on
-  its failure); `ministral-8b` lost its failure to tool calls whose result
-  it never printed.
-- **OpenRouter `qwen3.8-27b:free`** is the fifth model because it was the
-  only free one left that follows the protocol (section 1.4). It solved
-  both tasks it ran, with few tokens (40,871 input and 647 output per
-  task), but it is the only model slowed by rate limits (3 HTTP 429 in 21
-  attempts). With 50 free requests a day, about one three-task campaign,
-  it can be used for this report but not as the exam model.
-- **The next gains are on the agent's side, not the model's**, from the
-  failures of section 4.2: (1) make `run_tests()` show the test results
-  (15 of 24 runs were blind, and the exit code shown is not the tests',
-  which the mock exam paid for; the prompt warns about it since
-  2026-10-05, the tool is still to fix);
-  (2) make a failed `edit_file` say why (closest lines, indentation) and
-  have the loop notice an action repeated word for word; (3) let
-  `edit_file` create a file, or say in the manual how to; (4) check
-  whether keeping only 3 whole observations makes models reread what they
-  have already seen.
-- **Still missing**: Qwen's `sympy-14711` run (section 2.3), a second run
-  of each model before ranking them, the raw output of the mock exam (kept
-  outside the repository so far) under `benchmarks/`, and a run of the
-  2026-10-05 agent.
+- **The agent reaches the exam bar with every model, but not on every
+  draw.** Over the 60 runs of the second campaign (five models, the six
+  tasks the exam can draw, two runs each), 40 pass, and every model passes
+  at least half of the tasks in each run. The mock exams with
+  `codestral-2508` gave 1/3, 1/3, 2/3 and 2/3 (real verdicts, section
+  2.5). Two tasks fail most often, `sympy-14711` and `sklearn-13439`
+  (5 passes in 10 runs each, and every exam that drew them).
+- **A single run per model and task is mostly noise.** Run twice with an
+  agent that, in practice, did not change (ablation H), 12 of 30
+  verdicts flip. Model rankings of section 2.3 or 2.4 taken alone are not
+  meaningful; pooled over two runs, `codestral` 9/12, `ministral-14b`
+  8/12, `ministral-3b` 7/12 and `ministral-8b` 6/12 are within that noise
+  of each other. **Mistral `codestral-2508` stays the default** for
+  reasons that hold across runs: it answers fastest with
+  `ministral-3b` (1.8–1.9 s), it never failed a request (0 retries in 113
+  attempts on 2026-10-06, 0 in 55 on 2026-10-04), its successes are the
+  shortest (3 to 7 iterations) and it uses the fewest input tokens
+  (51,942 per task in section 2.4, against 77,989 to 140,514), it writes
+  almost only one block per answer (4 % multi-block answers against 52 to
+  72 % for the `ministral` models), and it never submitted a hand-written
+  or a wrong patch in the campaigns (it did once, in the first mock exam,
+  before the exit-code rule).
+- **NVIDIA `nemotron-3-ultra` is good when it answers.** In run9 it wrote
+  the fix of three tasks itself, `sympy-14711`, the hardest, among them,
+  and failed one; the fallback model finished the other two. But its
+  availability fell from 100 % on
+  2026-10-04 to 42 % on 2026-10-06 (HTTP 503), and 10 of its 12 tasks
+  needed the fallback model: it cannot be the exam model, and its scores
+  of section 2.4 are partly `ministral-14b`'s.
+- **Model size does not order the `ministral` series** on these tasks
+  (14B, 8B, 3B: 8, 6 and 7 passes out of 12). What size changes is
+  discipline: the 3B model wrote all four hand-made diffs, and the 14B and
+  8B models most of the multi-block answers.
+- **The agent changes of 2026-10-05 are visible in what the model sees,
+  not yet in the pass rate** (ablation I): blind test runs went from 14 of
+  22 to 3 of 15 and 0 of 9, and successes submitted after a green test run
+  from 2 of 8 to 7 of 9 and 9 of 10. The refusal of unread edits was
+  nearly idle in these runs (2 refusals in 30), unlike in earlier ones (19
+  of 60 edits).
+- **The next gains are on the agent's side**, from section 4.2: (1) stop a
+  model from submitting anything but the output of `get_patch()` (four
+  hand-made diffs, one of which "passed" through fuzzy patching); (2) stop
+  generation at a second code block or at a line starting a new step, or
+  run only answers that end with `<end_code>`, since multi-block answers
+  and run-on steps caused all six output-cap failures; (3) break loops
+  that the repeated-step note does not break (`codestral` alternating two
+  blocks for 25 steps); (4) count the `new_str` of a successful edit as
+  seen, so that the refusal of unread edits does not block a line the
+  model wrote itself. (1), (4) and most of (2) are in the agent since the
+  evening of 2026-10-06, not yet measured (section 1.1).
+- **Still missing**: a `nemotron` run without NVIDIA's overload; the
+  first campaign's Qwen `sympy-14711`, which can no longer be run for free;
+  an official `validate swebench` of the second campaign on a regular
+  Docker daemon (its verdicts come from the checker's grading code,
+  section 1.2); and more than two runs per model and task before ranking
+  models.
 
 ## Backing data
 
@@ -1147,7 +1556,18 @@ files and which checker output is authoritative for each run.
 | swebench/run2 | Mistral `ministral-14b-2512` |
 | swebench/run3 | Mistral `ministral-8b-2512` |
 | swebench/run4 | NVIDIA `nemotron-3-ultra` |
-| swebench/run5 | OpenRouter `qwen/qwen3.8-27b:free` (`sympy-14711` pending) |
+| swebench/run5 | OpenRouter `qwen/qwen3.8-27b:free` (`sympy-14711` not run: the free model was withdrawn) |
+| swebench/run6, run11 | Mistral `codestral-2508` (second campaign; run11 without the refusal of unread edits) |
+| swebench/run7, run12 | Mistral `ministral-14b-2512` (idem; `run7/aborted/`: the stopped first attempt) |
+| swebench/run8, run13 | Mistral `ministral-8b-2512` (idem) |
+| swebench/run9, run14 | NVIDIA `nemotron-3-ultra` (idem; most tasks finished by the fallback, section 3.2) |
+| swebench/run10, run15 | Mistral `ministral-3b-2512` (idem) |
+
+The mock exams of 2026-10-05 and 2026-10-06 are in `benchmarks/exams/`,
+one directory per exam with the output of the four scripts (`sandbox/`,
+`mbpp/`, `swebench/`), as the scripts wrote it in `evaluations/`; each
+SWE-bench task also has a `grade.txt`, the verdict of the checker's
+grading code (section 1.2).
 
 Since 2026-10-05 `--model-name` and `--provider-url` can be left out: the
 model defaults to `codestral-2508`, and the provider is the one that

@@ -98,6 +98,38 @@ to its exit, container set-up included; `sec` is the agent's own
 code) and `models` (the models that answered). The last line of each
 `logs/agent_XX.log` gives the agent's exit code and `wall`.
 
-`run5` (Qwen) has only `task_02` and `task_03` so far: `task_01` waits for
-the OpenRouter free quota. Its `task_02` was run twice, the second run
-overwriting the first; `META.txt` records the first run's figures.
+`run5` (Qwen) has only `task_02` and `task_03`: `task_01` waited for the
+OpenRouter free quota, and on 2026-10-06 the model was no longer served
+for free. Its `task_02` was run twice, the second run overwriting the
+first; `META.txt` records the first run's figures.
+
+`swebench/run6` to `run15` (2026-10-06) are the second campaign: six
+tasks (`task_01` to `task_03` as above, then `task_04`
+`sympy__sympy-18189`, `task_05` `django__django-11066`, `task_06`
+`scikit-learn__scikit-learn-13439`), one model per run, on commit
+`f27644a`. run6 to run10 run the agent as it is; run11 to run15 run it
+with `Loop.check_unread_edits()` disabled (ablation H of the report),
+which their `META.txt` states under `ablation`. They ran on rootless
+Docker, where `validate swebench` cannot run: `logs/grade_XX.txt` holds
+the verdict of the checker's grading code called outside
+`moulinette_eval` (report, section 1.2), and `RESUME.json` takes
+`resolution` from it. `RESUME.json` also has `grade` (how the patch was
+applied, FAIL_TO_PASS and PASS_TO_PASS counts) and the intermediary
+metrics of the report's section 4.2: `first_read`, `first_edit`,
+`run_tests_calls`, `blind`, `green` (step of the first green test run),
+`last`, `repeated`, `unread_edit_steps`, `edits_ok`, `edits_notfound`.
+`run7/aborted/` is a first `ministral-14b-2512` attempt, stopped after
+its first task went to the fallback model on deadline overruns.
+
+## Mock exams
+
+`exams/<date>_<time>/` holds what the four `exams/` scripts wrote in
+`evaluations/` for the full mock exams of 2026-10-05 (15:37 and 16:18)
+and 2026-10-06 (13:49): `sandbox/`, `mbpp/` and `swebench/`, one
+directory per task with `task.json`, `solution.json`, `stdout.log` (the
+checker's output) and `stderr.log`. The official SWE-bench verdict there
+is FAILED for every task, because validation fails on rootless Docker;
+`grade.txt` gives the verdict of the checker's grading code.
+`2026-10-06_13-49/mbpp_first_pass/` is the first MBPP exam of that day,
+whose validation failed for lack of the checker's image (report, section
+2.5).

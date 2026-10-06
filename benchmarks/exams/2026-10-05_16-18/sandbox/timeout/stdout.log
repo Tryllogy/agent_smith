@@ -1,0 +1,3 @@
+OK: short computation completed in 0.001s (result=499500)
+PARTIAL_OUTPUT_MARKER: this line was printed before timeout
+=== TIMEOUT TEST COMPLETE ===

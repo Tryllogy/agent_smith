@@ -7,6 +7,7 @@ ESTIMATED_CHARS_PER_TOKEN = 2.5
 LLM_STOP_SEQUENCE = [
     "<end_code>",
     "Observation:",
+    "```\n\n",
 ]
 LLM_START_SEQUENCE = [
     "```python",
