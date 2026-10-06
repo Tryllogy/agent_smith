@@ -32,9 +32,12 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import time
 import uuid
 import weakref
 from pathlib import Path
+
+from sandbox import executor
 
 # Where every SWE-bench image keeps the repository.
 TESTBED = "/testbed"
@@ -148,6 +151,7 @@ class TaskContainer:
         self.workdir = None
         self.repo = None
         self.eval_script = None
+        self.proc = None
         self.started = False
 
     def start(self):
@@ -164,9 +168,7 @@ class TaskContainer:
             self.workdir = Path(tempfile.mkdtemp(prefix="agent_smith_"))
             self.repo = self.workdir / "testbed"
             self.copy_testbed()
-            docker("run", "-d", "--name", self.name,
-                   "-v", f"{self.repo}:{TESTBED}",
-                   self.task.docker_image, "sleep", "infinity")
+            self._run_container()
             self.started = True
             self.eval_script = self.workdir / "eval_script.sh"
             self.eval_script.write_text(self.task.eval_script)
@@ -174,6 +176,50 @@ class TaskContainer:
             self.stop()
             raise
         return self
+
+    def _run_container(self):
+        """Start the container, tied to the agent's lifetime.
+
+        `docker run --rm -i` on a process that blocks reading stdin keeps
+        the container alive only while we hold the write end of that
+        pipe. If the agent dies for any reason -- including `kill -9`,
+        which no handler can catch -- the pipe closes, the process reads
+        EOF and exits, and `--rm` removes the container. The SIGTERM and
+        atexit net and stop() remain as backups.
+        """
+        self.proc = subprocess.Popen(
+            ["docker", "run", "--rm", "-i", "--name", self.name,
+             "-v", f"{self.repo}:{TESTBED}", self.task.docker_image,
+             "sh", "-c", "cat >/dev/null 2>&1"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # The sandbox child is forked later and would inherit this pipe,
+        # holding the container open past a kill of the agent. Tell the
+        # child to close it, so only this process keeps the lifeline.
+        executor.FDS_TO_CLOSE_IN_CHILD.append(self.proc.stdin.fileno())
+        self._wait_running()
+
+    def _wait_running(self, timeout=120):
+        """Block until the container is up, or fail.
+
+        Raises:
+            DockerError: If it exits early or is not up within `timeout`.
+        """
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.proc.poll() is not None:
+                raise DockerError("the container exited while starting")
+            try:
+                running = docker(
+                    "inspect", "-f", "{{.State.Running}}", self.name)
+            except DockerError:
+                running = ""
+            if running == "true":
+                return
+            time.sleep(0.2)
+        raise DockerError(f"container {self.name} did not start in time")
 
     def pull(self):
         """Fetch the task's image, unless it is already there."""
@@ -210,7 +256,20 @@ class TaskContainer:
     def stop(self):
         """Remove the container and the host copy. Safe to call twice."""
         if self.started:
-            # Already gone means nothing left to clean.
+            proc = getattr(self, "proc", None)
+            if proc is not None:
+                # Deregister then close the pipe, so the container sees
+                # EOF and --rm fires; then make sure the client is gone.
+                with contextlib.suppress(Exception):
+                    executor.FDS_TO_CLOSE_IN_CHILD.remove(
+                        proc.stdin.fileno())
+                with contextlib.suppress(Exception):
+                    if proc.stdin:
+                        proc.stdin.close()
+                with contextlib.suppress(Exception):
+                    proc.terminate()
+                self.proc = None
+            # Backup, in case --rm has not fired yet.
             with contextlib.suppress(DockerError):
                 docker("rm", "-f", self.name)
             self.started = False
