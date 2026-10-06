@@ -1,5 +1,7 @@
+import contextlib
 import io
 import multiprocessing as mp
+import os
 import queue
 import resource
 import time
@@ -26,6 +28,12 @@ DRAIN_SECONDS = 0.5
 # The two ways an entry can end without the child answering.
 TIMEOUT = "Timeout after {}s"
 DIED = "No result (process died)"
+
+# File descriptors the sandboxed child must close on startup. The agent
+# ties a Docker container to its life by holding a pipe (see
+# agent_swebench/docker.py); the forked child would otherwise inherit
+# that pipe and keep the container alive after the agent is killed.
+FDS_TO_CLOSE_IN_CHILD = []
 
 # Largest stdout, stderr or tool result handed back for one entry.
 # Past this the output is cut and the model is told, so a flood of text
@@ -138,6 +146,11 @@ def worker(jobs, outbox, answers, config: SandboxConfig, specs, manual):
     is still there for the next -- the "persistent variables between
     steps" the subject promises for code-based tool calling.
     """
+    # Drop any fd the child must not keep (the Docker lifeline pipe), so
+    # that killing the agent really closes it.
+    for fd in FDS_TO_CLOSE_IN_CHILD:
+        with contextlib.suppress(OSError):
+            os.close(fd)
     octets = config.max_memory_mb * 1024 * 1024
     resource.setrlimit(resource.RLIMIT_AS, (octets, octets))
     block_network()
