@@ -1,0 +1,5 @@
+LLM retry 1 on step 3: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 10.0s
+LLM retry 2 on step 3: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 10.0s
+LLM retry 1 on step 4: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 10.0s
+LLM retry 1 on step 5: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 10.0s
+exit=0 wall=74.1

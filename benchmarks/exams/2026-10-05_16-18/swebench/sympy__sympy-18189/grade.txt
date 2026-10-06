@@ -1,0 +1,1 @@
+RESOLVED_FULL | applique par git apply --verbose, FAIL_TO_PASS 1/1, PASS_TO_PASS 41/41, 37 s

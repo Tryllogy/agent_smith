@@ -10,7 +10,7 @@ from core.config_models import LLMResponse
 from core.llm.fallback import FallbackClient
 from core.models import SandboxConfig, SolutionOutput, StepMetrics
 from sandbox.executor import Sandbox, execute
-from sandbox.mcp_client.client import MCPClient
+from sandbox.mcp_client.client import MCPClient, MCPError
 
 
 class Loop:
@@ -97,7 +97,7 @@ class Loop:
             messages=self.prompt.prompt,
             max_tokens=max_tokens,
         )
-        text: str = llm_response.content
+        text: str = self.close_cut_fence(llm_response.content)
         self.request_time_ms = llm_response.request_time_ms
         self.usage_input += llm_response.input_tokens
         self.usage_output += llm_response.output_tokens
@@ -118,6 +118,21 @@ class Loop:
         self.llm_output = " ".join(part for part in (reason, text) if part)
         message = {"role": "assistant", "content": text}
         self.prompt.add_message(message)
+
+    @staticmethod
+    def close_cut_fence(text: str) -> str:
+        """Give back the closing fence a stop sequence took with it.
+
+        "```\\n\\n" is a stop sequence, so that an answer ends after its
+        first code block instead of going on with more blocks that would
+        never run; the provider drops the closing fence along with it. An
+        answer left with an odd number of fences gets it back, so that its
+        block is well-formed for the extraction and in the conversation
+        the model reads again.
+        """
+        if isinstance(text, str) and text.count("```") % 2 == 1:
+            return text.rstrip("\n") + "\n```"
+        return text
 
     def prompt_chars(self) -> int:
         """Return the number of characters of the conversation."""
@@ -187,6 +202,9 @@ class Loop:
             stdout + stderr + error if error else stdout + stderr
         )
         self.seen_text.append(self.sandbox_output)
+        self.seen_text.extend(
+            self.written_by_edits(self.sandbox_input, self.sandbox_output)
+        )
         self.repeat_note = self.check_repeat(
             self.sandbox_input, self.sandbox_output
         )
@@ -272,29 +290,69 @@ class Loop:
         steps count as shown. None when every line was shown, or when
         old_str is not a literal string and cannot be checked.
         """
+        seen: str = "\n".join(self.seen_text)
+        for call in self.edit_file_calls(code):
+            if call["old_str"] is None:
+                continue
+            for line in call["old_str"].splitlines():
+                if line.strip() and line.strip() not in seen:
+                    return line.strip()
+        return None
+
+    def written_by_edits(self, code: str, output: str) -> list[str]:
+        """Return the new_str of each edit_file call the output reports done.
+
+        The model wrote these lines into the file itself, so editing them
+        again is not a recitation. A call counts as done when the output
+        holds its "Edited <filepath>:" line, or any "Edited " line when
+        filepath is not a literal string.
+        """
+        written: list[str] = []
+        for call in self.edit_file_calls(code):
+            if call["new_str"] is None:
+                continue
+            done: str = (
+                "Edited "
+                if call["filepath"] is None
+                else f"Edited {call['filepath']}:"
+            )
+            if done in output:
+                written.append(call["new_str"])
+        return written
+
+    @staticmethod
+    def edit_file_calls(code: str) -> list[dict[str, str | None]]:
+        """Return the arguments of each edit_file call of code.
+
+        Keyed by parameter name, positional or keyword. An argument that
+        is not a literal string (a variable, an f-string) is None. Empty
+        when code does not parse.
+        """
         try:
             tree = ast.parse(code)
         except SyntaxError:
-            return None
-        seen: str = "\n".join(self.seen_text)
+            return []
+        calls: list[dict[str, str | None]] = []
         for node in ast.walk(tree):
             if not (
                 isinstance(node, ast.Call)
                 and getattr(node.func, "id", "") == "edit_file"
             ):
                 continue
-            old = next(
-                (k.value for k in node.keywords if k.arg == "old_str"),
-                node.args[1] if len(node.args) > 1 else None,
-            )
-            if not (
-                isinstance(old, ast.Constant) and isinstance(old.value, str)
-            ):
-                continue
-            for line in old.value.splitlines():
-                if line.strip() and line.strip() not in seen:
-                    return line.strip()
-        return None
+            call: dict[str, str | None] = {}
+            for index, name in enumerate(("filepath", "old_str", "new_str")):
+                value = next(
+                    (k.value for k in node.keywords if k.arg == name),
+                    node.args[index] if len(node.args) > index else None,
+                )
+                call[name] = (
+                    value.value
+                    if isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)
+                    else None
+                )
+            calls.append(call)
+        return calls
 
     def truncate_output(self, output: str) -> str:
         """Return output cut to the bench's observation_max_chars.
@@ -391,7 +449,40 @@ class Loop:
                 "The final answer is NOT a git patch."
                 " Pass the result of get_patch() to final_answer()."
             )
-        return None
+        patch: str | None = self.current_patch()
+        if patch is None or answer.strip() == patch.strip():
+            return None
+        if patch.strip() == "":
+            return (
+                "The final answer is not the repository's patch:"
+                " get_patch() is empty, the repository has no change. Make"
+                " the fix with edit_file(), check it, then call"
+                " final_answer(get_patch())."
+            )
+        return (
+            "The final answer is not the repository's patch: it differs"
+            " from what get_patch() returns now. Pass the output of"
+            " get_patch() to final_answer() unchanged, never a patch you"
+            " wrote yourself."
+        )
+
+    def current_patch(self) -> str | None:
+        """Return what the get_patch tool returns now, or None.
+
+        Only the repository's own diff can be submitted: a patch the model
+        typed may not apply, or may apply a change the repository never
+        held. None, when there is no MCP server, the call fails or the
+        tool answers with an error, means the answer cannot be compared.
+        """
+        if self.mcp_client is None:
+            return None
+        try:
+            patch: str = self.mcp_client.call_tool("get_patch", {})
+        except (MCPError, RuntimeError):
+            return None
+        if patch.startswith("Error:"):
+            return None
+        return patch
 
     def run_answer_tests(self, answer: str) -> str | None:
         """Run the answer alone with answer_tests; return why it fails.

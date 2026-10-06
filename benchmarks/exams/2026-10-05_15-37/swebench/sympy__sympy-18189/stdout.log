@@ -1,0 +1,47 @@
+TIME_LIMIT: OK (74s <= 900s)
+/home/tchemin/Documents/agent_smith/moulinette/.venv/lib/python3.10/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.0.0)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+
+============================================================
+VALIDATING SOLUTION
+============================================================
+Task ID: sympy__sympy-18189
+Benchmark: swebench
+Success claimed: True
+
+============================================================
+STEP 1: CORRECTNESS VALIDATION
+============================================================
+Started container 2fb9b8720e370b270235566da5e26e8587309d69985773ada566b7f32b996f1c
+2026-10-05 15:38:36,299 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-10-05 15:38:36,299 - huggingface_hub.utils._http - WARNING - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-10-05 15:38:36,309 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/datasets/SWE-bench/SWE-bench_Verified/78f471bf655a3137b2e8a75af1501690ec009ec3/README.md "HTTP/1.1 200 OK"
+2026-10-05 15:38:36,423 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/resolve/78f471bf655a3137b2e8a75af1501690ec009ec3/SWE-bench_Verified.py "HTTP/1.1 404 Not Found"
+2026-10-05 15:38:36,709 - httpx - INFO - HTTP Request: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/SWE-bench/SWE-bench_Verified/SWE-bench/SWE-bench_Verified.py "HTTP/1.1 404 Not Found"
+2026-10-05 15:38:36,831 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/datasets/SWE-bench/SWE-bench_Verified/revision/78f471bf655a3137b2e8a75af1501690ec009ec3 "HTTP/1.1 200 OK"
+2026-10-05 15:38:36,949 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/resolve/78f471bf655a3137b2e8a75af1501690ec009ec3/.huggingface.yaml "HTTP/1.1 404 Not Found"
+2026-10-05 15:38:37,095 - httpx - INFO - HTTP Request: GET https://datasets-server.huggingface.co/info?dataset=SWE-bench/SWE-bench_Verified "HTTP/1.1 200 OK"
+2026-10-05 15:38:37,218 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/datasets/SWE-bench/SWE-bench_Verified/tree/78f471bf655a3137b2e8a75af1501690ec009ec3/data?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-10-05 15:38:37,337 - httpx - INFO - HTTP Request: GET https://huggingface.co/api/datasets/SWE-bench/SWE-bench_Verified/tree/78f471bf655a3137b2e8a75af1501690ec009ec3?recursive=false&expand=false "HTTP/1.1 200 OK"
+2026-10-05 15:38:37,458 - httpx - INFO - HTTP Request: HEAD https://huggingface.co/datasets/SWE-bench/SWE-bench_Verified/resolve/78f471bf655a3137b2e8a75af1501690ec009ec3/dataset_infos.json "HTTP/1.1 404 Not Found"
+Error validating solution: 500 Server Error for http+docker://localhost/v1.54/containers/2fb9b8720e370b270235566da5e26e8587309d69985773ada566b7f32b996f1c/archive?path=%2Ftmp: Internal Server Error ("failed to Lchown "/tmp/patch.diff" for UID 103977, GID 4225: lchown /tmp/patch.diff: invalid argument")
+Correctness: FAILED
+
+============================================================
+STEP 2: METRICS VALIDATION
+============================================================
+Iterations: 3 / 30 OK
+Input tokens: 12411 / 300000 OK
+Output tokens: 658 / 10000 OK
+Time: 72.2s / 900.0s OK
+Metrics: VALID
+
+============================================================
+FINAL RESULT
+============================================================
+Correctness: FAILED
+Metrics: VALID
+Overall: FAILED
+RESULT: FAILED (validation)
+CLEANUP: FAILED

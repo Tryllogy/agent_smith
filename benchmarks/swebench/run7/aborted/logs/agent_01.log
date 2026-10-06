@@ -1,0 +1,12 @@
+LLM retry 1 on step 2: The request to the LLM provider timed out.; waiting 10.0s
+LLM retry 1 on step 3: The request to the LLM provider timed out.; waiting 10.0s
+LLM retry 2 on step 3: The request to the LLM provider timed out.; waiting 10.0s
+LLM retry 3 on step 3: The request to the LLM provider timed out.; waiting 10.0s
+LLM retry 4 on step 3: The request to the LLM provider timed out.; waiting 10.0s
+LLM fallback on step 3: The request to the LLM provider timed out.; switching to nvidia/nemotron-3-ultra-550b-a55b at https://integrate.api.nvidia.com/v1/chat/completions
+LLM retry 1 on step 4: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 10.0s
+LLM retry 1 on step 5: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 10.0s
+LLM retry 2 on step 5: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 10.0s
+LLM retry 3 on step 5: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 10.0s
+LLM retry 4 on step 5: Transient error from LLM provider: Service temporarily overloaded (HTTP 503); waiting 10.0s
+Error: Interrupted by SIGTERM

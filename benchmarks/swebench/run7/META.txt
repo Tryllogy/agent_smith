@@ -1,0 +1,9 @@
+modele=ministral-14b-2512
+taches=sympy__sympy-14711 sympy__sympy-13480 pydata__xarray-4629 sympy__sympy-18189 django__django-11066 scikit-learn__scikit-learn-13439
+code=f27644a + configs/models.json (entrees ministral-3b-2512) non commite
+ablation=aucune (agent tel quel)
+mcp=mcp_tools_swebench.py
+docker=29.3.0 rootless (socket /run/user/$UID/docker.sock)
+validation=code de notation de la moulinette rejoue hors moulinette_eval (grade_XX.txt) : la validation officielle echoue en rootless (lchown)
+debut=2026-10-06T14:38:59+02:00
+fin=2026-10-06T14:48:36+02:00

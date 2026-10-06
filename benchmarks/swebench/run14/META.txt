@@ -1,0 +1,9 @@
+modele=nvidia/nemotron-3-ultra-550b-a55b
+taches=sympy__sympy-14711 sympy__sympy-13480 pydata__xarray-4629 sympy__sympy-18189 django__django-11066 scikit-learn__scikit-learn-13439
+code=f27644a + configs/models.json (entrees ministral-3b-2512) non commite
+ablation=check_unread_edits desactive (Loop.check_unread_edits rend toujours None)
+mcp=mcp_tools_swebench.py
+docker=29.3.0 rootless (socket /run/user/$UID/docker.sock)
+validation=code de notation de la moulinette rejoue hors moulinette_eval (grade_XX.txt) : la validation officielle echoue en rootless (lchown)
+debut=2026-10-06T15:03:57+02:00
+fin=2026-10-06T15:22:37+02:00

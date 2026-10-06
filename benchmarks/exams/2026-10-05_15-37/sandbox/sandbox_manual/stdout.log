@@ -1,0 +1,32 @@
+Testing sandbox manual generation...
+
+OK: Found manual via 'sandbox_manual' variable
+Manual content (first 500 chars):
+# Sandbox manual
+
+You write Python that runs in a sandbox. A bare expression's value is
+discarded, so print() whatever you need to see.
+
+Two kinds of callables exist: the tools below, and final_answer.
+
+## Tools
+
+add(a: int, b: int)
+Add two numbers.
+
+multiply(a: int, b: int)
+Multiply two numbers.
+
+echo(message: str)
+Echo a message back.
+
+## final_answer(answer)
+
+Ends the task and returns `answer` as the solution. A sandbox
+primitive, not a tool: present whatever server is connected.
+
+OK: Manual mentions 'add'
+OK: Manual mentions 'multiply'
+OK: Manual mentions 'echo'
+
+=== SANDBOX MANUAL OK ===

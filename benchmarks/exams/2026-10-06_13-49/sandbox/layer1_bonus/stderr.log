@@ -1,0 +1,3 @@
+Timeout after 5s; the sandbox was restarted, so variables from earlier entries are gone
+NameError: name 'time' is not defined
+NameError: name 'caught_timeout' is not defined

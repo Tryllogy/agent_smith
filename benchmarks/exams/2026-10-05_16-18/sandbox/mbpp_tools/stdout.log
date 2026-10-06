@@ -1,0 +1,12 @@
+Testing run_tests tool via MCP...
+Result: success: true (3 of 3 tests passed)
+1. PASS  assert add(1, 2) == 3
+2. PASS  assert add(0, 0) == 0
+3. PASS  assert add(-1, 1) == 0
+
+
+Testing final_answer tool...
+final_answer raised: def add(a, b): return a + b
+OK: final_answer is callable (raised expected error)
+
+=== MBPP TOOLS OK ===
