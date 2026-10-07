@@ -2,7 +2,7 @@ import socket
 
 
 def _blocked(*args, **kwargs):
-    raise PermissionError("Bloqué !")
+    raise PermissionError("network access is blocked in the sandbox")
 
 
 def block_network():

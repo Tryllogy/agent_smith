@@ -2,7 +2,6 @@ import argparse
 import sys
 import time
 
-from agent_mbpp.cli import AgentMBPP
 from core.agent_cli_helper import (
     check_args,
     find_provider_url_by_model,
@@ -11,6 +10,8 @@ from core.agent_cli_helper import (
     write_failure_output,
 )
 from core.constants import MBPP, MBPP_DEFAULT_MODEL
+
+from .cli import AgentMBPP
 
 
 def main() -> int:
@@ -45,7 +46,7 @@ def main() -> int:
 
     try:
         check_args(args)
-        agent_mbpp = AgentMBPP(
+        agent = AgentMBPP(
             task_file=args.task_file,
             output_file=args.output,
             model_name=args.model_name,
@@ -53,7 +54,7 @@ def main() -> int:
             or find_provider_url_by_model(args.model_name),
             start_time=start_time,
         )
-        agent_mbpp.run()
+        agent.run()
     except Exception as e:
         error: str = str(e)
     except KeyboardInterrupt as e:

@@ -8,10 +8,10 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "docker" },
-    { name = "httpx" },
     { name = "mcp" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "requests" },
 ]
 
 [package.optional-dependencies]
@@ -23,11 +23,11 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "docker", specifier = ">=7.0" },
-    { name = "httpx", specifier = ">=0.27" },
     { name = "mcp", specifier = ">=1.22,<2" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
 provides-extras = ["dev"]

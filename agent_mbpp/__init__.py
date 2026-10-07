@@ -1,4 +1,4 @@
-from agent_mbpp.cli import AgentMBPP
+from .cli import AgentMBPP
 
 __all__ = [
     "AgentMBPP",

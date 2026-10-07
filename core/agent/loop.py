@@ -99,7 +99,7 @@ class Loop:
         temperature: float | None = (
             None if self.stuck_step is None else constants.STUCK_TEMPERATURE
         )
-        llm_response: LLMResponse = self.client.get_llm_reponse(
+        llm_response: LLMResponse = self.client.get_llm_response(
             timeout_max=timeout_max,
             messages=self.prompt.prompt,
             max_tokens=max_tokens,

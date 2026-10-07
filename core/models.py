@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
@@ -139,6 +140,13 @@ class StepMetrics(BaseModel):
         description="Number of LLM API retries before getting a successful "
         "response (0 = first attempt succeeded)",
     )
+
+
+class BenchName(Enum):
+    """Benchmark names, as written in SolutionOutput."""
+
+    SWE = "swebench"
+    MBPP = "mbpp"
 
 
 class SolutionOutput(BaseModel):
