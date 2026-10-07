@@ -1,8 +1,7 @@
 import calendar
 import time
+from collections.abc import Mapping
 from datetime import datetime
-
-from httpx import Headers
 
 from core.config_models import ProviderConfig
 
@@ -28,7 +27,9 @@ class Provider:
         except ValueError:
             return False
 
-    def get_token_rate(self, headers: Headers) -> tuple[int, int] | None:
+    def get_token_rate(
+        self, headers: Mapping[str, str]
+    ) -> tuple[int, int] | None:
         """Return the (limit, remaining) tokens of the current window.
 
         Read from the headers named in token_rate_limit; None when the
@@ -45,7 +46,7 @@ class Provider:
             return None
         return int(limit), int(remaining)
 
-    def get_retry_after(self, headers: Headers) -> float | None:
+    def get_retry_after(self, headers: Mapping[str, str]) -> float | None:
         """Return the wait in seconds from the rate-limit headers.
 
         Uses the first configured header that parses; None otherwise.

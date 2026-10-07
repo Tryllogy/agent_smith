@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from enum import Enum
+
+from core.models import BenchName
 
 MARGIN_EXECUTION_TIME = 5
 LLM_MAX_RETRIES = 4
@@ -29,13 +30,6 @@ MBPP_DEFAULT_MODEL = "codestral-2508"
 SWE_DEFAULT_MODEL = "codestral-2508"
 
 PATCH_MARKERS = ("diff --git", "--- a/", "+++ b/", "@@")
-
-
-class BenchName(Enum):
-    """Benchmark names, as written in SolutionOutput."""
-
-    SWE = "swebench"
-    MBPP = "mbpp"
 
 
 @dataclass(frozen=True)

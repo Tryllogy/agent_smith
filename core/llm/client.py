@@ -3,8 +3,9 @@ import math
 import re
 import threading
 import time
+from collections.abc import Mapping
 
-import httpx
+import requests
 from pydantic import ValidationError
 
 from core import constants, errors
@@ -56,7 +57,7 @@ class LLMClient:
         )
         self.last_api_key_index: int = 0
 
-    def get_reponses(
+    def get_responses(
         self,
         thread_result: dict,
         timeout_max: float,
@@ -71,7 +72,7 @@ class LLMClient:
         """
         try:
             header = self.replace_header_api_key(self.provider.config.header)
-            request: httpx.Response = httpx.post(
+            request: requests.Response = requests.post(
                 url=self.url,
                 headers={**header},
                 json=self.request_body(messages, max_tokens, temperature),
@@ -129,7 +130,7 @@ class LLMClient:
     ) -> tuple[dict, float]:
         """Run the request in a daemon thread bounded by timeout_max.
 
-        httpx timeouts apply per I/O phase, the join bounds the total.
+        requests timeouts apply per I/O phase, the join bounds the total.
         Returns the response and its duration in milliseconds.
         """
         start_time = time.time()
@@ -138,7 +139,7 @@ class LLMClient:
             "request": None,
         }
         thread = threading.Thread(
-            target=self.get_reponses,
+            target=self.get_responses,
             args=(
                 thread_result,
                 timeout_max,
@@ -160,7 +161,7 @@ class LLMClient:
         request = thread_result.get("request")
         return request, request_time_ms
 
-    def get_llm_reponse(
+    def get_llm_response(
         self,
         timeout_max: float,
         messages: list,
@@ -346,7 +347,7 @@ class LLMClient:
             retry_after=min(waits),
         )
 
-    def record_token_rate(self, headers: httpx.Headers) -> None:
+    def record_token_rate(self, headers: Mapping[str, str]) -> None:
         """Store on the key in use the token budget its answer reported."""
         token_rate = self.provider.get_token_rate(headers)
         if token_rate is not None:
@@ -367,26 +368,20 @@ class LLMClient:
                     "The LLM response is not a valid JSON.",
                     status_code=None,
                 )
-            case httpx.TimeoutException():
+            case requests.Timeout():
                 raise errors.TransientLLMResponseError(
                     "The request to the LLM provider timed out.",
                 )
-            case httpx.RequestError():
-                raise errors.TransientLLMResponseError(
-                    "An error occurred while making the request to"
-                    f" the LLM provider: {error}",
-                    status_code=None,
-                )
-            case httpx.HTTPStatusError():
+            case requests.HTTPError():
                 retry_after: float | None = self.provider.get_retry_after(
                     error.response.headers
                 )
                 try:
-                    reponse_error: dict = error.response.json()
-                    if not isinstance(reponse_error, dict):
-                        reponse_error = {}
+                    response_error: dict = error.response.json()
+                    if not isinstance(response_error, dict):
+                        response_error = {}
                     provider_error: dict = self.provider.get_error(
-                        reponse_error
+                        response_error
                     )
                 except json.JSONDecodeError:
                     provider_error = {}
@@ -395,6 +390,12 @@ class LLMClient:
                     retry_after=retry_after,
                     error=provider_error.get("message", error),
                     timeout_max=timeout_max,
+                )
+            case requests.RequestException():
+                raise errors.TransientLLMResponseError(
+                    "An error occurred while making the request to"
+                    f" the LLM provider: {error}",
+                    status_code=None,
                 )
             case _:
                 return error

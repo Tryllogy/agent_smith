@@ -30,8 +30,8 @@ TIMEOUT = "Timeout after {}s"
 DIED = "No result (process died)"
 
 # File descriptors the sandboxed child must close on startup. The agent
-# ties a Docker container to its life by holding a pipe (see
-# agent_swebench/docker.py); the forked child would otherwise inherit
+# ties a Docker container to its life by holding a pipe (see docker.py
+# in the SWE-bench agent); the forked child would otherwise inherit
 # that pipe and keep the container alive after the agent is killed.
 FDS_TO_CLOSE_IN_CHILD = []
 

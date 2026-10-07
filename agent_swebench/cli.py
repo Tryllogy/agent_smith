@@ -1,6 +1,5 @@
 from dotenv import load_dotenv
 
-from agent_swebench.docker import TaskContainer
 from core import constants
 from core.agent import Loop
 from core.agent.prompt import Prompt
@@ -18,6 +17,8 @@ from core.llm.fallback import FallbackClient
 from core.models import SandboxConfig, SolutionOutput, SWEBenchTaskInput
 from sandbox.manual import render_manual
 from sandbox.mcp_client.client import MCPClient
+
+from .docker import TaskContainer
 
 load_dotenv()
 

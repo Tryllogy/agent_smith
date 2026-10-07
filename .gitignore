@@ -220,6 +220,7 @@ CLAUDE.md
 tests/
 cache/
 moulinette/
+exams/
 solution.json
 evaluations/
 !benchmarks/**/*.log

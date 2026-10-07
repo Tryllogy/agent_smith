@@ -2,7 +2,6 @@ import argparse
 import sys
 import time
 
-from agent_swebench.cli import AgentSWEBENCH
 from core.agent_cli_helper import (
     check_args,
     find_provider_url_by_model,
@@ -11,6 +10,8 @@ from core.agent_cli_helper import (
     write_failure_output,
 )
 from core.constants import SWE, SWE_DEFAULT_MODEL
+
+from .cli import AgentSWEBENCH
 
 
 def main() -> int:
@@ -46,7 +47,7 @@ def main() -> int:
 
     try:
         check_args(args)
-        agent_swebench = AgentSWEBENCH(
+        agent = AgentSWEBENCH(
             task_file=args.task_file,
             output_file=args.output,
             model_name=args.model_name,
@@ -54,7 +55,7 @@ def main() -> int:
             or find_provider_url_by_model(args.model_name),
             start_time=start_time,
         )
-        agent_swebench.run()
+        agent.run()
     except Exception as e:
         error: str = str(e)
     except KeyboardInterrupt as e:

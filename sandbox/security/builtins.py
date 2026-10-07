@@ -31,7 +31,6 @@ SAFE = [
     "sum",
     "min",
     "max",
-    # Numeriques & formatage
     "abs",
     "round",
     "pow",
@@ -45,16 +44,13 @@ SAFE = [
     "format",
     "repr",
     "hash",
-    # Introspection douce (test de type uniquement, pas de manipulation)
     "isinstance",
     "issubclass",
     "type",
     "callable",
     # Namespace: lists the names in scope, including the injected tools.
     "dir",
-    # Sortie
     "print",
-    # Exceptions (le code legitime en leve et en attrape)
     "BaseException",
     "Exception",
     "ArithmeticError",
@@ -87,7 +83,6 @@ SAFE = [
     "UnicodeError",
     "UnicodeDecodeError",
     "UnicodeEncodeError",
-    # Constantes
     "True",
     "False",
     "None",

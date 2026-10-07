@@ -33,7 +33,7 @@ class FallbackClient:
         """Return the model of the client in use."""
         return self.current.model_name
 
-    def get_llm_reponse(
+    def get_llm_response(
         self,
         timeout_max: float,
         messages: list,
@@ -41,7 +41,7 @@ class FallbackClient:
         temperature: float | None = None,
     ) -> LLMResponse:
         """Send the request to the client in use; its errors propagate."""
-        return self.current.get_llm_reponse(
+        return self.current.get_llm_response(
             timeout_max=timeout_max,
             messages=messages,
             max_tokens=max_tokens,
