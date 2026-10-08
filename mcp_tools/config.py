@@ -16,7 +16,6 @@ from pathlib import Path
 
 SCRATCH = Path("/tmp/agent")
 
-# Where every SWE-bench image keeps the repository to fix.
 CONTAINER_REPO = Path("/testbed")
 
 
@@ -199,9 +198,6 @@ def configure_from_argv(benchmark: str, argv=None) -> argparse.Namespace:
     """
     args = build_parser(benchmark).parse_args(argv)
     if benchmark == "swebench":
-        # repo_alias is set even without a container: the model and the
-        # eval script name the repository /testbed either way, so the
-        # tools must translate that path to repo_root in both cases.
         configure(
             repo_root=args.repo_root,
             eval_script=args.eval_script,

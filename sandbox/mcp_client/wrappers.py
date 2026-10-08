@@ -38,7 +38,6 @@ def tool_spec(tool) -> dict:
     return {
         "name": tool.name,
         "description": (getattr(tool, "description", "") or "").strip(),
-        # inputSchema in the mcp SDK 1.x, input_schema in 2.x.
         "schema": (getattr(tool, "inputSchema", None)
                    or getattr(tool, "input_schema", None) or {}),
     }

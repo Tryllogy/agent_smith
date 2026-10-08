@@ -13,13 +13,8 @@ import re
 
 from mcp_tools.config import get_config, to_alias, to_host
 
-# Definitions and references are Python symbols, so those two tools look
-# at Python files only.
 PYTHON_FILES = "*.py"
 
-# Not the repository's own code: git's internals and an installed
-# virtual environment. Searching them buries real matches under
-# thousands of hits from third-party packages.
 IGNORED_DIRS = {".git", ".venv"}
 
 

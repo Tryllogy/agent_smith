@@ -24,7 +24,6 @@ from core.models import SandboxConfig
 from sandbox.executor import Sandbox
 from sandbox.mcp_client.client import MCPClient, MCPError
 
-# Arrow keys and history in input(), where the platform offers them.
 with contextlib.suppress(ImportError):
     import readline  # noqa: F401
 
@@ -147,7 +146,6 @@ def run_script(sandbox):
     try:
         statements = ast.parse(source).body
     except SyntaxError:
-        # Let the sandbox report the syntax error, as it would any other.
         show(sandbox.run(source, interactive=False))
         return
     for statement in statements:
@@ -174,7 +172,6 @@ def repl(sandbox):
         try:
             show(sandbox.run(source, interactive=True))
         except KeyboardInterrupt:
-            # Ctrl+C reaches the child too; it cannot be trusted after.
             sandbox.close()
             print("\nInterrupted; the sandbox was restarted, so variables "
                   "from earlier entries are gone", file=sys.stderr)

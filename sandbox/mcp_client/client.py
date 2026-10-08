@@ -27,12 +27,8 @@ import mcp.shared.exceptions as _mcp_exc
 
 from sandbox.mcp_client.transports import http_session, stdio_session
 
-# McpError in the mcp SDK 1.x, MCPError in 2.x: whichever this install
-# ships is the error call_tool must convert to our own MCPError.
 SdkMCPError = getattr(_mcp_exc, "McpError", None) or _mcp_exc.MCPError
 
-# A tool call can legitimately be slow: run_tests() walks a whole test
-# suite. Long, but not forever, so a hung server cannot hang the agent.
 DEFAULT_CALL_TIMEOUT = 900.0
 
 
@@ -191,7 +187,6 @@ class MCPClient:
         """
         result = self._submit(self._session.call_tool(name, arguments))
         text = _text_of(result)
-        # isError in the mcp SDK 1.x, is_error in 2.x.
         failed = (getattr(result, "isError", None)
                   or getattr(result, "is_error", None))
         if failed:
@@ -298,7 +293,6 @@ class MCPClient:
         try:
             return future.result(self._call_timeout)
         except FutureTimeoutError as exc:
-            # Only this call is abandoned; the session stays usable.
             raise MCPError(
                 f"no answer from the server after {self._call_timeout}s"
             ) from exc

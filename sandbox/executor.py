@@ -17,27 +17,15 @@ from sandbox.security.filesystem import make_guarded_directory
 from sandbox.security.imports import make_guarded_import
 from sandbox.security.network import block_network
 
-# How often the parent looks up from the queue, to notice a child that
-# died without sending anything.
 POLL_SECONDS = 0.05
 
-# Once the child is gone, how long to keep reading the queue: a result
-# still in flight must not be mistaken for a crash.
 DRAIN_SECONDS = 0.5
 
-# The two ways an entry can end without the child answering.
 TIMEOUT = "Timeout after {}s"
 DIED = "No result (process died)"
 
-# File descriptors the sandboxed child must close on startup. The agent
-# ties a Docker container to its life by holding a pipe (see docker.py
-# in the SWE-bench agent); the forked child would otherwise inherit
-# that pipe and keep the container alive after the agent is killed.
 FDS_TO_CLOSE_IN_CHILD = []
 
-# Largest stdout, stderr or tool result handed back for one entry.
-# Past this the output is cut and the model is told, so a flood of text
-# cannot blow the token budget or hide the useful lines.
 MAX_OUTPUT = 20000
 
 
@@ -70,8 +58,6 @@ class ToolError(Exception):
 
 
 def final_answer(answer):
-    # The parameter is named to match the manual, so the model may write
-    # final_answer(answer=...) as well as final_answer(...).
     raise FinalAnswer(answer)
 
 
@@ -146,8 +132,6 @@ def worker(jobs, outbox, answers, config: SandboxConfig, specs, manual):
     is still there for the next -- the "persistent variables between
     steps" the subject promises for code-based tool calling.
     """
-    # Drop any fd the child must not keep (the Docker lifeline pipe), so
-    # that killing the agent really closes it.
     for fd in FDS_TO_CLOSE_IN_CHILD:
         with contextlib.suppress(OSError):
             os.close(fd)
@@ -159,12 +143,8 @@ def worker(jobs, outbox, answers, config: SandboxConfig, specs, manual):
         config.authorized_imports
     )
     builtins_dict["open"] = make_guarded_directory(config.allowed_directories)
-    # Exactly two kinds of callables: the wrappers of the connected
-    # server's tools, and final_answer.
     ns = build_namespace(specs, make_dispatch(outbox, answers))
     ns["final_answer"] = final_answer
-    # The manual is also reachable from inside the sandbox, so code can
-    # look up what it may call without leaving the namespace.
     ns["sandbox_manual"] = manual
     ns["get_manual"] = lambda: manual
     ns["__builtins__"] = builtins_dict
@@ -311,14 +291,10 @@ class Sandbox:
         self.config = config if config is not None else SandboxConfig()
         self.client = client
         self.specs = [tool_spec(t) for t in client.tools] if client else []
-        # Built once from the connected server, and handed to the child
-        # so `sandbox_manual` / `get_manual()` are available in the code.
         self.manual = render_manual(client) if client else ""
         self.p = None
 
     def start(self):
-        # Fresh queues on every start: a dead child may have left a
-        # message half-way that must not reach its successor.
         self.jobs, self.outbox, self.answers = (
             mp.Queue(), mp.Queue(), mp.Queue()
         )
