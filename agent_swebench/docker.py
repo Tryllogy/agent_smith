@@ -46,8 +46,8 @@ SERVER = Path(__file__).resolve().parents[1] / "mcp_tools_swebench.py"
 PULL_TIMEOUT = 1800
 
 _LIVE = weakref.WeakSet()
-_NET_INSTALLED = False
-_OWNER = None
+_net_installed = False
+_owner = None
 
 
 def _install_safety_net():
@@ -59,18 +59,18 @@ def _install_safety_net():
     handler covers the kill, then chains to whatever was there before so
     the process still ends. Installed once.
     """
-    global _NET_INSTALLED, _OWNER
-    if _NET_INSTALLED:
+    global _net_installed, _owner
+    if _net_installed:
         return
-    _NET_INSTALLED = True
-    _OWNER = os.getpid()
+    _net_installed = True
+    _owner = os.getpid()
 
     atexit.register(_cleanup_all)
 
     previous = signal.getsignal(signal.SIGTERM)
 
     def handle(signum, frame):
-        if os.getpid() != _OWNER:
+        if os.getpid() != _owner:
             signal.signal(signal.SIGTERM, signal.SIG_DFL)
             signal.raise_signal(signal.SIGTERM)
             return
@@ -91,7 +91,7 @@ def _cleanup_all():
     No-op outside the process that installed the net, so the forked
     sandbox child never tears down the parent's containers.
     """
-    if os.getpid() != _OWNER:
+    if os.getpid() != _owner:
         return
     for box in list(_LIVE):
         with contextlib.suppress(Exception):
