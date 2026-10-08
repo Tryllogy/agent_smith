@@ -9,14 +9,8 @@ TIMEOUT_EXIT = 137
 
 DOCKER_GRACE = 30
 
-# Cap on test output, kept from the end (see _keep_tail). Below the
-# sandbox's own 20000-char tool cap, which trims from the start, so that
-# cap never re-trims and drops the summary.
 MAX_TEST_OUTPUT = 18000
 
-# The eval script wraps the real test run between these two lines. Its
-# own exit code is the last git checkout's, not the tests', so the model
-# must be shown what is between the markers, not that code.
 START_MARKER = ">>>>> Start Test Output"
 END_MARKER = ">>>>> End Test Output"
 
@@ -117,8 +111,6 @@ def run_command(command: str, workdir: str = "", timeout: int = 60) -> str:
             cwd = workdir or str(config.repo_alias)
             proc = _in_container(["-lc", command], cwd, timeout)
         else:
-            # No container: a /testbed workdir from the model is on the
-            # host copy, so translate it like the file tools do.
             cwd = str(to_host(workdir)) if workdir else str(config.repo_root)
             proc = _run(command, cwd, timeout)
     except PathError as exc:
@@ -224,10 +216,6 @@ def get_patch() -> str:
         The git patch, or a message saying why it could not be built.
     """
     root = str(get_config().repo_root)
-    # core.fileMode=false on BOTH commands: on the diff alone it is too
-    # late, since `git add` has already recorded the mode change in the
-    # index. With it on the add too, the executable bit never enters the
-    # patch.
     try:
         _run("git -c core.fileMode=false add -A", root, 60)
         proc = _run("git -c core.fileMode=false diff --cached", root, 60)

@@ -29,8 +29,6 @@ iteration, so each line costs ten times what it looks like.
 import keyword
 import re
 
-# JSON Schema has its own type names; the manual reads better in the
-# ones the model is going to write.
 PYTHON_TYPES = {
     "string": "str",
     "integer": "int",
@@ -109,7 +107,6 @@ def signature(tool) -> str:
     Returns:
         A line such as "read_file(filepath: str, start_line: int)".
     """
-    # inputSchema in the mcp SDK 1.x, input_schema in 2.x; accept both.
     schema = (getattr(tool, "inputSchema", None)
               or getattr(tool, "input_schema", None))
     rendered = []

@@ -1,7 +1,6 @@
 import builtins
 
 SAFE = [
-    # Types & conversions
     "bool",
     "int",
     "float",
@@ -14,7 +13,6 @@ SAFE = [
     "dict",
     "set",
     "frozenset",
-    # Iteration & sequences
     "len",
     "range",
     "enumerate",
@@ -48,7 +46,6 @@ SAFE = [
     "issubclass",
     "type",
     "callable",
-    # Namespace: lists the names in scope, including the injected tools.
     "dir",
     "print",
     "BaseException",
@@ -69,8 +66,6 @@ SAFE = [
     "NotImplementedError",
     "LookupError",
     "FloatingPointError",
-    # Legitimate code catches these (e.g. `try: import x except
-    # ImportError`); they are exception classes, not capabilities.
     "ImportError",
     "ModuleNotFoundError",
     "MemoryError",

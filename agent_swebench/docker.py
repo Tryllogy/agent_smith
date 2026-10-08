@@ -39,17 +39,12 @@ from pathlib import Path
 
 from sandbox import executor
 
-# Where every SWE-bench image keeps the repository.
 TESTBED = "/testbed"
 
-# The tool server, at the root of the repository, as the subject requires.
 SERVER = Path(__file__).resolve().parents[1] / "mcp_tools_swebench.py"
 
-# Pulling a SWE-bench image means several gigabytes.
 PULL_TIMEOUT = 1800
 
-# Every container currently started, so the safety net below can remove
-# them even when the normal `with` exit is skipped.
 _LIVE = weakref.WeakSet()
 _NET_INSTALLED = False
 _OWNER = None
@@ -68,10 +63,6 @@ def _install_safety_net():
     if _NET_INSTALLED:
         return
     _NET_INSTALLED = True
-    # The sandbox child is forked from this process and inherits both the
-    # atexit callback and this handler. It must not run them: the sandbox
-    # sends SIGTERM to the child on every timeout, which would otherwise
-    # delete this task's containers and host copy mid-run.
     _OWNER = os.getpid()
 
     atexit.register(_cleanup_all)
@@ -90,8 +81,6 @@ def _install_safety_net():
             signal.signal(signal.SIGTERM, signal.SIG_DFL)
             signal.raise_signal(signal.SIGTERM)
 
-    # Only the main thread may install a signal handler; a worker thread
-    # still gets the atexit net.
     with contextlib.suppress(ValueError):
         signal.signal(signal.SIGTERM, handle)
 
@@ -195,9 +184,6 @@ class TaskContainer:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        # The sandbox child is forked later and would inherit this pipe,
-        # holding the container open past a kill of the agent. Tell the
-        # child to close it, so only this process keeps the lifeline.
         executor.FDS_TO_CLOSE_IN_CHILD.append(self.proc.stdin.fileno())
         self._wait_running()
 
@@ -258,8 +244,6 @@ class TaskContainer:
         if self.started:
             proc = getattr(self, "proc", None)
             if proc is not None:
-                # Deregister then close the pipe, so the container sees
-                # EOF and --rm fires; then make sure the client is gone.
                 with contextlib.suppress(Exception):
                     executor.FDS_TO_CLOSE_IN_CHILD.remove(
                         proc.stdin.fileno())
@@ -269,7 +253,6 @@ class TaskContainer:
                 with contextlib.suppress(Exception):
                     proc.terminate()
                 self.proc = None
-            # Backup, in case --rm has not fired yet.
             with contextlib.suppress(DockerError):
                 docker("rm", "-f", self.name)
             self.started = False
