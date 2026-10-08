@@ -83,15 +83,6 @@ format:
 	$(UV) run ruff format .
 	$(UV) run ruff check --fix .
 
-test:
-	$(UV) run pytest
-
-test-samples:
-	$(UV) run pytest tests/test_samples.py -s -k dump
-
-test-update:
-	$(UV) run pytest --update-snapshots
-
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -type d -name '*.egg-info' -prune -exec rm -rf {} +
