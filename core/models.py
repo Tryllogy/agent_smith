@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SandboxConfig(BaseModel):
@@ -37,8 +37,19 @@ class SandboxConfig(BaseModel):
     allowed_directories: list[str] = Field(
         default_factory=lambda: ["/testbed", "/tmp/agent"]
     )
-    max_execution_time_seconds: int = 30
-    max_memory_mb: int = 512
+    max_execution_time_seconds: int = Field(default=30, gt=0, le=86400)
+    max_memory_mb: int = Field(default=512, ge=128, le=65536)
+
+    @field_validator("allowed_directories")
+    @classmethod
+    def _usable_directories(cls, directories: list[str]) -> list[str]:
+        for directory in directories:
+            if not directory or "\x00" in directory:
+                raise ValueError(
+                    "allowed_directories entries must be non-empty and "
+                    "contain no null byte"
+                )
+        return directories
 
 
 class MBPPTaskInput(BaseModel):
