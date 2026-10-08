@@ -163,7 +163,8 @@ def repl(sandbox):
             print()
             return
         except KeyboardInterrupt:
-            print("\nKeyboardInterrupt")
+            print("\nKeyboardInterrupt -- type 'exit' or press Ctrl+D "
+                  "to quit")
             continue
         if source.strip() in EXIT_COMMANDS:
             return
@@ -173,8 +174,9 @@ def repl(sandbox):
             show(sandbox.run(source, interactive=True))
         except KeyboardInterrupt:
             sandbox.close()
-            print("\nInterrupted; the sandbox was restarted, so variables "
-                  "from earlier entries are gone", file=sys.stderr)
+            print("\nKeyboardInterrupt -- the sandbox was restarted, so "
+                  "variables from earlier entries are gone. Type 'exit' "
+                  "or press Ctrl+D to quit.", file=sys.stderr)
 
 
 def main(argv=None):

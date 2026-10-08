@@ -149,12 +149,15 @@ def worker(jobs, outbox, answers, config: SandboxConfig, specs, manual):
     ns["get_manual"] = lambda: manual
     ns["__builtins__"] = builtins_dict
 
-    while True:
-        job = jobs.get()
-        if job is None:
-            return
-        code, interactive = job
-        outbox.put(("result", run_one(code, ns, interactive, outbox)))
+    try:
+        while True:
+            job = jobs.get()
+            if job is None:
+                return
+            code, interactive = job
+            outbox.put(("result", run_one(code, ns, interactive, outbox)))
+    except (KeyboardInterrupt, SystemExit):
+        return
 
 
 def serve(p, outbox, answers, client, timeout):
