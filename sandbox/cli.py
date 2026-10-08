@@ -59,10 +59,22 @@ def parse_args(argv):
 
 
 def load_config(path):
-    """Read a SandboxConfig from JSON, or return the defaults."""
+    """Read a SandboxConfig from JSON, or return the defaults.
+
+    Read as utf-8-sig so a byte-order mark is tolerated; the value
+    checks (positive timeout, usable memory, non-empty paths) live on
+    SandboxConfig itself, so a bad file raises a clean ValidationError.
+
+    Raises:
+        OSError: If the file cannot be read.
+        UnicodeDecodeError: If it is not UTF-8.
+        pydantic.ValidationError: If the JSON or a value is invalid.
+    """
     if path is None:
         return SandboxConfig()
-    return SandboxConfig.model_validate_json(path.read_text())
+    return SandboxConfig.model_validate_json(
+        path.read_text(encoding="utf-8-sig")
+    )
 
 
 def open_client(args):
@@ -186,7 +198,7 @@ def main(argv=None):
     except OSError as exc:
         print(f"sandbox: cannot read {args.config}: {exc}", file=sys.stderr)
         return 1
-    except ValidationError as exc:
+    except (ValidationError, ValueError) as exc:
         print(f"sandbox: invalid configuration in {args.config}:\n{exc}",
               file=sys.stderr)
         return 1
